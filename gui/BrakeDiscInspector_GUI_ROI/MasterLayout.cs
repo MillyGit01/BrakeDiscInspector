@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using BrakeDiscInspector_GUI_ROI.Models;
 
@@ -59,14 +61,34 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var path = GetDefaultPath(preset);
             MasterLayout layout;
-            if (!File.Exists(path))
+
+            try
             {
-                layout = new MasterLayout();
+                if (!File.Exists(path))
+                {
+                    layout = new MasterLayout();
+                }
+                else
+                {
+                    var raw = File.ReadAllText(path, Encoding.UTF8);
+                    var json = (raw ?? string.Empty)
+                        .Replace("\0", string.Empty)
+                        .TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
+
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        layout = new MasterLayout();
+                    }
+                    else
+                    {
+                        layout = JsonSerializer.Deserialize<MasterLayout>(json) ?? new MasterLayout();
+                    }
+                }
             }
-            else
+            catch (Exception ex) when (ex is IOException || ex is JsonException)
             {
-                var json = File.ReadAllText(path);
-                layout = JsonSerializer.Deserialize<MasterLayout>(json) ?? new MasterLayout();
+                Debug.WriteLine($"[MasterLayoutManager] LoadOrNew: contenido inválido, se cargan valores por defecto. {ex.Message}");
+                layout = new MasterLayout();
             }
 
             EnsureInspectionRoiDefaults(layout);
@@ -78,8 +100,18 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var path = GetDefaultPath(preset);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var json = JsonSerializer.Serialize(layout, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(path, json);
+
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            var json = JsonSerializer.Serialize(layout, options);
+
+            var tmp = path + ".tmp";
+            File.WriteAllText(tmp, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+#if NET6_0_OR_GREATER
+            File.Move(tmp, path, overwrite: true);
+#else
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tmp, path);
+#endif
         }
 
         private static void EnsureInspectionRoiDefaults(MasterLayout layout)

@@ -2477,6 +2477,12 @@ namespace BrakeDiscInspector_GUI_ROI
             _imgSourceBI.EndInit();
 
             ImgMain.Source = _imgSourceBI;
+
+            // [AUTO] reset master/image seeds for this new image
+            _inspectionBaselineSeededForImage = false;   // force reseed of inspection baseline for this image
+            _imageKeyForMasters = string.Empty;          // so masters won't be considered already seeded
+            _mastersSeededForImage = false;              // seed again during auto Analyze Master
+            LogDebug($"[roi-diag] load image → seeded=false, mastersSeeded={_mastersSeededForImage}, imageKey='{_imageKeyForMasters}'");
             OnImageLoaded_SetCurrentSource(_imgSourceBI);
             _currentImageHash = ComputeImageSeedKey();
             // RoiOverlay disabled: labels are now drawn on Canvas only
@@ -2532,16 +2538,19 @@ namespace BrakeDiscInspector_GUI_ROI
                 await Dispatcher.Yield(DispatcherPriority.Loaded);
                 SyncOverlayToImage(scheduleResync: true);
                 await Dispatcher.Yield(DispatcherPriority.Render);
+                await Dispatcher.Yield(DispatcherPriority.Background);
 
                 if (HasAllMastersAndInspectionsDefined())
                 {
                     try
                     {
+                        LogDebug("[auto-analyze] ImageLoaded → AnalyzeMaster()");
                         await AnalyzeMastersAsync();
+                        ScheduleSyncOverlay(force: true);
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[AutoAnalyze] Failed: {ex.Message}");
+                        LogDebug($"[auto-analyze] failed: {ex.Message}");
                     }
                 }
             }, DispatcherPriority.Loaded);

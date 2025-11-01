@@ -1948,7 +1948,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task EvaluateSelectedRoiAsync()
         {
-            await EvaluateRoiAsync(SelectedInspectionRoi, CancellationToken.None).ConfigureAwait(false);
+            var roiCfg = SelectedInspectionRoi;
+            if (roiCfg == null)
+            {
+                return;
+            }
+
+            // Ensure canvas + legacy paths point to the selected index
+            _activateInspectionIndex?.Invoke(roiCfg.Index);
+
+            await EvaluateRoiAsync(roiCfg, CancellationToken.None).ConfigureAwait(false);
         }
 
         private async Task InferEnabledRoisAsync()

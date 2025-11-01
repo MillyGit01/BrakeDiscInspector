@@ -16,6 +16,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Models;
 using Forms = System.Windows.Forms;
@@ -292,8 +293,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (value != null)
                     {
-                        _log($"[ui] activate ROI {value.Index} from SelectedInspectionRoi setter");
-                        _activateInspectionIndex?.Invoke(value.Index);
+                        _log($"[ui] SelectedInspectionRoi -> {value.DisplayName} idx={value.Index} key={value.ModelKey}");
+                        try
+                        {
+                            LocalThreshold = value.CalibratedThreshold ?? value.ThresholdDefault;
+                            _log($"[ui] LocalThreshold <- {LocalThreshold:0.###} (SelectedInspectionRoi)");
+                        }
+                        catch
+                        {
+                            // tolerate missing properties on older builds
+                        }
+
+                        ClearInferenceUi("[ui] selection changed");
+                        _ = ActivateCanvasIndexAsync(value.Index);
                     }
                 }
             }
@@ -1954,8 +1966,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            // Ensure canvas + legacy paths point to the selected index
-            _activateInspectionIndex?.Invoke(roiCfg.Index);
+            await ActivateCanvasIndexAsync(roiCfg.Index).ConfigureAwait(false);
 
             await EvaluateRoiAsync(roiCfg, CancellationToken.None).ConfigureAwait(false);
         }
@@ -1997,8 +2008,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            _activateInspectionIndex?.Invoke(roi.Index);
-            _log($"[eval] export ROI for {roi.Name} (index={roi.Index})");
+            await ActivateCanvasIndexAsync(roi.Index).ConfigureAwait(false);
+            _log($"[eval] start -> name='{roi.Name}' idx={roi.Index} modelKey='{roi.ModelKey}'");
 
             var export = await _exportRoiAsync().ConfigureAwait(false);
             if (export == null)
@@ -2053,8 +2064,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 roi.LastScore = result.score;
                 var decisionThreshold = roi.CalibratedThreshold ?? roi.ThresholdDefault;
-                roi.LastResultOk = result.score >= decisionThreshold;
+                var isNg = result.score >= decisionThreshold;
+                roi.LastResultOk = isNg;
                 roi.LastEvaluatedAt = DateTime.UtcNow;
+                _log($"[eval] done idx={roi.Index} key='{roi.ModelKey}' score={result.score:0.###} thr={decisionThreshold:0.###} => {(isNg ? "NG" : "OK")}");
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
                 UpdateGlobalBadge();
             }
@@ -2075,8 +2088,87 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 roi.LastResultOk = null;
                 roi.LastEvaluatedAt = DateTime.UtcNow;
                 InferenceSummary = $"Inference failed: {message}";
+                _log($"[eval] FAILED idx={roi.Index} key='{roi.ModelKey}' -> {message}");
                 await ShowMessageAsync(message, caption: "Inference error");
                 UpdateGlobalBadge();
+            }
+        }
+
+        private async Task ActivateCanvasIndexAsync(int index)
+        {
+            try
+            {
+                _log($"[ui] ActivateCanvasIndexAsync({index})");
+                _activateInspectionIndex?.Invoke(index);
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher != null)
+                {
+                    await dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render).Task.ConfigureAwait(false);
+                }
+                await Task.Delay(10).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log($"[ui] ActivateCanvasIndexAsync error: {ex.Message}");
+            }
+        }
+
+        private void ClearInferenceUi(string reason)
+        {
+            try
+            {
+                _log($"{reason} -> clearing inference/heatmap");
+            }
+            catch
+            {
+                // ignore logging failures
+            }
+
+            _lastExport = null;
+            _lastInferResult = null;
+            _lastHeatmapBytes = null;
+            InferenceScore = null;
+            InferenceThreshold = null;
+            InferenceSummary = string.Empty;
+
+            try
+            {
+                _clearHeatmap();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null)
+            {
+                Regions.Clear();
+            }
+            else if (dispatcher.CheckAccess())
+            {
+                Regions.Clear();
+            }
+            else
+            {
+                dispatcher.InvokeAsync(() => Regions.Clear());
+            }
+        }
+
+        public void OnInspectionTabChanged(int index)
+        {
+            try
+            {
+                var roiCfg = _inspectionRois?.FirstOrDefault(r => r.Index == index);
+                if (roiCfg != null)
+                {
+                    _log($"[ui] OnInspectionTabChanged -> {roiCfg.DisplayName} idx={index}");
+                    SelectedInspectionRoi = roiCfg;
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"[ui] OnInspectionTabChanged error: {ex.Message}");
             }
         }
 

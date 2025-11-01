@@ -61,10 +61,34 @@
             <GroupBox Header="Inspection ROIs">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-                        <TextBlock Text="{Binding FitSummary}" TextWrapping="Wrap"/>
-                        <TextBlock Text="{Binding CalibrationSummary}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                        <TextBlock Text="{Binding InferenceSummary}" TextWrapping="Wrap" Margin="0,4,0,8"/>
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <!-- Per-selected-ROI summary -->
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Score:"/>
+                            <TextBlock Text="{Binding SelectedInspectionRoi.LastScore, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
+                            <TextBlock Text="Threshold:"/>
+                            <TextBlock Text="{Binding SelectedInspectionRoi.CalibratedThreshold, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
+                            <TextBlock Text="Result:"/>
+                            <TextBlock Margin="4,0,0,0">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="—"/>
+                                        <Setter Property="Foreground" Value="Gray"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding SelectedInspectionRoi.LastResultOk}" Value="True">
+                                                <Setter Property="Text" Value="OK"/>
+                                                <Setter Property="Foreground" Value="ForestGreen"/>
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding SelectedInspectionRoi.LastResultOk}" Value="False">
+                                                <Setter Property="Text" Value="NOK"/>
+                                                <Setter Property="Foreground" Value="DarkRed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                             <Button Content="Infer Enabled"
                                     Command="{Binding InferEnabledRoisCommand}"
                                     Padding="12,4"/>

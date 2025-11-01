@@ -2065,7 +2065,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 roi.LastScore = result.score;
                 var decisionThreshold = roi.CalibratedThreshold ?? roi.ThresholdDefault;
                 var isNg = result.score >= decisionThreshold;
-                roi.LastResultOk = isNg;
+                roi.LastResultOk = !isNg;
                 roi.LastEvaluatedAt = DateTime.UtcNow;
                 _log($"[eval] done idx={roi.Index} key='{roi.ModelKey}' score={result.score:0.###} thr={decisionThreshold:0.###} => {(isNg ? "NG" : "OK")}");
                 OnPropertyChanged(nameof(SelectedInspectionRoi));

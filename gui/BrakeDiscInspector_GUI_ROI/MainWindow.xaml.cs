@@ -2013,6 +2013,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 Directory.CreateDirectory(roiDir);
                 Directory.CreateDirectory(Path.Combine(roiDir, "ok"));
                 Directory.CreateDirectory(Path.Combine(roiDir, "ng"));
+                Directory.CreateDirectory(Path.Combine(roiDir, "Model"));
 
                 if (!string.Equals(roi.DatasetPath, roiDir, StringComparison.OrdinalIgnoreCase))
                 {
@@ -2020,6 +2021,26 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
         }
+
+        private string GetInspectionModelFolder(int inspectionIndex)
+        {
+            _dataRoot ??= EnsureDataRoot();
+
+            int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
+            var roisRoot = Path.Combine(_dataRoot, "rois");
+            Directory.CreateDirectory(roisRoot);
+
+            var folderName = $"Inspection_{clamped}";
+            var roiDir = Path.Combine(roisRoot, folderName);
+            Directory.CreateDirectory(roiDir);
+
+            var modelDir = Path.Combine(roiDir, "Model");
+            Directory.CreateDirectory(modelDir);
+            return modelDir;
+        }
+
+        private string? ResolveInspectionModelDirectory(InspectionRoiConfig roi)
+            => roi == null ? null : GetInspectionModelFolder(roi.Index);
 
         private void InitWorkflow()
         {
@@ -2051,7 +2072,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     ShowHeatmapOverlayAsync,
                     ClearHeatmapOverlay,
                     UpdateGlobalBadge,
-                    SetActiveInspectionIndex);
+                    SetActiveInspectionIndex,
+                    ResolveInspectionModelDirectory);
 
                 _workflowViewModel.PropertyChanged += WorkflowViewModelOnPropertyChanged;
                 _workflowViewModel.OverlayVisibilityChanged += WorkflowViewModelOnOverlayVisibilityChanged;
@@ -8693,41 +8715,166 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BtnM1S_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Search);
         private void BtnM1S_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Search);
 
-        private void BtnClearCanvas_Click(object sender, RoutedEventArgs e)
+        private async void BtnLoadModel_Click(object sender, RoutedEventArgs e)
         {
-            // Limpia visual y modelo de forma controlada, SIN tocar render/resize críticos
+            int index = _activeInspectionIndex;
+            if (sender is FrameworkElement fe && fe.Tag != null)
+            {
+                if (fe.Tag is int intTag)
+                {
+                    index = intTag;
+                }
+                else if (fe.Tag is string strTag && int.TryParse(strTag, out var parsed))
+                {
+                    index = parsed;
+                }
+            }
+
+            index = Math.Max(1, Math.Min(4, index));
+
             try
             {
-                // 1) Limpia shapes del Canvas
-                CanvasROI.Children.Clear();
-                RoiOverlay.Visibility = Visibility.Collapsed;
+                var modelDir = GetInspectionModelFolder(index);
+                var dialog = new OpenFileDialog
+                {
+                    Title = $"Selecciona un modelo para Inspection {index}",
+                    InitialDirectory = Directory.Exists(modelDir)
+                        ? modelDir
+                        : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    Filter = "Model files|*.json;*.onnx;*.bin;*.npz;*.faiss|All files|*.*",
+                    Multiselect = false
+                };
 
-                // 2) Resetea el layout mínimo necesario
+                if (dialog.ShowDialog() != true)
+                {
+                    return;
+                }
+
+                if (_workflowViewModel == null)
+                {
+                    Snack("Workflow no disponible.");
+                    return;
+                }
+
+                var roiConfig = _workflowViewModel.InspectionRois?.FirstOrDefault(r => r.Index == index);
+                if (roiConfig == null)
+                {
+                    Snack($"Inspection {index} no está configurado.");
+                    return;
+                }
+
+                bool loaded = await _workflowViewModel.LoadModelManifestAsync(roiConfig, dialog.FileName).ConfigureAwait(false);
+                if (!loaded)
+                {
+                    return;
+                }
+
+                AppendLog($"[model] Modelo cargado en Inspection {index}: {dialog.FileName}");
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    _workflowViewModel.SelectedInspectionRoi = roiConfig;
+                    RefreshInspectionRoiSlots();
+                }, DispatcherPriority.Background);
+            }
+            catch (Exception ex)
+            {
+                AppendLog("[model] Error al cargar modelo: " + ex.Message);
+                MessageBox.Show(
+                    "No se pudo cargar el modelo seleccionado. Revisa el log para más detalles.",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private void BtnClearCanvas_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show(
+                "Esto borrará TODOS los ROI y reiniciará el estado. ¿Deseas continuar?",
+                "Confirmar borrado y reset",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            AppendLog("[align] Reset solicitado por el usuario (Borrar Canvas).");
+
+            try
+            {
+                _isDrawing = false;
+                _dragShape = null;
+                _tmpBuffer = null;
+                _analysisViewActive = false;
+
+                try { DetachPreviewAndAdorner(); } catch { }
+                try { ClearCanvasShapesAndLabels(); } catch { }
+                try { ClearCanvasInternalMaps(); } catch { }
+                try { ClearPersistedRoisFromCanvas(); } catch { }
+
+                if (RoiOverlay != null)
+                {
+                    RoiOverlay.Visibility = Visibility.Collapsed;
+                }
+
+                _inspectionBaselinesByImage.Clear();
+
                 if (_layout != null)
                 {
                     _layout.Master1Pattern = null;
-                    _layout.Master1Search  = null;
+                    _layout.Master1PatternImagePath = null;
+                    _layout.Master1Search = null;
                     _layout.Master2Pattern = null;
-                    _layout.Master2Search  = null;
-                    _layout.Inspection     = null;
-                    _layout.Inspection1    = null;
-                    _layout.Inspection2    = null;
-                    _layout.Inspection3    = null;
-                    _layout.Inspection4    = null;
+                    _layout.Master2PatternImagePath = null;
+                    _layout.Master2Search = null;
+                    _layout.Inspection = null;
+                    _layout.InspectionBaseline = null;
+                    _layout.Inspection1 = null;
+                    _layout.Inspection2 = null;
+                    _layout.Inspection3 = null;
+                    _layout.Inspection4 = null;
+                    _layout.InspectionBaselinesByImage?.Clear();
                 }
 
-                // 3) Refrescos standard ya usados en el flujo
+                for (int i = 1; i <= 4; i++)
+                {
+                    SetInspectionSlotModel(i, null, updateActive: false);
+                }
+
+                Inspection1 = null;
+                Inspection2 = null;
+                Inspection3 = null;
+                Inspection4 = null;
+
+                _workflowViewModel?.SetInspectionRoiModels(null, null, null, null);
+                _workflowViewModel?.ResetModelStates();
+
+                _state = MasterState.DrawM1_Pattern;
+                ApplyDrawToolSelection(RoiShape.Rectangle, updateViewModel: true);
+                SetActiveInspectionIndex(1);
+
+                ScheduleSyncOverlay(force: true);
                 RequestRoiVisibilityRefresh();
                 RedrawOverlaySafe();
                 UpdateRoiHud();
+                UpdateWizardState();
 
-                AppendLog("[align] Canvas limpio (todos los ROI eliminados).");
+                TryPersistLayout();
+
+                AppendLog("[align] Reset completado. Estado listo para crear Masters nuevamente.");
                 Snack("Canvas borrado.");
             }
             catch (Exception ex)
             {
                 AppendLog("[align] Error al limpiar canvas: " + ex.Message);
-                Snack("Error al limpiar canvas.");
+                MessageBox.Show(
+                    "Error al limpiar canvas.",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
             }
         }
 

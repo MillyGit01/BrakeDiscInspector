@@ -356,6 +356,9 @@ namespace BrakeDiscInspector_GUI_ROI
         private BackendClient? _backendClient;
         private string? _dataRoot;
         private double _heatmapOverlayOpacity = 0.6;
+        private double _heatmapGain = 1.0;
+        private double _heatmapGamma = 1.0;
+        private bool _lastIsNg;
 
         private int _activeInspectionIndex = 1;
         private bool _updatingActiveInspection;
@@ -477,6 +480,40 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        public double HeatmapGain
+        {
+            get => _heatmapGain;
+            set
+            {
+                var clamped = Math.Clamp(value, 0.25, 4.0);
+                if (Math.Abs(_heatmapGain - clamped) < 1e-6)
+                {
+                    return;
+                }
+
+                _heatmapGain = clamped;
+                OnPropertyChanged();
+                PersistUiOptions();
+            }
+        }
+
+        public double HeatmapGamma
+        {
+            get => _heatmapGamma;
+            set
+            {
+                var clamped = Math.Clamp(value, 0.25, 4.0);
+                if (Math.Abs(_heatmapGamma - clamped) < 1e-6)
+                {
+                    return;
+                }
+
+                _heatmapGamma = clamped;
+                OnPropertyChanged();
+                PersistUiOptions();
+            }
+        }
+
         private void PersistAnalyzeOptions()
         {
             if (_layout == null || _isInitializingOptions)
@@ -501,6 +538,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _layout.Ui ??= new UiOptions();
             _layout.Ui.HeatmapOverlayOpacity = _heatmapOverlayOpacity;
+            _layout.Ui.HeatmapGain = _heatmapGain;
+            _layout.Ui.HeatmapGamma = _heatmapGamma;
 
             TryPersistLayout();
         }
@@ -1931,6 +1970,14 @@ namespace BrakeDiscInspector_GUI_ROI
             double opacity = layoutUi != null && layoutUi.HeatmapOverlayOpacity >= 0
                 ? Math.Max(0.0, Math.Min(1.0, layoutUi.HeatmapOverlayOpacity))
                 : defaultOpacity;
+            double gain = layoutUi != null && layoutUi.HeatmapGain > 0
+                ? layoutUi.HeatmapGain
+                : 1.0;
+            double gamma = layoutUi != null && layoutUi.HeatmapGamma > 0
+                ? layoutUi.HeatmapGamma
+                : 1.0;
+            gain = Math.Clamp(gain, 0.25, 4.0);
+            gamma = Math.Clamp(gamma, 0.25, 4.0);
 
             _inspectionBaselinesByImage.Clear();
             if (_layout?.InspectionBaselinesByImage != null)
@@ -1955,6 +2002,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 ScaleLock = scaleLock;
                 AnalyzePosTolerancePx = posTol;
                 AnalyzeAngToleranceDeg = angTol;
+                HeatmapGain = gain;
+                HeatmapGamma = gamma;
                 HeatmapOverlayOpacity = opacity;
             }
             finally
@@ -3515,6 +3564,37 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private void UpdateLastInferenceClassification()
+        {
+            double? score = _workflowViewModel?.InferenceScore;
+            if (!score.HasValue)
+            {
+                _lastIsNg = false;
+                return;
+            }
+
+            double? threshold = null;
+            if (_workflowViewModel?.SelectedInspectionRoi is InspectionRoiConfig selected)
+            {
+                threshold = selected.CalibratedThreshold ?? selected.ThresholdDefault;
+            }
+
+            if (_workflowViewModel != null)
+            {
+                double local = _workflowViewModel.LocalThreshold;
+                if (local > 0)
+                {
+                    threshold = local;
+                }
+                else if (_workflowViewModel.InferenceThreshold.HasValue)
+                {
+                    threshold = _workflowViewModel.InferenceThreshold.Value;
+                }
+            }
+
+            _lastIsNg = threshold.HasValue && score.Value > threshold.Value;
+        }
+
         private async Task ShowHeatmapOverlayAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)
         {
             await EnsureOverlayAlignedForHeatmapAsync().ConfigureAwait(false);
@@ -3535,6 +3615,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 await Dispatcher.InvokeAsync(() =>
                 {
                     ClearHeatmapOverlay();
+                    UpdateLastInferenceClassification();
                     _lastHeatmapRoi = HeatmapRoiModel.From(export.RoiImage.Clone());
                     _heatmapOverlayOpacity = Math.Clamp(opacity, 0.0, 1.0);
                     EnterAnalysisView();
@@ -3622,6 +3703,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _lastHeatmapGray = null;
             _lastHeatmapW = 0;
             _lastHeatmapH = 0;
+            _lastIsNg = false;
             LogHeatmap("Heatmap Source: <null>");
             UpdateHeatmapOverlayLayoutAndClip();
         }
@@ -3634,6 +3716,58 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
             UpdateHeatmapOverlayLayoutAndClip();
+        }
+
+        private static BitmapSource? ApplyHeatmapLut(BitmapSource src, double gain, double gamma)
+        {
+            if (src == null)
+            {
+                return null;
+            }
+
+            gain = Math.Clamp(gain, 0.25, 4.0);
+            gamma = Math.Clamp(gamma, 0.25, 4.0);
+
+            BitmapSource baseSrc = src;
+            if (baseSrc.Format != PixelFormats.Bgra32)
+            {
+                var converted = new FormatConvertedBitmap(baseSrc, PixelFormats.Bgra32, null, 0);
+                converted.Freeze();
+                baseSrc = converted;
+            }
+
+            var wb = new WriteableBitmap(baseSrc);
+            int width = wb.PixelWidth;
+            int height = wb.PixelHeight;
+            int stride = wb.BackBufferStride;
+            int bpp = (wb.Format.BitsPerPixel + 7) / 8;
+            byte[] pixels = new byte[stride * height];
+            wb.CopyPixels(pixels, stride, 0);
+
+            const double eps = 1e-6;
+            for (int y = 0; y < height; y++)
+            {
+                int rowOffset = y * stride;
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = rowOffset + x * bpp;
+                    double b = pixels[idx];
+                    double g = pixels[idx + 1];
+                    double r = pixels[idx + 2];
+                    double lum = (0.0722 * b + 0.7152 * g + 0.2126 * r) / 255.0;
+                    double safeLum = Math.Max(lum, eps);
+                    double adjusted = Math.Pow(safeLum, gamma);
+                    adjusted = Math.Clamp(adjusted * gain, 0.0, 1.0);
+                    double scale = adjusted / safeLum;
+                    pixels[idx] = (byte)Math.Round(Math.Clamp(b * scale, 0.0, 255.0));
+                    pixels[idx + 1] = (byte)Math.Round(Math.Clamp(g * scale, 0.0, 255.0));
+                    pixels[idx + 2] = (byte)Math.Round(Math.Clamp(r * scale, 0.0, 255.0));
+                }
+            }
+
+            wb.WritePixels(new Int32Rect(0, 0, width, height), pixels, stride, 0);
+            wb.Freeze();
+            return wb;
         }
 
         private void RebuildHeatmapOverlayFromCache()
@@ -3675,7 +3809,21 @@ namespace BrakeDiscInspector_GUI_ROI
                 _lastHeatmapW, _lastHeatmapH, 96, 96,
                 System.Windows.Media.PixelFormats.Bgra32, null);
             wb.WritePixels(new Int32Rect(0, 0, _lastHeatmapW, _lastHeatmapH), bgra, _lastHeatmapW * 4, 0);
-            HeatmapOverlay.Source = wb;
+            double baseGain = _heatmapGain;
+            double baseGamma = _heatmapGamma;
+            double effectiveGain = _lastIsNg ? Math.Max(baseGain, 1.35) : Math.Min(baseGain, 0.85);
+            double effectiveGamma = _lastIsNg ? Math.Min(baseGamma, 0.85) : Math.Max(baseGamma, 1.15);
+            var adjusted = ApplyHeatmapLut(wb, effectiveGain, effectiveGamma);
+
+            if (adjusted != null)
+            {
+                HeatmapOverlay.Source = adjusted;
+            }
+            else
+            {
+                wb.Freeze();
+                HeatmapOverlay.Source = wb;
+            }
         }
 
         private void CacheHeatmapGrayFromBitmapSource(BitmapSource src)
@@ -7957,10 +8105,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 var resp = await BackendAPI.InferAsync(request);
 
                 // 6) Mostrar texto (si tienes el TextBlock en XAML)
+                bool isNg = resp.threshold.HasValue && resp.score > resp.threshold.Value;
+                _lastIsNg = isNg;
                 if (ResultLabel != null)
                 {
                     string thrText = resp.threshold.HasValue ? resp.threshold.Value.ToString("0.###") : "n/a";
-                    ResultLabel.Text = $"score={resp.score:F3} / thr {thrText}";
+                    ResultLabel.Text = isNg
+                        ? $"NG (score={resp.score:F3} / thr {thrText})"
+                        : $"OK (score={resp.score:F3} / thr {thrText})";
+                    ResultLabel.Foreground = isNg ? Brushes.OrangeRed : Brushes.LightGreen;
                 }
 
                 // 7) Decodificar heatmap y pintarlo en el Image del XAML

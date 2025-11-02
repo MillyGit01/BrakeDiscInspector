@@ -8763,7 +8763,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                bool loaded = await _workflowViewModel.LoadModelManifestAsync(roiConfig, dialog.FileName).ConfigureAwait(false);
+                bool loaded = await _workflowViewModel.LoadModelManifestAsync(roiConfig, dialog.FileName);
                 if (!loaded)
                 {
                     return;

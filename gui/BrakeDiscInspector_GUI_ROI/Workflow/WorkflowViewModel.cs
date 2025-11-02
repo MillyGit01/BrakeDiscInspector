@@ -10,6 +10,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -69,6 +70,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private byte[]? _lastHeatmapBytes;
         private InferResult? _lastInferResult;
         private readonly Dictionary<InspectionRoiConfig, RoiDatasetAnalysis> _roiDatasetCache = new();
+        private readonly Dictionary<InspectionRoiConfig, FitOkResult> _lastFitResultsByRoi = new();
+        private readonly Dictionary<InspectionRoiConfig, CalibResult> _lastCalibResultsByRoi = new();
+        private readonly Func<InspectionRoiConfig, string?>? _resolveModelDirectory;
+
+        private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
+        {
+            WriteIndented = true
+        };
 
         public WorkflowViewModel(
             BackendClient client,
@@ -79,7 +88,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Func<RoiExportResult, byte[], double, Task> showHeatmapAsync,
             Action clearHeatmap,
             Action<bool?> updateGlobalBadge,
-            Action<int>? activateInspectionIndex = null)
+            Action<int>? activateInspectionIndex = null,
+            Func<InspectionRoiConfig, string?>? resolveModelDirectory = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -90,6 +100,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _clearHeatmap = clearHeatmap ?? throw new ArgumentNullException(nameof(clearHeatmap));
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
             _activateInspectionIndex = activateInspectionIndex;
+            _resolveModelDirectory = resolveModelDirectory;
 
             _backendBaseUrl = _client.BaseUrl;
 
@@ -400,6 +411,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 foreach (InspectionRoiConfig roi in e.OldItems)
                 {
                     roi.PropertyChanged -= InspectionRoiPropertyChanged;
+                    _lastFitResultsByRoi.Remove(roi);
+                    _lastCalibResultsByRoi.Remove(roi);
                 }
             }
 
@@ -442,6 +455,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 EvaluateAllRoisCommand.RaiseCanExecuteChanged();
                 EvaluateSelectedRoiCommand.RaiseCanExecuteChanged();
+            }
+
+            if (e.PropertyName == nameof(InspectionRoiConfig.HasFitOk) && sender is InspectionRoiConfig changedFit && !changedFit.HasFitOk)
+            {
+                _lastFitResultsByRoi.Remove(changedFit);
+            }
+
+            if (e.PropertyName == nameof(InspectionRoiConfig.CalibratedThreshold) && sender is InspectionRoiConfig changedCal && changedCal.CalibratedThreshold == null)
+            {
+                _lastCalibResultsByRoi.Remove(changedCal);
             }
 
             if (e.PropertyName == nameof(InspectionRoiConfig.LastResultOk) || e.PropertyName == nameof(InspectionRoiConfig.Enabled))
@@ -1791,6 +1814,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var memoryHint = roi.TrainMemoryFit ? " (memory-fit)" : string.Empty;
                 FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]" + memoryHint;
                 roi.HasFitOk = true;
+                _lastFitResultsByRoi[roi] = result;
+                await SaveModelManifestAsync(roi, result, null, ct).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
@@ -1880,12 +1905,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             double? threshold = null;
+            CalibResult? calibResult = null;
             if (await EnsureCalibrateEndpointAsync().ConfigureAwait(false))
             {
                 try
                 {
                     var calib = await _client.CalibrateAsync(RoleId, roi.ModelKey, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null, ct: ct).ConfigureAwait(false);
                     threshold = calib.threshold;
+                    calibResult = calib;
                     CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile:0.###}";
                 }
                 catch (HttpRequestException ex)
@@ -1898,11 +1925,227 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 threshold = ComputeYoudenThreshold(okScores, ngScores, roi.ThresholdDefault);
                 CalibrationSummary = $"Threshold={threshold:0.###} (local)";
+                calibResult = new CalibResult
+                {
+                    threshold = threshold,
+                    ok_mean = okScores.Count > 0 ? okScores.Average() : 0.0,
+                    ng_mean = ngScores.Count > 0 ? ngScores.Average() : 0.0,
+                    score_percentile = 0.0,
+                    area_mm2_thr = 0.0
+                };
             }
 
             roi.CalibratedThreshold = threshold;
             OnPropertyChanged(nameof(SelectedInspectionRoi));
             UpdateGlobalBadge();
+
+            if (calibResult != null)
+            {
+                _lastCalibResultsByRoi[roi] = calibResult;
+            }
+
+            await SaveModelManifestAsync(roi, GetLastFitResult(roi), calibResult, ct).ConfigureAwait(false);
+        }
+
+        public void ResetModelStates()
+        {
+            _lastFitResultsByRoi.Clear();
+            _lastCalibResultsByRoi.Clear();
+            FitSummary = string.Empty;
+            CalibrationSummary = string.Empty;
+            InferenceSummary = string.Empty;
+            _lastExport = null;
+            _lastInferResult = null;
+            _lastHeatmapBytes = null;
+            ClearInferenceUi("[model] reset via canvas clear");
+
+            if (_inspectionRois != null)
+            {
+                foreach (var roi in _inspectionRois)
+                {
+                    roi.HasFitOk = false;
+                    roi.CalibratedThreshold = null;
+                    roi.LastScore = null;
+                    roi.LastResultOk = null;
+                    roi.LastEvaluatedAt = null;
+                }
+            }
+
+            UpdateGlobalBadge();
+        }
+
+        public async Task<bool> LoadModelManifestAsync(InspectionRoiConfig roi, string filePath)
+        {
+            if (roi == null)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                await ShowMessageAsync("Model file not found.", "Load model", MessageBoxImage.Warning);
+                return false;
+            }
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
+                var manifest = JsonSerializer.Deserialize<InspectionModelManifest>(json, ManifestJsonOptions);
+                if (manifest == null)
+                {
+                    throw new InvalidOperationException("Empty model manifest.");
+                }
+
+                if (manifest.roi_index > 0 && manifest.roi_index != roi.Index)
+                {
+                    await ShowMessageAsync(
+                        $"El modelo seleccionado corresponde a Inspection {manifest.roi_index}.",
+                        "Load model",
+                        MessageBoxImage.Warning);
+                }
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    if (!string.IsNullOrWhiteSpace(manifest.model_key)
+                        && !string.Equals(roi.ModelKey, manifest.model_key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        roi.ModelKey = manifest.model_key;
+                    }
+
+                    roi.HasFitOk = manifest.fit != null;
+                    roi.CalibratedThreshold = manifest.calibration?.threshold;
+                    roi.LastScore = null;
+                    roi.LastResultOk = null;
+                    roi.LastEvaluatedAt = null;
+                });
+
+                ClearInferenceUi("[model] load manifest");
+
+                if (manifest.fit != null)
+                {
+                    _lastFitResultsByRoi[roi] = manifest.fit;
+                    FitSummary = $"Embeddings={manifest.fit.n_embeddings} Coreset={manifest.fit.coreset_size} TokenShape=[{string.Join(',', manifest.fit.token_shape ?? Array.Empty<int>())}]";
+                }
+                else
+                {
+                    _lastFitResultsByRoi.Remove(roi);
+                    FitSummary = string.Empty;
+                }
+
+                if (manifest.calibration != null)
+                {
+                    _lastCalibResultsByRoi[roi] = manifest.calibration;
+                    CalibrationSummary = $"Threshold={(manifest.calibration.threshold ?? double.NaN):0.###} OKµ={manifest.calibration.ok_mean:0.###} NGµ={manifest.calibration.ng_mean:0.###} Percentile={manifest.calibration.score_percentile:0.###}";
+
+                    if (manifest.calibration.threshold is double thr && thr > 0)
+                    {
+                        LocalThreshold = thr;
+                    }
+                }
+                else
+                {
+                    _lastCalibResultsByRoi.Remove(roi);
+                    CalibrationSummary = string.Empty;
+                }
+
+                SelectedInspectionRoi = roi;
+                OnPropertyChanged(nameof(SelectedInspectionRoi));
+                UpdateGlobalBadge();
+
+                _log($"[model] manifest cargado '{filePath}' para ROI '{roi.Name}' (idx={roi.Index})");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _log($"[model] load manifest failed: {ex.Message}");
+                await ShowMessageAsync(
+                    $"No se pudo cargar el modelo.\n{ex.Message}",
+                    "Load model",
+                    MessageBoxImage.Error);
+                return false;
+            }
+        }
+
+        private FitOkResult? GetLastFitResult(InspectionRoiConfig roi)
+            => roi != null && _lastFitResultsByRoi.TryGetValue(roi, out var value) ? value : null;
+
+        private async Task SaveModelManifestAsync(InspectionRoiConfig roi, FitOkResult? fit, CalibResult? calib, CancellationToken ct)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            if (fit == null && calib == null)
+            {
+                return;
+            }
+
+            if (_resolveModelDirectory == null)
+            {
+                return;
+            }
+
+            string? targetDirectory;
+            try
+            {
+                targetDirectory = _resolveModelDirectory(roi);
+            }
+            catch (Exception ex)
+            {
+                _log($"[model] error resolving directory: {ex.Message}");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(targetDirectory))
+            {
+                return;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(targetDirectory);
+
+                var manifest = new InspectionModelManifest
+                {
+                    manifest_version = "1.0",
+                    role_id = RoleId,
+                    model_key = roi.ModelKey,
+                    roi_index = roi.Index,
+                    roi_name = roi.Name,
+                    mm_per_px = MmPerPx,
+                    trained_at_utc = fit != null ? DateTimeOffset.UtcNow : null,
+                    calibrated_at_utc = calib != null ? DateTimeOffset.UtcNow : null,
+                    fit = fit ?? GetLastFitResult(roi),
+                    calibration = calib ?? (_lastCalibResultsByRoi.TryGetValue(roi, out var lastCalib) ? lastCalib : null)
+                };
+
+                if (manifest.fit == null && manifest.calibration == null)
+                {
+                    return;
+                }
+
+                string fileName = $"model_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
+                string manifestPath = Path.Combine(targetDirectory, fileName);
+                string json = JsonSerializer.Serialize(manifest, ManifestJsonOptions);
+                await File.WriteAllTextAsync(manifestPath, json, ct).ConfigureAwait(false);
+
+                try
+                {
+                    var latestPath = Path.Combine(targetDirectory, "latest_model.json");
+                    File.Copy(manifestPath, latestPath, overwrite: true);
+                }
+                catch (Exception copyEx)
+                {
+                    _log($"[model] no se pudo actualizar latest_model.json: {copyEx.Message}");
+                }
+
+                _log($"[model] manifest guardado en '{manifestPath}'");
+            }
+            catch (Exception ex)
+            {
+                _log($"[model] error al guardar manifest: {ex.Message}");
+            }
         }
 
         private async Task<bool> EnsureTrainedBeforeCalibrateAsync(InspectionRoiConfig? roi, CancellationToken ct)
@@ -2398,6 +2641,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             public static RoiDatasetAnalysis Empty(string status)
                 => new(string.Empty, new List<DatasetEntry>(), 0, 0, false, status, new List<(string, bool)>());
+        }
+
+        private sealed class InspectionModelManifest
+        {
+            public string? manifest_version { get; set; }
+            public string? role_id { get; set; }
+            public string? model_key { get; set; }
+            public int roi_index { get; set; }
+            public string? roi_name { get; set; }
+            public double? mm_per_px { get; set; }
+            public DateTimeOffset? trained_at_utc { get; set; }
+            public DateTimeOffset? calibrated_at_utc { get; set; }
+            public FitOkResult? fit { get; set; }
+            public CalibResult? calibration { get; set; }
         }
 
         private sealed record DatasetEntry(string Path, bool IsOk);

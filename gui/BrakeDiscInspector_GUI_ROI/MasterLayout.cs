@@ -50,6 +50,8 @@ namespace BrakeDiscInspector_GUI_ROI
     public sealed class UiOptions
     {
         public double HeatmapOverlayOpacity { get; set; } = 0.6;
+        public double HeatmapGain { get; set; } = 1.0;
+        public double HeatmapGamma { get; set; } = 1.0;
     }
 
     public static class MasterLayoutManager
@@ -61,10 +63,11 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var path = GetDefaultPath(preset);
             MasterLayout layout;
+            bool loadedFromFile = File.Exists(path);
 
             try
             {
-                if (!File.Exists(path))
+                if (!loadedFromFile)
                 {
                     layout = new MasterLayout();
                 }
@@ -93,6 +96,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
             EnsureInspectionRoiDefaults(layout);
             EnsureOptionDefaults(layout);
+
+            if (loadedFromFile && (layout.Master1Pattern == null || layout.Master1Search == null))
+            {
+                throw new InvalidOperationException("Preset incompleto: falta Master 1.");
+            }
+
+            layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
+            layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
             return layout;
         }
 

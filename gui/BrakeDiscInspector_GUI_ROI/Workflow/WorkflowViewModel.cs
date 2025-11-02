@@ -2307,8 +2307,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 roi.LastScore = result.score;
                 var decisionThreshold = roi.CalibratedThreshold ?? roi.ThresholdDefault;
-                var isNg = result.score >= decisionThreshold;
-                roi.LastResultOk = isNg;
+                bool isNg = result.score > decisionThreshold;
+                roi.LastResultOk = !isNg;
                 roi.LastEvaluatedAt = DateTime.UtcNow;
                 _log($"[eval] done idx={roi.Index} key='{roi.ModelKey}' score={result.score:0.###} thr={decisionThreshold:0.###} => {(isNg ? "NG" : "OK")}");
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
@@ -2480,7 +2480,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (thr > 0)
             {
                 sb.AppendFormat(" LocalThr={0:0.###}", thr);
-                sb.Append(InferenceScore.Value >= thr ? " → NG" : " → OK");
+                sb.Append(InferenceScore.Value > thr ? " → NG" : " → OK");
             }
             InferenceSummary = sb.ToString();
         }

@@ -1989,7 +1989,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
+                var json = await File.ReadAllTextAsync(filePath);
                 var manifest = JsonSerializer.Deserialize<InspectionModelManifest>(json, ManifestJsonOptions);
                 if (manifest == null)
                 {

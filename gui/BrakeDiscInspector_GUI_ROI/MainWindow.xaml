@@ -63,6 +63,7 @@
                   <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Margin="0,4,0,0">
                     <ComboBoxItem Content="Rectángulo"/>
                     <ComboBoxItem Content="Círculo"/>
+                    <ComboBoxItem Content="Annulus"/>
                   </ComboBox>
                 </Grid>
 
@@ -105,6 +106,7 @@
                   <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Margin="0,4,0,0">
                     <ComboBoxItem Content="Rectángulo"/>
                     <ComboBoxItem Content="Círculo"/>
+                    <ComboBoxItem Content="Annulus"/>
                   </ComboBox>
                 </Grid>
 

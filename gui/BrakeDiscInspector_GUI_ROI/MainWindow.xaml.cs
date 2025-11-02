@@ -2112,6 +2112,7 @@ namespace BrakeDiscInspector_GUI_ROI
             ComboMasterRoiShape.Items.Clear();
             ComboMasterRoiShape.Items.Add("Rectángulo");
             ComboMasterRoiShape.Items.Add("Círculo");
+            ComboMasterRoiShape.Items.Add("Annulus");
             ComboMasterRoiShape.SelectedIndex = 0;
 
 
@@ -2331,7 +2332,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             TxtMasterHints.Text = _state switch
             {
-                MasterState.DrawM1_Pattern => "1) Dibuja el ROI del patrón Master 1. 2) Cambia a 'ROI Inspección Master 1' para delimitar la zona de búsqueda. Usa rectángulo o círculo.",
+                MasterState.DrawM1_Pattern => "1) Dibuja el ROI del patrón Master 1. 2) Cambia a 'ROI Inspección Master 1' para delimitar la zona de búsqueda. Usa rectángulo, círculo o annulus.",
                 MasterState.DrawM1_Search => "Dibuja la zona de búsqueda para Master 1 y pulsa Guardar.",
                 MasterState.DrawM2_Pattern => "Dibuja el ROI del patrón Master 2.",
                 MasterState.DrawM2_Search => "Dibuja la zona de búsqueda para Master 2 y pulsa Guardar.",
@@ -4795,20 +4796,33 @@ namespace BrakeDiscInspector_GUI_ROI
         // ====== Ratón & dibujo ======
         private RoiShape ReadShapeForCurrentStep()
         {
-            string ToLower(object? x) => (x?.ToString() ?? string.Empty).ToLowerInvariant();
+            string ToLower(object? x)
+            {
+                if (x is ComboBoxItem comboItem)
+                {
+                    if (comboItem.Tag is RoiShape taggedShape)
+                    {
+                        return taggedShape.ToString().ToLowerInvariant();
+                    }
+
+                    var content = comboItem.Content?.ToString();
+                    if (!string.IsNullOrWhiteSpace(content))
+                    {
+                        return content.ToLowerInvariant();
+                    }
+                }
+
+                return (x?.ToString() ?? string.Empty).ToLowerInvariant();
+            }
 
             if (_state == MasterState.DrawM1_Pattern || _state == MasterState.DrawM1_Search)
             {
-                var t = ToLower(ComboMasterRoiShape.SelectedItem);
-                if (t.Contains("círculo") || t.Contains("circulo")) return RoiShape.Circle;
-                return RoiShape.Rectangle;
+                return ReadShapeFrom(ComboMasterRoiShape);
             }
 
             if (_state == MasterState.DrawM2_Pattern || _state == MasterState.DrawM2_Search)
             {
-                var t = ToLower(ComboM2Shape.SelectedItem);
-                if (t.Contains("círculo") || t.Contains("circulo")) return RoiShape.Circle;
-                return RoiShape.Rectangle;
+                return ReadShapeFrom(ComboM2Shape);
             }
 
             if (_state == MasterState.DrawInspection || _state == MasterState.Ready)
@@ -4817,8 +4831,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var shapeText = ToLower(GetInspectionShapeFromModel());
-            if (shapeText.Contains("círculo") || shapeText.Contains("circulo")) return RoiShape.Circle;
             if (shapeText.Contains("annulus")) return RoiShape.Annulus;
+            if (shapeText.Contains("círculo") || shapeText.Contains("circulo") || shapeText.Contains("circle")) return RoiShape.Circle;
             return RoiShape.Rectangle;
         }
 
@@ -5538,7 +5552,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 case MasterState.DrawM1_Pattern:
                     savedRole = RoiRole.Master1Pattern;
                     AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
-                    if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { Snack("Master: usa rectángulo o círculo"); return; }
+                    if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { Snack("Master: usa rectángulo, círculo o annulus"); return; }
                     _tmpBuffer.Role = savedRole.Value;
 
                     _layout.Master1Pattern = _tmpBuffer.Clone();
@@ -5578,7 +5592,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 case MasterState.DrawM2_Pattern:
                     savedRole = RoiRole.Master2Pattern;
                     AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
-                    if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { Snack("Master: usa rectángulo o círculo"); return; }
+                    if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { Snack("Master: usa rectángulo, círculo o annulus"); return; }
                     _tmpBuffer.Role = savedRole.Value;
 
                     _layout.Master2Pattern = _tmpBuffer.Clone();
@@ -5760,7 +5774,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private static bool IsAllowedMasterShape(RoiShape s) => s == RoiShape.Rectangle || s == RoiShape.Circle;
+        private static bool IsAllowedMasterShape(RoiShape s)
+            => s == RoiShape.Rectangle || s == RoiShape.Circle || s == RoiShape.Annulus;
 
         // ====== Validadores ======
         private void BtnValidateM1_Click(object sender, RoutedEventArgs e)
@@ -8635,25 +8650,45 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private RoiShape ReadShapeFrom(ComboBox combo)
         {
-            string t = (combo?.SelectedItem?.ToString() ?? "").ToLowerInvariant();
-            if (t.Contains("círculo") || t.Contains("circulo")) return RoiShape.Circle;
+            if (combo?.SelectedItem is ComboBoxItem item)
+            {
+                if (item.Tag is RoiShape taggedShape)
+                {
+                    return taggedShape;
+                }
+
+                var content = item.Content?.ToString();
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    var loweredContent = content.ToLowerInvariant();
+                    if (loweredContent.Contains("annulus")) return RoiShape.Annulus;
+                    if (loweredContent.Contains("círculo") || loweredContent.Contains("circulo") || loweredContent.Contains("circle"))
+                        return RoiShape.Circle;
+                }
+            }
+
+            string text = (combo?.SelectedItem?.ToString() ?? string.Empty).ToLowerInvariant();
+            if (text.Contains("annulus")) return RoiShape.Annulus;
+            if (text.Contains("círculo") || text.Contains("circulo") || text.Contains("circle")) return RoiShape.Circle;
             return RoiShape.Rectangle;
         }
 
         private void SetDrawToolFromShape(RoiShape shape)
         {
-            // Mantén las herramientas existentes sin tocarlas: activa el toggle según la forma
-            if (shape == RoiShape.Circle)
+            if (RectToolButton != null)
             {
-                CircleToolButton.IsChecked = true;
-                RectToolButton.IsChecked = false;
+                RectToolButton.IsChecked = shape == RoiShape.Rectangle;
             }
-            else
+
+            if (CircleToolButton != null)
             {
-                RectToolButton.IsChecked = true;
-                CircleToolButton.IsChecked = false;
+                CircleToolButton.IsChecked = shape == RoiShape.Circle;
             }
-            // Annulus se gestiona desde la pestaña de Inspección; aquí solo Rect/Circ para masters.
+
+            if (AnnulusToolButton != null)
+            {
+                AnnulusToolButton.IsChecked = shape == RoiShape.Annulus;
+            }
         }
 
         private void StartDrawingFor(MasterState state, ComboBox shapeCombo)

@@ -116,26 +116,31 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            RoiModel? assigned = null;
+
             if (model != null)
             {
                 NormalizeInspectionRoi(model, index);
+                assigned = model.Clone();
             }
 
             switch (index)
             {
                 case 1:
-                    _layout.Inspection1 = model;
+                    _layout.Inspection1 = assigned;
                     break;
                 case 2:
-                    _layout.Inspection2 = model;
+                    _layout.Inspection2 = assigned;
                     break;
                 case 3:
-                    _layout.Inspection3 = model;
+                    _layout.Inspection3 = assigned;
                     break;
                 case 4:
-                    _layout.Inspection4 = model;
+                    _layout.Inspection4 = assigned;
                     break;
             }
+
+            RoiDiag($"[slot-set] idx={index} assignedId={(assigned?.Id ?? "<null>")} srcId={(model?.Id ?? "<null>")}");
 
             if (updateActive && index == _activeInspectionIndex)
             {
@@ -1413,11 +1418,28 @@ namespace BrakeDiscInspector_GUI_ROI
         }
         // ---------- Logging helpers ----------
 
-        private void RoiDiag(string line) => RoiDiagLog(line);
+        private void RoiDiag(string line)
+        {
+            try
+            {
+                var sb = new System.Text.StringBuilder(256);
+                sb.Append("[").Append(System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")).Append("] ").Append(line);
+                var dir = System.IO.Path.GetDirectoryName(RoiDiagLogPath);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    System.IO.Directory.CreateDirectory(dir);
+                }
+                System.IO.File.AppendAllText(RoiDiagLogPath, sb.ToString() + System.Environment.NewLine, System.Text.Encoding.UTF8);
+            }
+            catch { /* never throw */ }
+        }
 
         private void LogImgLoadAndRois(string stageTag)
         {
             RoiDiag($"[{stageTag}] img=({_imgW}x{_imgH})");
+            var t = GetImageToCanvasTransform();
+            RoiDiag($"[{stageTag}] transform sx={t.sx:F6} sy={t.sy:F6} off=({t.offX:F2},{t.offY:F2})");
+
             foreach (var roi in GetInspectionRoiModelsForRescale())
             {
                 if (roi == null || roi.Role != RoiRole.Inspection)
@@ -1458,21 +1480,119 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private FrameworkElement? FindInspectionShapeById(string id)
+        {
+            var canvas = CanvasROI;
+            if (canvas == null)
+            {
+                return null;
+            }
+
+            foreach (var child in canvas.Children)
+            {
+                if (child is FrameworkElement fe)
+                {
+                    if (fe.Tag is RoiModel model && string.Equals(model.Id, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return fe;
+                    }
+
+                    if (fe.Tag is string tag && string.Equals(tag, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return fe;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(fe.Name) && string.Equals(fe.Name, "roiShape_" + id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return fe;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private void DumpUiShapesMap(string stageTag)
+        {
+            var canvas = CanvasROI;
+            if (canvas == null)
+            {
+                RoiDiag($"[{stageTag}] UI-SHAPE canvas=<null>");
+                return;
+            }
+
+            foreach (var child in canvas.Children)
+            {
+                if (child is FrameworkElement fe)
+                {
+                    double L = System.Windows.Controls.Canvas.GetLeft(fe);
+                    double T = System.Windows.Controls.Canvas.GetTop(fe);
+                    if (double.IsNaN(L)) L = 0;
+                    if (double.IsNaN(T)) T = 0;
+                    double W = fe.ActualWidth;
+                    double H = fe.ActualHeight;
+                    if ((double.IsNaN(W) || W <= 0) && fe is Shape shapeW && !double.IsNaN(shapeW.Width) && shapeW.Width > 0)
+                    {
+                        W = shapeW.Width;
+                    }
+                    if ((double.IsNaN(H) || H <= 0) && fe is Shape shapeH && !double.IsNaN(shapeH.Height) && shapeH.Height > 0)
+                    {
+                        H = shapeH.Height;
+                    }
+                    var name = fe.Name;
+                    var tag = fe.Tag?.ToString();
+                    RoiDiag($"[{stageTag}] UI-SHAPE name='{name}' tag='{tag}' L={L:F1} T={T:F1} W={W:F1} H={H:F1}");
+                }
+            }
+        }
+
+        private void LogDeltaAgainstShape(string stageTag, string inspectionId, System.Windows.Rect expectedCanvasRect)
+        {
+            if (string.IsNullOrWhiteSpace(inspectionId))
+            {
+                RoiDiag($"[{stageTag}] DELTA id=<null>");
+                return;
+            }
+
+            var fe = FindInspectionShapeById(inspectionId);
+            if (fe == null)
+            {
+                RoiDiag($"[{stageTag}] DELTA id={inspectionId} shape=NOT_FOUND");
+                return;
+            }
+
+            double L = System.Windows.Controls.Canvas.GetLeft(fe);
+            double T = System.Windows.Controls.Canvas.GetTop(fe);
+            if (double.IsNaN(L)) L = 0;
+            if (double.IsNaN(T)) T = 0;
+            double W = fe.ActualWidth;
+            double H = fe.ActualHeight;
+            if ((double.IsNaN(W) || W <= 0) && fe is Shape shapeW && !double.IsNaN(shapeW.Width) && shapeW.Width > 0)
+            {
+                W = shapeW.Width;
+            }
+            if ((double.IsNaN(H) || H <= 0) && fe is Shape shapeH && !double.IsNaN(shapeH.Height) && shapeH.Height > 0)
+            {
+                H = shapeH.Height;
+            }
+            var deltaPos = (expectedCanvasRect.X - L, expectedCanvasRect.Y - T);
+            var deltaSize = (expectedCanvasRect.Width - W, expectedCanvasRect.Height - H);
+            RoiDiag($"[{stageTag}] DELTA id={inspectionId} Δpos=({deltaPos.Item1:F1},{deltaPos.Item2:F1}) Δsize=({deltaSize.Item1:F1},{deltaSize.Item2:F1})");
+        }
+
         private void RoiDiagLog(string line)
         {
             if (!_roiDiagEnabled) return;
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(RoiDiagLogPath)!);
                 var sb = new StringBuilder(256);
-                sb.Append("[").Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff")).Append("] ");
                 sb.Append("#").Append(++_roiDiagEventSeq).Append(" ");
                 sb.Append("[").Append(_roiDiagSessionId).Append("] ");
                 sb.Append(line);
-                var text = sb.ToString() + Environment.NewLine;
+                var formatted = sb.ToString();
                 lock (_roiDiagLock)
                 {
-                    File.AppendAllText(RoiDiagLogPath, text, Encoding.UTF8);
+                    RoiDiag(formatted);
                 }
             }
             catch { /* never throw from logging */ }
@@ -2803,6 +2923,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             AppendLog($"Imagen cargada: {_imgW}x{_imgH}  (Canvas: {CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0})");
             RedrawOverlaySafe();
+            DumpUiShapesMap("imgload:post-redraw");
             ClearHeatmapOverlay();
             RestoreInspectionBaselineForCurrentImage();
 
@@ -3182,6 +3303,9 @@ namespace BrakeDiscInspector_GUI_ROI
                                     roi.Role == RoiRole.Master2Pattern ||
                                     roi.Role == RoiRole.Master2Search;
 
+                SWRect expectedCanvasRect = default;
+                bool expectedRectValid = false;
+
                 switch (roi.Shape)
                 {
                     case RoiShape.Rectangle:
@@ -3227,6 +3351,8 @@ namespace BrakeDiscInspector_GUI_ROI
                             canvasRoi.CY = centerY;
                             canvasRoi.R = Math.Max(width, height) / 2.0;
                             canvasRoi.RInner = 0;
+                            expectedCanvasRect = MapImageRectToCanvas(new SWRect(roi.Left, roi.Top, roi.Width, roi.Height));
+                            expectedRectValid = true;
                             break;
                         }
                     case RoiShape.Circle:
@@ -3268,6 +3394,10 @@ namespace BrakeDiscInspector_GUI_ROI
                             canvasRoi.Y = cy;
                             canvasRoi.R = d / 2.0;
                             canvasRoi.RInner = 0;
+                            var mapped = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, 0);
+                            double mappedDiameter = Math.Max(1.0, mapped.rOuter * 2.0);
+                            expectedCanvasRect = new SWRect(mapped.c.X - mappedDiameter / 2.0, mapped.c.Y - mappedDiameter / 2.0, mappedDiameter, mappedDiameter);
+                            expectedRectValid = true;
                             break;
                         }
                     case RoiShape.Annulus:
@@ -3318,6 +3448,10 @@ namespace BrakeDiscInspector_GUI_ROI
                             canvasRoi.X = cx;
                             canvasRoi.Y = cy;
                             canvasRoi.R = d / 2.0;
+                            var mapped = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, roi.RInner);
+                            double mappedDiameter = Math.Max(1.0, mapped.rOuter * 2.0);
+                            expectedCanvasRect = new SWRect(mapped.c.X - mappedDiameter / 2.0, mapped.c.Y - mappedDiameter / 2.0, mappedDiameter, mappedDiameter);
+                            expectedRectValid = true;
                             break;
                         }
                 }
@@ -3383,6 +3517,11 @@ namespace BrakeDiscInspector_GUI_ROI
                     AppendResizeLog($"[roi] {roi.Label ?? "ROI"}: L={l:0} T={t:0} W={shape.Width:0} H={shape.Height:0}");
                 }
 
+                if (roi.Role == RoiRole.Inspection && expectedRectValid && !string.IsNullOrWhiteSpace(roi.Id))
+                {
+                    LogDeltaAgainstShape($"redraw:{roi.Id}", roi.Id, expectedCanvasRect);
+                }
+
                 ApplyRoiRotationToShape(shape, roi.AngleDeg);
             }
 
@@ -3390,6 +3529,8 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 SyncCurrentRoiFromInspection(_layout.Inspection);
             }
+
+            DumpUiShapesMap("redraw:end");
         }
 
         private Shape? CreateLayoutShape(RoiModel roi)
@@ -4709,6 +4850,7 @@ namespace BrakeDiscInspector_GUI_ROI
             for (int i = 0; i < 4; i++)
             {
                 var model = source.Count > i ? source[i] : null;
+                RoiDiag($"[slot-refresh] slot={i + 1} srcId={(model?.Id ?? "<null>")} shape={(model?.Shape.ToString() ?? "<none>")} base=({model?.BaseImgW?.ToString("F1", CultureInfo.InvariantCulture) ?? "-"}x{model?.BaseImgH?.ToString("F1", CultureInfo.InvariantCulture) ?? "-"})");
                 SetInspectionSlotModel(i + 1, model, updateActive: false);
             }
 
@@ -4716,6 +4858,8 @@ namespace BrakeDiscInspector_GUI_ROI
             Inspection2 = GetInspectionSlotModel(2);
             Inspection3 = GetInspectionSlotModel(3);
             Inspection4 = GetInspectionSlotModel(4);
+
+            RoiDiag($"[slot-refresh] layout slot1={(Inspection1?.Id ?? "<null>")} slot2={(Inspection2?.Id ?? "<null>")} slot3={(Inspection3?.Id ?? "<null>")} slot4={(Inspection4?.Id ?? "<null>")}");
 
             _workflowViewModel?.SetInspectionRoiModels(Inspection1, Inspection2, Inspection3, Inspection4);
             SetActiveInspectionIndex(_activeInspectionIndex);
@@ -4741,10 +4885,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
             roiModel.IsFrozen = false;
             NormalizeInspectionRoi(roiModel, index);
+            RoiDiag($"[save-slot] idx={index} roiId={roiModel.Id} role={roiModel.Role} shape={roiModel.Shape} img=({_imgW}x{_imgH}) base=({roiModel.BaseImgW}x{roiModel.BaseImgH}) rect=({roiModel.Left:F1},{roiModel.Top:F1},{roiModel.Width:F1},{roiModel.Height:F1})");
 
             var config = GetInspectionConfigByIndex(index);
             if (config != null)
             {
+                config.Id = $"Inspection_{index}";
                 config.Shape = roiModel.Shape;
                 if (!string.IsNullOrWhiteSpace(roiModel.Label)
                     && (string.IsNullOrWhiteSpace(config.Name)
@@ -4754,6 +4900,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 config.BaseImgW = _imgW;
                 config.BaseImgH = _imgH;
+                RoiDiag($"[save-slot] idx={index} configId={config.Id} shape={config.Shape} base=({config.BaseImgW}x{config.BaseImgH}) name='{config.Name}'");
             }
 
             roiModel.BaseImgW = _imgW;
@@ -4761,12 +4908,16 @@ namespace BrakeDiscInspector_GUI_ROI
 
             GuiLog.Info($"[inspection] save slot={index} roi={roiModel.Label ?? roiModel.Id} shape={roiModel.Shape}");
 
+            RoiDiag($"[save-slot] idx={index} persist base=({roiModel.BaseImgW}x{roiModel.BaseImgH})");
+
             var savedClone = roiModel.Clone();
             SetInspectionSlotModel(index, savedClone);
             RefreshInspectionRoiSlots();
             SetActiveInspectionIndex(index);
             EnsureInspectionDatasetStructure();
             TryPersistLayout();
+
+            DumpUiShapesMap($"save-slot:{index}");
 
             MessageBox.Show($"Inspection {index} guardada",
                             $"Inspection {index}",
@@ -7068,6 +7219,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 AngleDeg = CurrentRoi.AngleDeg,
                 Role = roleOverride ?? RoiRole.Inspection
             };
+
+            if (_imgW > 0 && _imgH > 0)
+            {
+                model.BaseImgW = _imgW;
+                model.BaseImgH = _imgH;
+            }
 
             if (!string.IsNullOrWhiteSpace(CurrentRoi.Legend))
             {

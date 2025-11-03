@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import traceback
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -44,6 +45,12 @@ else:
 log = logging.getLogger(__name__)
 
 app = FastAPI(title="Anomaly Backend (PatchCore + DINOv2)")
+
+
+def slog(event: str, **kw):
+    rec = {"ts": time.time(), "event": event}
+    rec.update(kw)
+    print(json.dumps(rec, ensure_ascii=False), flush=True)
 
 # Carpeta para artefactos persistentes por (role_id, roi_id)
 def _env_var(name: str, *, legacy: str | None = None, default: str | None = None) -> str | None:
@@ -112,6 +119,8 @@ def fit_ok(
     Guarda (role_id, roi_id): memoria (embeddings), token grid y, si hay FAISS, el índice.
     """
     try:
+        slog("fit_ok.request", role_id=role_id, roi_id=roi_id, n_files=len(images), memory_fit=bool(memory_fit))
+        t0 = time.time()
         if not images:
             return JSONResponse(status_code=400, content={"error": "No images provided"})
 
@@ -164,14 +173,24 @@ def fit_ok(
         except Exception:
             pass
 
-        return {
+        response = {
             "n_embeddings": int(E.shape[0]),
             "coreset_size": int(mem.emb.shape[0]),
             "token_shape": [int(token_hw[0]), int(token_hw[1])],
             "coreset_rate_requested": float(coreset_rate),
             "coreset_rate_applied": float(applied_rate),
         }
+        slog(
+            "fit_ok.response",
+            role_id=role_id,
+            roi_id=roi_id,
+            elapsed_ms=int(1000 * (time.time() - t0)),
+            n_embeddings=int(E.shape[0]),
+            coreset_size=int(mem.emb.shape[0]),
+        )
+        return response
     except Exception as e:
+        slog("fit_ok.error", role_id=role_id, roi_id=roi_id, error=str(e))
         return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
 
 @app.post("/calibrate_ng")
@@ -189,6 +208,15 @@ async def calibrate_ng(payload: Dict[str, Any]):
         ng_scores = np.asarray(payload.get("ng_scores", []), dtype=float) if "ng_scores" in payload else None
         area_mm2_thr = float(payload.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)))
         p_score = int(payload.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)))
+
+        slog(
+            "calibrate_ng.request",
+            role_id=role_id,
+            roi_id=roi_id,
+            ok_count=int(ok_scores.size),
+            ng_count=int(ng_scores.size) if ng_scores is not None else 0,
+        )
+        t0 = time.time()
 
         t = choose_threshold(
             ok_scores,
@@ -216,8 +244,16 @@ async def calibrate_ng(payload: Dict[str, Any]):
             "score_percentile": int(p_score),
         }
         store.save_calib(role_id, roi_id, calib)
+        slog(
+            "calibrate_ng.response",
+            role_id=role_id,
+            roi_id=roi_id,
+            elapsed_ms=int(1000 * (time.time() - t0)),
+            threshold=float(t),
+        )
         return calib
     except Exception as e:
+        slog("calibrate_ng.error", error=str(e), payload_keys=list(payload.keys()))
         return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
 
 
@@ -230,6 +266,8 @@ def infer(
     shape: Optional[str] = Form(None),
 ):
     try:
+        slog("infer.request", role_id=role_id, roi_id=roi_id)
+        t0 = time.time()
         import json, base64, numpy as np
         try:
             import cv2  # opcional para PNG rápido
@@ -344,16 +382,25 @@ def infer(
                 heatmap_png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
         # 10) Respuesta (threshold puede ser None → se serializa como null)
-        return {
+        response = {
             "score": float(score),
             "threshold": (float(thr) if thr is not None else None),
             "token_shape": [int(token_shape_out[0]), int(token_shape_out[1])],
             "heatmap_png_base64": heatmap_png_b64,
             "regions": regions or [],
         }
+        slog(
+            "infer.response",
+            role_id=role_id,
+            roi_id=roi_id,
+            elapsed_ms=int(1000 * (time.time() - t0)),
+            score=float(score),
+            threshold=(float(thr) if thr is not None else None),
+        )
+        return response
 
     except Exception as e:
-        import traceback
+        slog("infer.error", role_id=role_id, roi_id=roi_id, error=str(e))
         return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
 
 
@@ -364,12 +411,22 @@ def datasets_ok_upload(
     roi_id: str = Form(...),
     images: List[UploadFile] = File(...)
 ):
+    slog("datasets.upload.request", label="ok", role_id=role_id, roi_id=roi_id, n_files=len(images))
+    t0 = time.time()
     saved = []
     for up in images:
         data = up.file.read()
         ext = Path(up.filename).suffix or ".png"
         path = store.save_dataset_image(role_id, roi_id, "ok", data, ext)
         saved.append(Path(path).name)
+    slog(
+        "datasets.upload.response",
+        label="ok",
+        role_id=role_id,
+        roi_id=roi_id,
+        elapsed_ms=int(1000 * (time.time() - t0)),
+        saved=len(saved),
+    )
     return {"status": "ok", "saved": saved}
 
 
@@ -379,34 +436,76 @@ def datasets_ng_upload(
     roi_id: str = Form(...),
     images: List[UploadFile] = File(...)
 ):
+    slog("datasets.upload.request", label="ng", role_id=role_id, roi_id=roi_id, n_files=len(images))
+    t0 = time.time()
     saved = []
     for up in images:
         data = up.file.read()
         ext = Path(up.filename).suffix or ".png"
         path = store.save_dataset_image(role_id, roi_id, "ng", data, ext)
         saved.append(Path(path).name)
+    slog(
+        "datasets.upload.response",
+        label="ng",
+        role_id=role_id,
+        roi_id=roi_id,
+        elapsed_ms=int(1000 * (time.time() - t0)),
+        saved=len(saved),
+    )
     return {"status": "ok", "saved": saved}
 
 
 @app.get("/datasets/list")
 def datasets_list(role_id: str, roi_id: str):
-    return store.list_dataset(role_id, roi_id)
+    slog("datasets.list.request", role_id=role_id, roi_id=roi_id)
+    data = store.list_dataset(role_id, roi_id)
+    slog(
+        "datasets.list.response",
+        role_id=role_id,
+        roi_id=roi_id,
+        classes=list((data.get("classes") or {}).keys()),
+    )
+    return data
 
 
 @app.get("/manifest")
 def manifest(role_id: str, roi_id: str):
-    return store.manifest(role_id, roi_id)
+    slog("manifest.request", role_id=role_id, roi_id=roi_id)
+    data = store.manifest(role_id, roi_id)
+    slog(
+        "manifest.response",
+        role_id=role_id,
+        roi_id=roi_id,
+        has_memory=bool(data.get("memory")),
+        datasets=list((data.get("datasets", {}).get("classes", {}) or {}).keys()) if isinstance(data.get("datasets"), dict) else [],
+    )
+    return data
 
 
 @app.delete("/datasets/file")
 def datasets_delete_file(role_id: str, roi_id: str, label: str, filename: str):
     ok = store.delete_dataset_file(role_id, roi_id, label, filename)
+    slog(
+        "datasets.delete",
+        role_id=role_id,
+        roi_id=roi_id,
+        label=label,
+        filename=filename,
+        deleted=bool(ok),
+    )
     return {"deleted": ok, "filename": filename}
 
 
 @app.delete("/datasets/clear")
 def datasets_clear_class(role_id: str, roi_id: str, label: str):
     n = store.clear_dataset_class(role_id, roi_id, label)
+    slog(
+        "datasets.clear",
+        role_id=role_id,
+        roi_id=roi_id,
+        label=label,
+        cleared=int(n),
+    )
     return {"cleared": n, "label": label}
 
 

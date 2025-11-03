@@ -196,6 +196,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     roi.ModelKey = $"inspection-{i + 1}";
                 }
+
+                var expectedId = $"Inspection_{i + 1}";
+                if (string.IsNullOrWhiteSpace(roi.Id) || !string.Equals(roi.Id, expectedId, StringComparison.OrdinalIgnoreCase))
+                {
+                    roi.Id = expectedId;
+                }
             }
 
             layout.Inspection1 ??= layout.Inspection;

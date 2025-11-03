@@ -2257,9 +2257,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void EnablePresetsTab(bool enable)
         {
-            if (TabInspection != null)
+            if (TabSetupInspect != null)
             {
-                TabInspection.IsEnabled = enable;
+                TabSetupInspect.IsEnabled = enable;
             }
         }
 
@@ -2391,23 +2391,11 @@ namespace BrakeDiscInspector_GUI_ROI
             };
 
             // Habilitación de tabs por etapas
-            TabMaster1.IsEnabled = true;
+            TabSetupInspect.IsEnabled = true;
             EnablePresetsTab(mastersReady || _hasLoadedImage);     // permite la pestaña de inspección tras cargar imagen o completar masters
 
             // Selección de tab acorde a estado
-            if (_state == MasterState.DrawM1_Pattern || _state == MasterState.DrawM1_Search
-                || _state == MasterState.DrawM2_Pattern || _state == MasterState.DrawM2_Search)
-            {
-                MainTabs.SelectedItem = TabMaster1;
-            }
-            else if (_state == MasterState.DrawInspection)
-            {
-                MainTabs.SelectedItem = TabInspection;
-            }
-            else
-            {
-                MainTabs.SelectedItem = TabInspection;
-            }
+            MainTabs.SelectedItem = TabSetupInspect;
 
             if (_analysisViewActive && _state != MasterState.Ready)
             {
@@ -4272,9 +4260,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             _analysisViewActive = true;
-            if (MainTabs != null && TabInspection != null)
+            if (MainTabs != null && TabSetupInspect != null)
             {
-                MainTabs.SelectedItem = TabInspection;
+                MainTabs.SelectedItem = TabSetupInspect;
             }
         }
 
@@ -4719,14 +4707,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void GoToInspectionTab()
         {
-            if (TabInspection != null)
+            if (TabSetupInspect != null)
             {
-                TabInspection.IsEnabled = true;
+                TabSetupInspect.IsEnabled = true;
             }
 
-            if (MainTabs != null && TabInspection != null)
+            if (MainTabs != null && TabSetupInspect != null)
             {
-                MainTabs.SelectedItem = TabInspection;
+                MainTabs.SelectedItem = TabSetupInspect;
             }
         }
 

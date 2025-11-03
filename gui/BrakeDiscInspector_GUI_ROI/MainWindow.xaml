@@ -31,18 +31,27 @@
 
     <!-- ===== Tabs (left) ===== -->
     <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Left">
-      <!-- PREPARACIÓN / ALINEACIÓN -->
-      <TabItem x:Name="TabMaster1" Header="Preparación/Alineación">
+      <TabItem x:Name="TabSetupInspect" Header="Preparación &amp; Inspección">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-          <StackPanel Margin="10">
-            <!-- Layout -->
-            <Button x:Name="BtnLoadLayout"
-                    Content="Load Layout"
-                    Margin="0,0,0,8"
-                    MinWidth="120"
-                    Click="BtnLoadLayout_Click"/>
+          <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+              <Button x:Name="BtnLoadImage"
+                      Content="Load Picture"
+                      Margin="0,0,8,0"
+                      MinWidth="120"
+                      ToolTip="Abrir una imagen"
+                      Click="BtnLoadImage_Click"/>
+              <Button x:Name="BtnLoadLayout"
+                      Content="Load Layout"
+                      Margin="0,0,8,0"
+                      MinWidth="120"
+                      Click="BtnLoadLayout_Click"/>
+              <Button x:Name="BtnSaveLayout"
+                      Content="Save Layout"
+                      MinWidth="120"
+                      Click="BtnSaveLayout_Click"/>
+            </StackPanel>
 
-            <!-- ===== Master 1 ===== -->
             <GroupBox x:Name="Master1EditorGroup" Header="Master 1">
               <StackPanel Margin="0,8,0,0">
                 <Grid Margin="0,0,0,8">
@@ -85,7 +94,6 @@
               </StackPanel>
             </GroupBox>
 
-            <!-- ===== Master 2 (header fixed) ===== -->
             <GroupBox Header="Master 2" Margin="0,10,0,0">
               <StackPanel Margin="0,8,0,0">
                 <Grid Margin="0,0,0,8">
@@ -111,7 +119,6 @@
                 </Grid>
 
                 <WrapPanel>
-                  <!-- keep existing handlers and names -->
                   <Button Content="Save Master 2"
                           Margin="0,0,8,0"
                           MinWidth="120"
@@ -124,231 +131,24 @@
               </StackPanel>
             </GroupBox>
 
-            <WrapPanel Margin="0,12,0,0">
+            <WrapPanel Margin="0,12,0,12">
               <Button x:Name="BtnClearCanvas"
                       Content="Borrar Canvas"
                       MinWidth="150"
                       Click="BtnClearCanvas_Click"/>
             </WrapPanel>
-          </StackPanel>
-        </ScrollViewer>
-      </TabItem>
-
-      <TabItem x:Name="TabInspection" Header="Inspección">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-          <StackPanel Margin="10">
-            <TextBlock Text="Inspection ROIs" FontWeight="SemiBold" Margin="0,0,0,8"/>
-
-            <StackPanel Orientation="Horizontal" Margin="8,4,8,0">
-              <TextBlock Text="Inspection 1" Width="120" VerticalAlignment="Center"/>
-              <ComboBox x:Name="CmbShapeInspection1"
-                        Width="130"
-                        Tag="1"
-                        ItemsSource="{Binding AvailableShapes}"
-                        SelectedItem="{Binding DataContext.InspectionRois[0].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
-                        SelectionChanged="InspectionShape_SelectionChanged"/>
-              <Button x:Name="BtnSaveInspection1"
-                      Margin="8,0,0,0"
-                      MinWidth="120"
-                      MinHeight="28"
-                      Click="BtnSaveInspection1_Click">
-                <Button.Content>
-                  <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                    <TextBlock Text="Inspection 1" FontWeight="SemiBold"/>
-                  </StackPanel>
-                </Button.Content>
-              </Button>
-              <Button x:Name="BtnAddOkInspection1"
-                      Margin="8,0,0,0"
-                      Content="Add to OK"
-                      Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection1}"/>
-              <Button x:Name="BtnAddNgInspection1"
-                      Margin="8,0,0,0"
-                      Content="Add to NG"
-                      Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection1}"/>
-              <Button x:Name="BtnRemoveInspection1"
-                      Margin="8,0,0,0"
-                      Content="Remove 1"
-                      Click="BtnRemoveInspection1_Click">
-                <Button.Style>
-                  <Style TargetType="Button">
-                    <Setter Property="IsEnabled" Value="True"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
-                        <Setter Property="IsEnabled" Value="False"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Button.Style>
-              </Button>
-              <Button x:Name="BtnLoadModelInspection1"
-                      Margin="8,0,0,0"
-                      Content="Load model"
-                      Tag="1"
-                      Click="BtnLoadModel_Click"/>
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" Margin="8,4,8,0">
-              <TextBlock Text="Inspection 2" Width="120" VerticalAlignment="Center"/>
-              <ComboBox x:Name="CmbShapeInspection2"
-                        Width="130"
-                        Tag="2"
-                        ItemsSource="{Binding AvailableShapes}"
-                        SelectedItem="{Binding DataContext.InspectionRois[1].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
-                        SelectionChanged="InspectionShape_SelectionChanged"/>
-              <Button x:Name="BtnSaveInspection2"
-                      Margin="8,0,0,0"
-                      MinWidth="120"
-                      MinHeight="28"
-                      Click="BtnSaveInspection2_Click">
-                <Button.Content>
-                  <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                    <TextBlock Text="Inspection 2" FontWeight="SemiBold"/>
-                  </StackPanel>
-                </Button.Content>
-              </Button>
-              <Button x:Name="BtnAddOkInspection2"
-                      Margin="8,0,0,0"
-                      Content="Add to OK"
-                      Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection2}"/>
-              <Button x:Name="BtnAddNgInspection2"
-                      Margin="8,0,0,0"
-                      Content="Add to NG"
-                      Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection2}"/>
-              <Button x:Name="BtnRemoveInspection2"
-                      Margin="8,0,0,0"
-                      Content="Remove 2"
-                      Click="BtnRemoveInspection2_Click">
-                <Button.Style>
-                  <Style TargetType="Button">
-                    <Setter Property="IsEnabled" Value="True"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
-                        <Setter Property="IsEnabled" Value="False"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Button.Style>
-              </Button>
-              <Button x:Name="BtnLoadModelInspection2"
-                      Margin="8,0,0,0"
-                      Content="Load model"
-                      Tag="2"
-                      Click="BtnLoadModel_Click"/>
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" Margin="8,4,8,0">
-              <TextBlock Text="Inspection 3" Width="120" VerticalAlignment="Center"/>
-              <ComboBox x:Name="CmbShapeInspection3"
-                        Width="130"
-                        Tag="3"
-                        ItemsSource="{Binding AvailableShapes}"
-                        SelectedItem="{Binding DataContext.InspectionRois[2].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
-                        SelectionChanged="InspectionShape_SelectionChanged"/>
-              <Button x:Name="BtnSaveInspection3"
-                      Margin="8,0,0,0"
-                      MinWidth="120"
-                      MinHeight="28"
-                      Click="BtnSaveInspection3_Click">
-                <Button.Content>
-                  <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                    <TextBlock Text="Inspection 3" FontWeight="SemiBold"/>
-                  </StackPanel>
-                </Button.Content>
-              </Button>
-              <Button x:Name="BtnAddOkInspection3"
-                      Margin="8,0,0,0"
-                      Content="Add to OK"
-                      Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection3}"/>
-              <Button x:Name="BtnAddNgInspection3"
-                      Margin="8,0,0,0"
-                      Content="Add to NG"
-                      Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection3}"/>
-              <Button x:Name="BtnRemoveInspection3"
-                      Margin="8,0,0,0"
-                      Content="Remove 3"
-                      Click="BtnRemoveInspection3_Click">
-                <Button.Style>
-                  <Style TargetType="Button">
-                    <Setter Property="IsEnabled" Value="True"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
-                        <Setter Property="IsEnabled" Value="False"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Button.Style>
-              </Button>
-              <Button x:Name="BtnLoadModelInspection3"
-                      Margin="8,0,0,0"
-                      Content="Load model"
-                      Tag="3"
-                      Click="BtnLoadModel_Click"/>
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" Margin="8,4,8,0">
-              <TextBlock Text="Inspection 4" Width="120" VerticalAlignment="Center"/>
-              <ComboBox x:Name="CmbShapeInspection4"
-                        Width="130"
-                        Tag="4"
-                        ItemsSource="{Binding AvailableShapes}"
-                        SelectedItem="{Binding DataContext.InspectionRois[3].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
-                        SelectionChanged="InspectionShape_SelectionChanged"/>
-              <Button x:Name="BtnSaveInspection4"
-                      Margin="8,0,0,0"
-                      MinWidth="120"
-                      MinHeight="28"
-                      Click="BtnSaveInspection4_Click">
-                <Button.Content>
-                  <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                    <TextBlock Text="Inspection 4" FontWeight="SemiBold"/>
-                  </StackPanel>
-                </Button.Content>
-              </Button>
-              <Button x:Name="BtnAddOkInspection4"
-                      Margin="8,0,0,0"
-                      Content="Add to OK"
-                      Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection4}"/>
-              <Button x:Name="BtnAddNgInspection4"
-                      Margin="8,0,0,0"
-                      Content="Add to NG"
-                      Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                      CommandParameter="{Binding Inspection4}"/>
-              <Button x:Name="BtnRemoveInspection4"
-                      Margin="8,0,0,0"
-                      Content="Remove 4"
-                      Click="BtnRemoveInspection4_Click">
-                <Button.Style>
-                  <Style TargetType="Button">
-                    <Setter Property="IsEnabled" Value="True"/>
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
-                        <Setter Property="IsEnabled" Value="False"/>
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Button.Style>
-              </Button>
-              <Button x:Name="BtnLoadModelInspection4"
-                      Margin="8,0,0,0"
-                      Content="Load model"
-                      Tag="4"
-                      Click="BtnLoadModel_Click"/>
-            </StackPanel>
-
-            <Separator Margin="0,12,0,12"/>
 
             <GroupBox Header="Analyze options" Margin="0,0,0,12">
               <StackPanel Margin="8,4,0,0">
-                <CheckBox Content="Lock scale"
-                          IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
+                <StackPanel Orientation="Horizontal">
+                  <CheckBox x:Name="ChkScaleLock"
+                            Content="Lock scale"
+                            IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
+                  <CheckBox x:Name="ChkUseLocalMatcher"
+                            Content="Use local matcher"
+                            Margin="16,0,0,0"
+                            ToolTip="Forzar matcher local"/>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                   <TextBlock Text="Position tolerance (px)"
                              Width="180"
@@ -364,6 +164,11 @@
                   <TextBox Width="80"
                            Text="{Binding AnalyzeAngToleranceDeg, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"/>
                 </StackPanel>
+                <Button x:Name="BtnAnalyzeMaster"
+                        Content="Force Analyze Master"
+                        Margin="0,12,0,0"
+                        MinWidth="160"
+                        Click="BtnAnalyzeMaster_Click"/>
               </StackPanel>
             </GroupBox>
 
@@ -386,7 +191,6 @@
             </StackPanel>
             <WrapPanel>
               <Button x:Name="BtnSavePreset" Content="Guardar Preset" Click="BtnSavePreset_Click" Margin="0,0,8,0"/>
-              <Button x:Name="BtnSaveLayout" Content="Guardar Layout" Click="BtnSaveLayout_Click" Margin="0,0,8,0"/>
             </WrapPanel>
 
             <TextBlock x:Name="ResultLabel"
@@ -396,11 +200,267 @@
                        Foreground="#ddd"
                        Margin="0,12,0,0"/>
 
-            <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
+            <GroupBox Header="Inspection ROIs" Margin="0,12,0,0">
+              <StackPanel Margin="8,4,0,0">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                  <TextBlock Text="Inspection 1" Width="120" VerticalAlignment="Center"/>
+                  <ComboBox x:Name="CmbShapeInspection1"
+                            Width="130"
+                            Tag="1"
+                            ItemsSource="{Binding AvailableShapes}"
+                            SelectedItem="{Binding DataContext.InspectionRois[0].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                            SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnSaveInspection1"
+                          Margin="8,0,0,0"
+                          MinWidth="120"
+                          MinHeight="28"
+                          Click="BtnSaveInspection1_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Inspection 1" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
+                  <Button x:Name="BtnAddOkInspection1"
+                          Margin="8,0,0,0"
+                          Content="Add to OK"
+                          Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection1}"/>
+                  <Button x:Name="BtnAddNgInspection1"
+                          Margin="8,0,0,0"
+                          Content="Add to NG"
+                          Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection1}"/>
+                  <Button x:Name="BtnRemoveInspection1"
+                          Margin="8,0,0,0"
+                          Content="Remove 1"
+                          Click="BtnRemoveInspection1_Click">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
+                  <Button x:Name="BtnLoadModelInspection1"
+                          Margin="8,0,0,0"
+                          Content="Load model"
+                          Tag="1"
+                          Click="BtnLoadModel_Click"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                  <TextBlock Text="Inspection 2" Width="120" VerticalAlignment="Center"/>
+                  <ComboBox x:Name="CmbShapeInspection2"
+                            Width="130"
+                            Tag="2"
+                            ItemsSource="{Binding AvailableShapes}"
+                            SelectedItem="{Binding DataContext.InspectionRois[1].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                            SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnSaveInspection2"
+                          Margin="8,0,0,0"
+                          MinWidth="120"
+                          MinHeight="28"
+                          Click="BtnSaveInspection2_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Inspection 2" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
+                  <Button x:Name="BtnAddOkInspection2"
+                          Margin="8,0,0,0"
+                          Content="Add to OK"
+                          Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection2}"/>
+                  <Button x:Name="BtnAddNgInspection2"
+                          Margin="8,0,0,0"
+                          Content="Add to NG"
+                          Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection2}"/>
+                  <Button x:Name="BtnRemoveInspection2"
+                          Margin="8,0,0,0"
+                          Content="Remove 2"
+                          Click="BtnRemoveInspection2_Click">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
+                  <Button x:Name="BtnLoadModelInspection2"
+                          Margin="8,0,0,0"
+                          Content="Load model"
+                          Tag="2"
+                          Click="BtnLoadModel_Click"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                  <TextBlock Text="Inspection 3" Width="120" VerticalAlignment="Center"/>
+                  <ComboBox x:Name="CmbShapeInspection3"
+                            Width="130"
+                            Tag="3"
+                            ItemsSource="{Binding AvailableShapes}"
+                            SelectedItem="{Binding DataContext.InspectionRois[2].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                            SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnSaveInspection3"
+                          Margin="8,0,0,0"
+                          MinWidth="120"
+                          MinHeight="28"
+                          Click="BtnSaveInspection3_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Inspection 3" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
+                  <Button x:Name="BtnAddOkInspection3"
+                          Margin="8,0,0,0"
+                          Content="Add to OK"
+                          Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection3}"/>
+                  <Button x:Name="BtnAddNgInspection3"
+                          Margin="8,0,0,0"
+                          Content="Add to NG"
+                          Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection3}"/>
+                  <Button x:Name="BtnRemoveInspection3"
+                          Margin="8,0,0,0"
+                          Content="Remove 3"
+                          Click="BtnRemoveInspection3_Click">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
+                  <Button x:Name="BtnLoadModelInspection3"
+                          Margin="8,0,0,0"
+                          Content="Load model"
+                          Tag="3"
+                          Click="BtnLoadModel_Click"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,12">
+                  <TextBlock Text="Inspection 4" Width="120" VerticalAlignment="Center"/>
+                  <ComboBox x:Name="CmbShapeInspection4"
+                            Width="130"
+                            Tag="4"
+                            ItemsSource="{Binding AvailableShapes}"
+                            SelectedItem="{Binding DataContext.InspectionRois[3].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                            SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnSaveInspection4"
+                          Margin="8,0,0,0"
+                          MinWidth="120"
+                          MinHeight="28"
+                          Click="BtnSaveInspection4_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Inspection 4" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
+                  <Button x:Name="BtnAddOkInspection4"
+                          Margin="8,0,0,0"
+                          Content="Add to OK"
+                          Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection4}"/>
+                  <Button x:Name="BtnAddNgInspection4"
+                          Margin="8,0,0,0"
+                          Content="Add to NG"
+                          Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                          CommandParameter="{Binding Inspection4}"/>
+                  <Button x:Name="BtnRemoveInspection4"
+                          Margin="8,0,0,0"
+                          Content="Remove 4"
+                          Click="BtnRemoveInspection4_Click">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
+                  <Button x:Name="BtnLoadModelInspection4"
+                          Margin="8,0,0,0"
+                          Content="Load model"
+                          Tag="4"
+                          Click="BtnLoadModel_Click"/>
+                </StackPanel>
+
+                <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0">
+                  <workflow:WorkflowControl.Resources>
+                    <Style TargetType="GroupBox">
+                      <Style.Triggers>
+                        <Trigger Property="Header" Value="Backend">
+                          <Setter Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                      </Style.Triggers>
+                    </Style>
+                  </workflow:WorkflowControl.Resources>
+                </workflow:WorkflowControl>
+              </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Backend" Margin="0,12,0,0" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
+              <Grid Margin="8">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Text="Role" VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1" Margin="8,0" Width="160"
+                         Text="{Binding RoleId, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <TextBlock Grid.Row="1" Text="ROI" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="1" Grid.Column="1" Margin="8,4,8,0" Width="160"
+                         Text="{Binding RoiId, UpdateSourceTrigger=PropertyChanged}"/>
+
+                <TextBlock Grid.Row="2" Text="mm/px" VerticalAlignment="Center"/>
+                <TextBox Grid.Row="2" Grid.Column="1" Margin="8,4,8,0" Width="120"
+                         Text="{Binding MmPerPx, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F4}}"/>
+
+                <TextBlock Grid.Row="3" Text="Backend" VerticalAlignment="Center"/>
+                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="8,4,8,0">
+                  <TextBox Width="260" Margin="0,0,8,0"
+                           Text="{Binding BackendBaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
+                  <Button Content="Health" Padding="12,4"
+                          Command="{Binding RefreshHealthCommand}"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,4,0,0"
+                           Text="{Binding HealthSummary}" TextWrapping="Wrap" Width="200"/>
+              </Grid>
+            </GroupBox>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
-
     </TabControl>
 
       <!-- ===== Viewer/Canvas (right) ===== -->
@@ -411,79 +471,6 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
-
-          <!-- ROI Toolbar (overlay) -->
-          <ToolBarTray x:Name="TopLeftTray"
-                       Grid.Row="0"
-                       Panel.ZIndex="1000"
-                       HorizontalAlignment="Left"
-                       VerticalAlignment="Top"
-                       Margin="8,8,8,0"
-                       IsLocked="True"
-                       Background="#222"
-                       Visibility="Visible">
-            <ToolBar x:Name="TbPrimaryCommands" Band="0" BandIndex="0" Padding="2">
-              <Button x:Name="BtnLoadImage"
-                      Content="Cargar imagen"
-                      MinWidth="120"
-                      Margin="0,0,4,0"
-                      ToolTip="Abrir una imagen"
-                      Click="BtnLoadImage_Click"/>
-              <Button x:Name="BtnAnalyzeMaster"
-                      Content="Analyze Master"
-                      MinWidth="120"
-                      Margin="0,0,4,0"
-                      ToolTip="Analizar masters actuales"
-                      Click="BtnAnalyzeMaster_Click"/>
-              <Button x:Name="BtnLoadPreset"
-                      Content="Cargar preset"
-                      MinWidth="130"
-                      Margin="0,0,4,0"
-                      ToolTip="Cargar configuración guardada"
-                      Click="BtnLoadPreset_Click"
-                      IsEnabled="{Binding IsImageLoaded}"/>
-              <Separator/>
-              <CheckBox x:Name="ChkScaleLock"
-                        Content="Scale Lock"
-                        Margin="4,0,4,0"
-                        ToolTip="Bloquear escala durante análisis"
-                        IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
-              <CheckBox x:Name="ChkUseLocalMatcher"
-                        Content="Usar matcher local"
-                        Margin="4,0,0,0"
-                        ToolTip="Forzar matcher local"/>
-            </ToolBar>
-
-            <ToolBar x:Name="TbDrawTools" Band="1" BandIndex="0" Padding="2">
-              <ToggleButton x:Name="RectToolButton"
-                            Content="Rect"
-                            Margin="0,0,4,0"
-                            Tag="Rectangle"
-                            ToolTip="Dibujar rectángulos"
-                            Checked="DrawToolToggle_Checked"
-                            Unchecked="DrawToolToggle_Unchecked"/>
-              <ToggleButton x:Name="CircleToolButton"
-                            Content="Circ"
-                            Margin="0,0,4,0"
-                            Tag="Circle"
-                            ToolTip="Dibujar círculos"
-                            Checked="DrawToolToggle_Checked"
-                            Unchecked="DrawToolToggle_Unchecked"/>
-              <ToggleButton x:Name="AnnulusToolButton"
-                            Content="Annulus"
-                            Margin="0,0,4,0"
-                            Tag="Annulus"
-                            ToolTip="Dibujar anillos"
-                            Checked="DrawToolToggle_Checked"
-                            Unchecked="DrawToolToggle_Unchecked"/>
-              <Separator/>
-              <Button x:Name="BtnClearRoi"
-                      Content="Borrar"
-                      MinWidth="80"
-                      ToolTip="Eliminar ROI actual"
-                      Click="BtnClearRoi_Click"/>
-            </ToolBar>
-          </ToolBarTray>
 
           <AdornerDecorator Grid.Row="1" Margin="0,8,0,0">
             <Grid Background="#111">
@@ -525,7 +512,7 @@
                     Background="#CC000000"
                     BorderBrush="#39FF14"
                     BorderThickness="1.5"
-                    CornerRadius="6"
+                    CornerRadius="0"
                     Padding="8">
               <StackPanel x:Name="RoiHudStack" />
             </Border>
@@ -538,7 +525,7 @@
                   Margin="8,6,8,8"
                   Padding="6"
                   Background="#CC1E1E1E"
-                  CornerRadius="6"
+                  CornerRadius="0"
                   Panel.ZIndex="1"
                   DataContext="{Binding DataContext, ElementName=WorkflowHost}">
             <StackPanel Orientation="Horizontal">
@@ -557,35 +544,55 @@
                 </Style>
               </StackPanel.Resources>
               <CheckBox x:Name="ChkShowMaster1Pattern"
-                        Content="Master 1"
                         IsChecked="{Binding ShowMaster1Pattern}"
                         Margin="0,0,6,0"
                         Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged"/>
+                        Unchecked="RoiVisibilityCheckChanged">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                  <TextBlock Text="Master 1"/>
+                </StackPanel>
+              </CheckBox>
               <CheckBox x:Name="ChkShowMaster1Inspection"
-                        Content="Search 1"
                         IsChecked="{Binding ShowMaster1Inspection}"
                         Margin="0,0,6,0"
                         Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged"/>
+                        Unchecked="RoiVisibilityCheckChanged">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                  <TextBlock Text="Search 1"/>
+                </StackPanel>
+              </CheckBox>
               <CheckBox x:Name="ChkShowMaster2Pattern"
-                        Content="Master 2"
                         IsChecked="{Binding ShowMaster2Pattern}"
                         Margin="0,0,6,0"
                         Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged"/>
+                        Unchecked="RoiVisibilityCheckChanged">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                  <TextBlock Text="Master 2"/>
+                </StackPanel>
+              </CheckBox>
               <CheckBox x:Name="ChkShowMaster2Inspection"
-                        Content="Search 2"
                         IsChecked="{Binding ShowMaster2Inspection}"
                         Margin="0,0,6,0"
                         Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged"/>
+                        Unchecked="RoiVisibilityCheckChanged">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                  <TextBlock Text="Search 2"/>
+                </StackPanel>
+              </CheckBox>
               <CheckBox x:Name="ChkShowInspectionRoi"
-                        Content="Inspection"
                         IsChecked="{Binding ShowInspectionRoi}"
                         Margin="0,0,6,0"
                         Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged"/>
+                        Unchecked="RoiVisibilityCheckChanged">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                  <TextBlock Text="Inspection"/>
+                </StackPanel>
+              </CheckBox>
             </StackPanel>
           </Border>
         </Grid>
@@ -600,7 +607,7 @@
                   Background="#CC000000"
                   BorderBrush="#39FF14"
                   BorderThickness="1.5"
-                  CornerRadius="6"
+                  CornerRadius="0"
                   Padding="8">
             <TextBlock x:Name="DiskStatusText"
                        Text=""
@@ -617,7 +624,7 @@
                   VerticalAlignment="Bottom"
                   Margin="16"
                   Background="#CC000000"
-                  CornerRadius="6"
+                  CornerRadius="0"
                   Padding="8"
                   IsHitTestVisible="True">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

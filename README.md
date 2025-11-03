@@ -1,99 +1,90 @@
-# BrakeDiscInspector
+# BrakeDiscInspector — dossier 2025
 
-## Resumen del proyecto
-BrakeDiscInspector es una solución completa de inspección visual para discos de freno enfocada en detectar anomalías como faltas de pintura, doble taladrado, pegotes y otros defectos superficiales. Combina una GUI WPF (.NET) para la captura y gestión de Regiones de Interés (ROIs) con un backend de visión por computador basado en FastAPI, PyTorch y modelos tipo PatchCore/DINOv2. Sus objetivos principales son:
+> **Estado**: Octubre 2025. Este repositorio implementa una célula de inspección visual para discos de freno con un **frontend WPF** centrado en el operario y un **backend FastAPI** especializado en detección de anomalías mediante PatchCore + DINOv2. Toda la documentación está sincronizada con la última iteración funcional descrita en `agents.md`.
 
-- **Latencia mínima** durante la inferencia gracias a la ejecución acelerada por GPU cuando está disponible.
-- **Soporte de resoluciones variables** entre 2 y 12 MP sin perder la escala física (mm/px) de cada captura.
-- **Reentrenos offline** y controlados por el operario, reutilizando las muestras almacenadas en disco.
-- **ROIs manuales y configurables** (rectángulo, círculo, anillo) que se congelan o editan desde la GUI según el flujo de inspección.
+## 1. Visión general
+BrakeDiscInspector cubre de punta a punta el flujo operativo de una célula industrial:
 
-## Arquitectura general
-El sistema se organiza en dos capas principales que colaboran mediante llamadas HTTP (REST + multipart/form-data):
+1. **Captura y anotación**: la GUI renderiza la pieza, permite definir ROI rectangulares, circulares o anulares y genera la **ROI canónica** (crop + rotación) respetando la escala física (`mm_per_px`).
+2. **Gestión de datasets**: cada ROI mantiene carpetas `ok/` y `ng/` con PNG y metadatos JSON; la GUI muestra contadores, miniaturas y estado de calibración.
+3. **Entrenamiento**: el backend ejecuta `fit_ok` en GPU/CPU (PatchCore con backbone DINOv2 ViT-S/14) y persiste embeddings + coreset por `(role_id, roi_id)`.
+4. **Calibración**: con muestras NG o percentiles, se fija un `threshold` operativo que se sincroniza con la GUI.
+5. **Inferencia**: en producción, la GUI envía ROI canónicas por HTTP, recibe `score`, `regions` y `heatmap` y genera overlays alineados.
 
-- **GUI (WPF .NET)**: proporciona herramientas de dibujo para definir ROIs canónicas, administra presets, datasets y comandos de entrenamiento/evaluación, y muestra overlays y miniaturas reales de cada ROI. Implementa MVVM ligero (`MainWindow`, `WorkflowViewModel`, controles específicos) y mantiene la experiencia del operario.
-- **Backend (FastAPI + PyTorch/timm/OpenCV/Faiss)**: recibe imágenes recortadas desde la GUI, extrae embeddings con modelos preentrenados, gestiona coresets y datasets (OK/NG), expone endpoints de fit/predict/estado y persiste metadatos asociados.
+Los objetivos clave siguen siendo **latencia mínima**, **operatividad offline** y **trazabilidad total** de cada ROI.
 
-Ambos componentes cumplen el contrato descrito en `agents.md`, preservando la exportación canónica de ROIs y la estabilidad de los endpoints.
+## 2. Contrato frontend ↔ backend (Oct-2025)
 
-## Estructura del repositorio
+| Endpoint | Método | Consumido por | Payload mínimo | Respuesta principal | Notas críticas |
+| --- | --- | --- | --- | --- | --- |
+| `/health` | `GET` | GUI al arrancar y monitor de planta | — | `{ "status": "ok", "device": "cuda:0", "model": "patchcore-dinov2-s14", "version": "2025.4", "uptime_s": 12 }` | Usado para mostrar estado en la barra de estado. No bloquea otras llamadas. |
+| `/fit_ok` | `POST multipart/form-data` | GUI al entrenar memoria OK | `role_id`, `roi_id`, `mm_per_px`, `images[]` (PNG/JPG ROI canónica) | `{ "n_embeddings": 512, "coreset_size": 128, "token_shape": [24, 24] }` | Ejecuta incrementalmente; persiste en `models/{role}/{roi}/fit/`. `mm_per_px` obligatorio para trazabilidad. |
+| `/calibrate_ng` | `POST application/json` | GUI tras evaluar scores NG | `{ "role_id": "master", "roi_id": "inspection-1", "mm_per_px": 0.021, "ok_scores": [...], "ng_scores": [...?], "area_mm2_thr": 12.5, "score_percentile": 0.995 }` | `{ "threshold": 0.61, "p99_ok": 0.47, "p5_ng": 0.73, "effective_area_mm2_thr": 12.5 }` | Permite calibrar solo con OK (`score_percentile`) o con NG reales. Backend guarda `calibration.json`. |
+| `/infer` | `POST multipart/form-data` | GUI en inspección on-line | `role_id`, `roi_id`, `mm_per_px`, `image` (ROI canónica), `shape` (JSON string en pixeles canónicos) | `{ "score": 0.38, "threshold": 0.61, "is_anomaly": false, "heatmap_png_base64": "iVBOR...", "regions": [{"kind":"blob","x":42,"y":88,"w":30,"h":24,"area_mm2":9.4,"score":0.52}], "token_shape": [24, 24] }` | `shape` admite `rect`, `circle`, `annulus`. El backend máscara la heatmap y respeta `mm_per_px` en áreas. |
+
+### Convenciones adicionales
+- **Formato ROI canónica**: PNG 8-bit o JPG sin compresión agresiva, ejes alineados tras rotación. Dimensión típica 448×448 px.
+- **Persistencia**: Cada endpoint escribe metadatos en `models/{role_id}/{roi_id}/manifest.json` (estado) y `datasets/{role}/{roi}/`. No renombrar carpetas manualmente.
+- **Comunicación**: Todas las llamadas son **asíncronas** en la GUI (uso de `HttpClient` con `await`). Retries con backoff exponencial.
+
+## 3. Arquitectura de carpetas
 ```
 backend/
-  app.py                  # FastAPI app (endpoints REST)
-  features.py             # Extracción embeddings (timm/torch), lazy import
-  dataset_manager.py      # Guardado/carga de muestras OK/NG + metadatos JSON
-  requirements.txt        # Deps Python (FastAPI, Torch, OpenCV, etc.)
-  tests/                  # Tests (unittest) p.ej. test_app_train_status.py
-gui/
-  BrakeDiscInspector_GUI_ROI/
-    MainWindow.xaml       # Vista principal (WPF)
-    MainWindow.xaml.cs    # Lógica de UI / eventos
-    Workflow/WorkflowViewModel.cs      # VM principal: comandos/estados
-    Controls/WorkflowControl.xaml      # Panel de dataset/acciones
-    ...
-docs/
-  (documentación en profundidad; ver índice más abajo)
-.github/workflows/
-  ci.yml (o similar)      # CI: instalar deps e invocar tests del backend
+  app.py                     # FastAPI + routers de fit/calibrate/infer/health
+  infer.py                   # Orquestación de inferencia PatchCore + post-proceso
+  calib.py                   # Agregación de scores y cálculo de thresholds
+  patchcore.py               # Implementación núcleo PatchCore (coreset, memoria)
+  features.py                # Backbone DINOv2 S/14 + normalización
+  storage.py                 # Persistencia datasets, manifests y caches FAISS
+  roi_mask.py                # Utilidades de máscaras (rect/circle/annulus)
+  utils.py                   # Helpers comunes (logging estructurado, timers)
+  requirements.txt
+  README_backend.md          # Cómo ejecutar, probar y desplegar backend
+
+gui/BrakeDiscInspector_GUI_ROI/
+  App.xaml / App.xaml.cs     # Punto de entrada
+  MainWindow.xaml(.cs)       # Vista/host principal
+  ViewModels/WorkflowViewModel.cs
+  Services/BackendClient.cs  # Cliente HTTP tipado
+  Models/RoiShape.cs, RoiManifest.cs
+  Resources/Strings.resx
+  README.md                  # Guía específica de GUI
+
+docs/                        # Documentación de referencia enlazada en este README
+docker/, scripts/, configs/  # Automatización e infra
 ```
 
-### Otros archivos relevantes
-- `ARCHITECTURE.md`, `API_REFERENCE.md`, `DATA_FORMATS.md`, `ROI_AND_MATCHING_SPEC.md`: especificaciones existentes sobre capas, endpoints históricos y geometrías.
-- `DEV_GUIDE.md`, `DEPLOYMENT.md`, `LOGGING.md`, `CONTRIBUTING.md`: guías operativas complementarias.
-- `Prompt_Backend_PatchCore_DINOv2.md`: decisiones de modelos y parámetros.
-- `instructions_codex_gui_workflow.md`: pautas para agentes Codex.
+## 4. Flujo completo de operación
+1. **Preparación**: se selecciona `role_id` (p. ej. `master` o `customer_X`) y `roi_id` (`inspection-1..4`). Se verifican presets y cámaras.
+2. **Definición ROI**: el operario dibuja ROI con adorners; al pulsar “Guardar ROI” se genera crop canónico y se congelan adorners.
+3. **Dataset OK/NG**: botones “Add to OK/NG” envían la ROI canónica al backend (`/fit_ok` o `/datasets/ng/upload` si existe). La GUI guarda copia local con manifiestos y actualiza contadores.
+4. **Entrenamiento**: “Train memory fit” → `POST /fit_ok`. El backend crea o actualiza coreset; se muestra resumen en GUI (`n_embeddings`, `coreset_size`).
+5. **Calibración**: “Calibrate threshold” envía `ok_scores` (previos) y `ng_scores` si existen. El backend retorna threshold recomendado.
+6. **Inferencia**: botón “Evaluate” ejecuta `/infer`, dibuja heatmap y regiones, y registra log con `score`, `threshold`, `decision`.
+7. **Trazabilidad**: Los manifiestos incluyen `model_version`, `fit_at`, `calibrated_at`, `operator_id`. Logs y archivos permiten auditoría.
 
-## Flujo general de uso
-1. El operario **carga una imagen** en la GUI y define una o varias **ROIs** manuales (Rect, Circle o Annulus).
-2. Tras congelar el ROI (`Toggle Inspection` → `IsFrozen=true`), la ROI queda bloqueada hasta que el operario active “Editar ROI”.
-3. La GUI envía la ROI canónica al **backend** mediante HTTP (FastAPI) para operaciones de `fit_ok`, `send_ng`, `predict`, estado de entrenamiento (`/train/status`), etc.
-4. El backend extrae **features** (timm/torch), actualiza coresets/datasets y responde con JSON normalizados.
-5. El operario **añade muestras** a carpetas **OK/NG**; los archivos (PNG) y sus metadatos JSON se guardan en disco (`data/rois/...`). La GUI refresca los thumbnails y contadores.
-6. Los reentrenos se ejecutan **offline** bajo demanda utilizando las muestras existentes y el modo `memory_fit` para acelerar iteraciones.
-7. En producción, se utiliza el modo **predict** para inspección con latencia baja (GPU cuando está disponible), devolviendo puntuaciones y flags de anomalía.
+## 5. Roadmap y estado 2025-Q4
+- **UI Simplificada**: eliminación de “Load Models”. Presets solo guardan Masters; las Inspection ROIs se reconfiguran por célula.
+- **Freeze/Editar ROI**: botón único con icono dual. Mantiene adorners intactos (ver restricciones en `agents.md`).
+- **Recolocado robusto**: Masters e Inspection ROIs se alinean con la imagen actual respetando estado “frozen”.
+- **Miniaturas reales**: se renderiza ROI canónica (square/circle/annulus) con máscara alpha correcta.
+- **Logging**: se redujo ruido dejando logs clave (dataset, fit, calibrate, infer). Ver `LOGGING.md` para niveles.
+- **Escalabilidad backend**: soporte multi-GPU con device negotiation y pooling de workers con `asyncio`.
 
-## Qué hay de nuevo (Q4 2025)
-- Flujo UI simplificado: primero cargar imagen, luego cargar preset (sin auto). Eliminado “Load Models”.
-- Presets sin inspections: el preset guarda solo Masters y ajustes globales; las Inspection ROIs (1–4) se definen después.
-- Cuatro ROIs de inspección opcionales: `Inspection 1..4`. Se puede trabajar con 1, 2, 3 o 4 según la célula.
-- Freeze/Editar ROI: botón único que alterna entre guardar/congelar y editar (adorners).
-- Recolocado robusto: los Masters (y sus inspections ligados) se reubican y rotan al analizar; las Inspection ROIs se mueven/rotan únicamente si no están congeladas.
-- Datasets por ROI: cada ROI tiene su dataset OK/NG, su “train memory fit”, “calibrate threshold” y “evaluate”.
-- Miniaturas reales: las miniaturas muestran el recorte exacto del ROI (square, circle o annulus).
-- Logging reducido: menos ruido por defecto; logs clave en análisis/carga.
+## 6. Requisitos y setup rápido
+- **Frontend**: Windows 10/11, .NET 6 (o 7), Visual Studio 2022 con workloads “Desktop Development with C#”.
+- **Backend**: Python 3.11/3.12, CUDA 12.x opcional, Torch 2.5.x, FAISS GPU opcional. Sugerido: `python -m venv .venv && pip install -r backend/requirements.txt`.
+- **Infra**: Dockerfiles listos (ver `docker/README.md`). CI ejecuta lint + unit tests backend (`pytest`).
 
-## Requisitos rápidos
-- Windows 10/11 con .NET 6+ (o la versión específica del proyecto) para la GUI WPF.
-- Python 3.11–3.12 para el backend (compatible con torch 2.5.x).
-- Modelos/weights gestionados por el backend; ver `Prompt_Backend_PatchCore_DINOv2.md` para configuración avanzada.
-- GPU NVIDIA opcional para acelerar inferencia/entrenamiento (ver [Setup](docs/SETUP.md)).
+## 7. Documentación relacionada
+- [`ARCHITECTURE.md`](ARCHITECTURE.md): profundidad de arquitectura de software/hardware.
+- [`API_REFERENCE.md`](API_REFERENCE.md): referencia exhaustiva de endpoints con ejemplos.
+- [`DATA_FORMATS.md`](DATA_FORMATS.md): definición de metadatos, JSON y formatos ROI.
+- [`ROI_AND_MATCHING_SPEC.md`](ROI_AND_MATCHING_SPEC.md): geometrías y matching espacial.
+- [`DEV_GUIDE.md`](DEV_GUIDE.md) & [`CONTRIBUTING.md`](CONTRIBUTING.md): estilos de código, flujos Git.
+- [`DEPLOYMENT.md`](DEPLOYMENT.md): despliegues on-prem y contenedores.
+- [`Prompt_Backend_PatchCore_DINOv2.md`](Prompt_Backend_PatchCore_DINOv2.md): notas de modelo PatchCore + DINOv2.
+- [`docs/`](docs/): manuales extendidos (GUI, backend, setup, pipeline, FAQ, etc.).
 
-## Uso básico desde la GUI
-1. **Cargar imagen** desde el botón principal (arriba-izquierda) y esperar al render del layout.
-2. **Cargar preset** desde `presets/` (diálogo de archivo). El preset no incluye las Inspection ROIs 1–4.
-3. **Definir Inspection ROIs** (1–4) y pulsar **Guardar ROI** para congelar. Alternar con **Editar ROI** para reactivar adorners.
-4. **Analyze Master** recoloca Masters e inspections ligadas (si no están congeladas) según cruces y ángulos.
-5. Para cada ROI activa, utilizar los comandos: **Add to OK**, **Add to NG**, **Train memory fit**, **Calibrate threshold**, **Evaluate**.
-6. Monitorizar los logs para revisar resultados y errores (nivel reducido pero con eventos clave).
-
-## Documentación ampliada
-- [Arquitectura](docs/ARQUITECTURA.md)
-- [Backend](docs/BACKEND.md)
-- [API (endpoints y JSON)](docs/API.md)
-- [Pipeline de detección](docs/PIPELINE_DETECCION.md)
-- [Dataset, metadatos y ROIs](docs/DATASET_Y_ROI.md)
-- [GUI (WPF)](docs/GUI.md)
-- [Setup (Windows/WSL, CUDA/Torch)](docs/SETUP.md)
-- [CI/CD](docs/CI_CD.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [FAQ](docs/FAQ.md)
-
-## Recursos adicionales
-- `ARCHITECTURE.md` y `DEV_GUIDE.md` para decisiones históricas de diseño.
-- `DATA_FORMATS.md` y `ROI_AND_MATCHING_SPEC.md` para detalles de geometrías, presets y reposicionamiento.
-- `DEPLOYMENT.md` para despliegues productivos (contenedores, orquestadores).
-- `LOGGING.md` para política de trazas y niveles.
-- `instructions_codex_gui_workflow.md` para flujos propuestos al colaborar mediante agentes.
-
-## Comunidad y contribuciones
-Las contribuciones se gestionan mediante issues y pull requests. Consulta `CONTRIBUTING.md` antes de proponer cambios y respeta las restricciones descritas en `agents.md` (no modificar adorners ni contratos de backend sin alineación previa).
+## 8. Contribuir
+Cualquier aporte requiere respetar las restricciones de `agents.md` (no modificar adorners, mantener contrato HTTP). Abra un issue describiendo el contexto, ejecute tests/backend antes de PR y anexe logs relevantes.

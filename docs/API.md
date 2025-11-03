@@ -1,125 +1,66 @@
-# API del Backend
+# API Backend — Manual completo 2025
 
-La API se expone vía FastAPI (`backend/app.py`) y sigue un contrato REST estable. Todas las rutas devuelven JSON y utilizan códigos HTTP estándar (`200` éxito, `4xx` errores de validación, `5xx` fallos inesperados). Los ejemplos mantienen nombres alineados con la GUI.
+Este documento complementa `API_REFERENCE.md` con explicación de flujos, ejemplos y códigos de error.
 
-## Endpoints disponibles
+## 1. Resumen de endpoints
+| Método | Ruta | Descripción |
+| --- | --- | --- |
+| GET | `/health` | Estado del servicio, device, versión y roles cargados |
+| POST | `/fit_ok` | Entrenamiento incremental con muestras OK |
+| POST | `/calibrate_ng` | Calibración de threshold usando scores OK/NG |
+| POST | `/infer` | Inferencia y generación de heatmap |
+| GET | `/manifests/{role}/{roi}` | Estado persistido (opcional) |
 
-| Método | Ruta            | Descripción breve                                            |
-|--------|-----------------|--------------------------------------------------------------|
-| GET    | `/health`       | Estado del servicio, dispositivo y versión del modelo        |
-| POST   | `/fit_ok`       | Construye/actualiza memoria PatchCore con muestras OK        |
-| POST   | `/calibrate_ng` | Calcula y persiste umbral a partir de scores OK/NG           |
-| POST   | `/infer`        | Ejecuta inferencia PatchCore y devuelve score + heatmap      |
+## 2. `/health`
+- **Uso**: handshake inicial de la GUI, monitorización.
+- **Respuesta 200**: ver `API_REFERENCE.md`.
+- **Errores**: `503` (`detail`: motivo), `401` si API Key inválida.
 
-### Campos comunes
-- `role_id` (`string`): Identificador de la célula/rol (`Inspection`, `Master`, etc.).
-- `roi_id` (`string`): Identificador de la ROI (ej. `Inspection_1`).
-- `mm_per_px` (`float`): Escala física en milímetros por píxel.
-- `memory_fit` (`bool` textual): `"true"` para usar el 100% de embeddings en la llamada a `/fit_ok`.
-- `images` (`File[]`): Lista de imágenes de ROI en formato PNG/JPG (solo en `/fit_ok`).
-- `image` (`File`): Imagen individual enviada a `/infer`.
-- `shape` (`string JSON`, opcional): Máscara rect/circle/annulus en coordenadas de la ROI (solo `/infer`).
+## 3. `/fit_ok`
+- **Content-Type**: `multipart/form-data`.
+- **Campos**: `role_id`, `roi_id`, `mm_per_px`, `images[]`, `operator_id?`.
+- **Proceso**:
+  1. Validar `mm_per_px` consistente con manifest (si existe).
+  2. Cargar imágenes a memoria y convertir a tensores.
+  3. Extraer embeddings DINOv2 (GPU si disponible).
+  4. Actualizar memoria PatchCore + coreset.
+  5. Guardar `embeddings.npy`, `coreset.faiss`, `manifest.json`.
+  6. Responder JSON con métricas.
+- **Errores comunes**: `400` (faltan campos), `409` (`mm_per_px` mismatched), `500` (error interno guardando coreset).
 
-## Ejemplo de uso con `curl`
-```bash
-# Alta de muestras OK (dos imágenes)
-curl -X POST http://localhost:8000/fit_ok \
-  -F "role_id=Inspection" \
-  -F "roi_id=Inspection_1" \
-  -F "mm_per_px=0.023" \
-  -F "images=@sample1.png" -F "images=@sample2.png"
+## 4. `/calibrate_ng`
+- **Content-Type**: `application/json`.
+- **Body**: ver `API_REFERENCE.md`.
+- **Proceso**:
+  1. Obtener `p99_ok` (o percentil configurado).
+  2. Si hay `ng_scores`: calcular `p5_ng` y promediar.
+  3. Guardar `calibration.json` + actualizar manifest.
+- **Errores**: `400` (scores vacíos), `404` (no hay fit previo), `500` (no se puede persistir).
 
-# Calibración NG a partir de scores
-temp_json=$(mktemp)
-cat <<'JSON' > "$temp_json"
-{
-  "role_id": "Inspection",
-  "roi_id": "Inspection_1",
-  "mm_per_px": 0.023,
-  "ok_scores": [12.1, 10.8, 11.5],
-  "ng_scores": [28.4],
-  "area_mm2_thr": 1.0,
-  "score_percentile": 99
-}
-JSON
-curl -X POST http://localhost:8000/calibrate_ng \
-  -H "Content-Type: application/json" \
-  -d @"$temp_json"
-rm "$temp_json"
+## 5. `/infer`
+- **Content-Type**: `multipart/form-data`.
+- **Campos**: `role_id`, `roi_id`, `mm_per_px`, `image`, `shape`, `operator_id?`.
+- **Proceso**:
+  1. Validar existencia de coreset y calibración.
+  2. Generar embedding → distancia vs coreset.
+  3. Upsample + máscara `shape`.
+  4. Calcular `score` (p99) y threshold.
+  5. Detectar regiones (contornos) y convertir a `area_mm2`.
+  6. Serializar heatmap PNG base64.
+- **Errores**: `404` (sin modelo), `428` (sin calibración), `409` (`mm_per_px` mismatch), `400` (`shape` inválido), `500` (error interno).
 
-# Inferencia con máscara circular
-curl -X POST http://localhost:8000/infer \
-  -F "role_id=Inspection" \
-  -F "roi_id=Inspection_1" \
-  -F "mm_per_px=0.023" \
-  -F "image=@nueva.png" \
-  -F "shape={\"kind\":\"circle\",\"cx\":192,\"cy\":192,\"r\":180}"
-```
+## 6. Ejemplos `curl`
+Ver `docs/curl_examples.md`.
 
-## Respuestas esperadas
-### GET `/health`
-```json
-{
-  "status": "ok",
-  "device": "cpu",
-  "model": "vit_small_patch14_dinov2.lvd142m",
-  "version": "0.1.0"
-}
-```
+## 7. Seguridad
+- API Key (`X-API-Key`).
+- Rate limiting opcional vía reverse proxy.
 
-### POST `/fit_ok`
-```json
-{
-  "n_embeddings": 34992,
-  "coreset_size": 700,
-  "token_shape": [32, 32],
-  "coreset_rate_requested": 0.02,
-  "coreset_rate_applied": 0.018
-}
-```
+## 8. Versionado
+- `model_version` devuelto en cada respuesta.
+- Cambios de contrato requieren actualizar docs + `agents.md`.
 
-### POST `/calibrate_ng`
-```json
-{
-  "threshold": 20.0,
-  "p99_ok": 12.0,
-  "p5_ng": 28.0,
-  "mm_per_px": 0.2,
-  "area_mm2_thr": 1.0,
-  "score_percentile": 99
-}
-```
-
-### POST `/infer`
-```json
-{
-  "role_id": "Inspection",
-  "roi_id": "Inspection_1",
-  "score": 18.7,
-  "threshold": 20.0,
-  "heatmap_png_base64": "iVBORw0K...",
-  "regions": [
-    {"bbox": [x, y, w, h], "area_px": 250.0, "area_mm2": 10.0, "contour": [[x1, y1], ...] }
-  ],
-  "token_shape": [32, 32],
-  "params": {
-    "extractor": "vit_small_patch14_dinov2.lvd142m",
-    "input_size": 448,
-    "coreset_rate": 0.02,
-    "score_percentile": 99
-  }
-}
-```
-
-## Manejo de errores
-- **400 Bad Request**: campos faltantes o formatos inválidos (`mm_per_px` no numérico, imagen corrupta, etc.). FastAPI devuelve un JSON con `detail` y mensaje.
-- **404 Not Found**: `/infer` sin memoria previa para el par (`role_id`, `roi_id`).
-- **500 Internal Server Error**: fallo inesperado durante inferencia o escritura. Revisar logs (`backend.app` logger) para detalle.
-
-## Consejos de integración
-- Enviar `roi_id` y `role_id` exactamente como se guardan en la GUI para mantener la persistencia coherente.
-- Para cargas masivas, agrupar imágenes en una única petición (`images` repetido) reduce overhead HTTP.
-- Usar cabeceras `Accept: application/json` para respuestas y revisar `/docs` o `/redoc` para el esquema OpenAPI actualizado.
-
-## Versionado
-`GET /health` expone el campo `version`. Cualquier cambio de contrato debe reflejarse aquí y en `agents.md`.
+## 9. Buenas prácticas
+- Enviar `shape` correcto para evitar falsos positivos.
+- Siempre recalibrar tras cambios de lote.
+- Revisar logs (GUI + backend) si hay `score` inesperado.

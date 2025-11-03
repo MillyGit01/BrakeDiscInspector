@@ -270,3 +270,19 @@ uvicorn backend.app:app --reload
 
 - For ROI alignment issues (drift after maximize/reload): consult the GUI logs and the `SyncOverlayToImage` scheduling/debounce logic. **Do not** modify adorners without explicit approval.
 - For backend model behavior: `backend/README_backend.md`, `app.py` endpoints, and `features.py`/`patchcore.py` explain internals.
+
+---
+
+## 14) Actualización Octubre 2025 — Contrato consolidado
+
+- **Frontend ↔ Backend**:
+  - `GET /health` → `{ status, device, model, version, uptime_s }`.
+  - `POST /fit_ok` → multipart con `role_id`, `roi_id`, `mm_per_px`, `images[]`.
+  - `POST /calibrate_ng` → JSON con `ok_scores`, `ng_scores?`, `score_percentile`, `area_mm2_thr`.
+  - `POST /infer` → multipart con `image`, `shape` (`rect|circle|annulus`), `mm_per_px`.
+  - Todas las respuestas incluyen `token_shape`, `model_version`, `request_id` (header).
+- **Persistencia**: `datasets/{role}/{roi}/ok|ng`, `models/{role}/{roi}/` con `manifest.json` y `calibration.json`.
+- **Escala física**: `mm_per_px` obligatorio en todas las operaciones.
+- **Shape JSON**: siempre en coordenadas de ROI canónica (post-rotación).
+- **Logging**: correlacionar `request_id` entre GUI y backend.
+- **Pruebas**: ejecutar `pytest` (backend) + validación manual GUI tras cambios en contrato.

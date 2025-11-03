@@ -1,94 +1,48 @@
-# Guía de Setup
+# Setup — Octubre 2025
 
-Esta guía cubre la instalación del backend y la preparación de la GUI en entornos Windows y WSL/Ubuntu, con foco en ejecutar el backend con soporte GPU cuando sea posible.
+## 1. Requisitos
+- Windows 10/11 con .NET 6/7 (GUI).
+- Python 3.11/3.12 (backend).
+- GPU NVIDIA opcional (CUDA 12.x).
+- Git, Visual Studio 2022, PowerShell/Bash.
 
-## Prerrequisitos comunes
-- Git para clonar el repositorio.
-- Python 3.11 o 3.12 (recomendado crear un entorno virtual).
-- .NET 6+ SDK para compilar/ejecutar la GUI WPF.
-- Drivers NVIDIA actualizados si se utilizará GPU.
-
-## Instalación en Windows (con GPU opcional)
-1. **Clonar repositorio**
-   ```bash
-   git clone https://github.com/MillyGit/BrakeDiscInspector.git
-   cd BrakeDiscInspector
-   ```
-2. **Crear entorno virtual**
-   ```bash
-   cd backend
-   python -m venv .venv
-   .venv\Scripts\activate
-   ```
-3. **Instalar PyTorch**
-   - **CPU**
-     ```bash
-     pip install --index-url https://download.pytorch.org/whl/cpu \
-       torch==2.5.1+cpu torchvision==0.20.1+cpu
-     ```
-   - **CUDA 12.1**
-     ```bash
-     pip install --index-url https://download.pytorch.org/whl/cu121 \
-       torch==2.5.1+cu121 torchvision==0.20.1+cu121
-     ```
-4. **Instalar dependencias restantes**
-   ```bash
-   pip install -r requirements.txt
-   ```
-5. **Lanzar backend**
-   ```bash
-   uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-   ```
-6. **Configurar GUI**
-   - Abrir la solución WPF (`gui/BrakeDiscInspector_GUI_ROI`) en Visual Studio o VS Code.
-   - Asegurar que el proyecto apunte al backend (`http://localhost:8000` por defecto).
-
-## Instalación en WSL/Ubuntu
-1. **Dependencias del sistema**
-   ```bash
-   sudo apt-get update && sudo apt-get install -y python3-venv libgl1
-   ```
-   `libgl1` es necesario para que OpenCV renderice.
-2. **Entorno virtual e instalación**
-   ```bash
-   cd BrakeDiscInspector/backend
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install --upgrade pip
-   pip install --index-url https://download.pytorch.org/whl/cpu \
-     torch==2.5.1+cpu torchvision==0.20.1+cpu
-   pip install -r requirements.txt
-   ```
-3. **Ejecutar backend**
-   ```bash
-   uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-   ```
-4. **Acceso desde Windows**
-   - Configurar la GUI para apuntar a `http://localhost:8000` si se usa WSLg o al puerto publicado (`http://<ip_wsl>:8000`).
-
-## Variables de entorno útiles
-- `BDI_LIGHT_IMPORT=1`: evita cargar `timm/torchvision` en CI o máquinas sin GPU (lazy import).
-- `BDI_MODELS_DIR=/ruta/custom`: cambia la carpeta base donde se guardan memorias/calibraciones PatchCore.
-- `UVICORN_RELOAD_DIRS=backend`: restringe los watchers de recarga.
-
-## Verificación rápida
+## 2. Preparar backend
 ```bash
-# Desde backend/
-python -m pytest tests
-curl http://localhost:8000/health
-curl -X POST "http://localhost:8000/fit_ok" \
-  -F role_id=Sample \
-  -F roi_id=ROI1 \
-  -F mm_per_px=0.25 \
-  -F images=@roi.png
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn backend.app:app --reload
 ```
+- Variables: `BACKEND_DEVICE=cuda:0`, `BACKEND_DATA_ROOT=../datasets`.
 
-## Solución de problemas
-- Si `torchvision` falla por dependencias, reinstalar con la misma index URL que `torch`.
-- Si OpenCV lanza error `libGL`, instalar `libgl1` (WSL/Linux).
-- Pylance “Import no resuelto”: seleccionar el intérprete correcto en VS Code (`Ctrl+Shift+P > Python: Select Interpreter`).
+## 3. Preparar GUI
+1. Abrir `gui/BrakeDiscInspector_GUI_ROI.sln` en Visual Studio.
+2. Restaurar paquetes NuGet.
+3. Configurar `appsettings.json`/`settings.json` si aplica (backend URL, idioma).
+4. Ejecutar en modo depuración.
 
-## Recomendaciones adicionales
-- Mantener el repositorio sincronizado (`git pull`) antes de entrenamientos para recoger ajustes de pipeline.
-- Realizar backups periódicos de `data/` y versionar configuraciones críticas.
-- Utilizar `requirements-lock.txt` (si existe) para replicar entornos productivos.
+## 4. Datasets demo
+- `datasets_demo/` (si disponible) contiene ROI canónicas con manifests.
+- Copiar a `datasets/` y ajustar `role_id`/`roi_id`.
+
+## 5. Pruebas rápidas
+1. Iniciar backend (`uvicorn`).
+2. Desde GUI: cargar imagen demo, dibujar ROI, `Add to OK` (x5).
+3. Ejecutar `Train memory fit` → comprobar respuesta.
+4. Ejecutar `Calibrate threshold` → threshold > 0.
+5. Ejecutar `Evaluate` → revisar heatmap.
+
+## 6. Dependencias opcionales
+- `cuda-toolkit` para GPU.
+- `faiss-gpu` (incluido en requirements si GPU detectada).
+- `jq`, `curl` para scripts.
+
+## 7. Troubleshooting
+- Backend no arranca → revisar versión Python.
+- GUI no compila → reinstalar workload Desktop en Visual Studio.
+- Sin GPU → configurar `BACKEND_DEVICE=cpu` y ajustar tiempo de inferencia.
+
+## 8. Referencias
+- `README.md`, `docs/GUI.md`, `docs/BACKEND.md`.
+- `docs/curl_examples.md` para pruebas manuales.

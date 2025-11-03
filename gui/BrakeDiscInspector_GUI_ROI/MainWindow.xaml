@@ -406,17 +406,7 @@
                           Click="BtnLoadModel_Click"/>
                 </StackPanel>
 
-                <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0">
-                  <workflow:WorkflowControl.Resources>
-                    <Style TargetType="GroupBox">
-                      <Style.Triggers>
-                        <Trigger Property="Header" Value="Backend">
-                          <Setter Property="Visibility" Value="Collapsed"/>
-                        </Trigger>
-                      </Style.Triggers>
-                    </Style>
-                  </workflow:WorkflowControl.Resources>
-                </workflow:WorkflowControl>
+                <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
               </StackPanel>
             </GroupBox>
 

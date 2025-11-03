@@ -2257,9 +2257,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void EnablePresetsTab(bool enable)
         {
-            if (TabSetupInspect != null)
+            if (TabSetupInspect != null && !TabSetupInspect.IsEnabled)
             {
-                TabSetupInspect.IsEnabled = enable;
+                TabSetupInspect.IsEnabled = true;
+            }
+
+            if (InspectionRoisGroup != null)
+            {
+                InspectionRoisGroup.IsEnabled = enable;
             }
         }
 
@@ -8816,20 +8821,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void SetDrawToolFromShape(RoiShape shape)
         {
-            if (RectToolButton != null)
-            {
-                RectToolButton.IsChecked = shape == RoiShape.Rectangle;
-            }
-
-            if (CircleToolButton != null)
-            {
-                CircleToolButton.IsChecked = shape == RoiShape.Circle;
-            }
-
-            if (AnnulusToolButton != null)
-            {
-                AnnulusToolButton.IsChecked = shape == RoiShape.Annulus;
-            }
+            // Mantiene la sincronización de la UI con el estado interno usando el camino
+            // centralizado que contempla la ausencia de botones de toggle específicos.
+            ApplyDrawToolSelection(shape, updateViewModel: false);
         }
 
         private void StartDrawingFor(MasterState state, ComboBox shapeCombo)

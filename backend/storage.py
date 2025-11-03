@@ -3,7 +3,8 @@ from __future__ import annotations
 import base64
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
 
 import numpy as np
 
@@ -133,3 +134,53 @@ class ModelStore:
 
         legacy_path = self._legacy_dir(role_id, roi_id) / "calib.json"
         return load_json(legacy_path, default=default)
+
+    def _ds_dir(self, role_id: str, roi_id: str, label: str) -> Path:
+        p = self.root / "datasets" / role_id / roi_id / label
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    def save_dataset_image(self, role_id: str, roi_id: str, label: str, data: bytes, ext: str = ".png") -> Path:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        ext = ext if ext.startswith(".") else "." + ext
+        path = self._ds_dir(role_id, roi_id, label) / f"{ts}{ext.lower()}"
+        path.write_bytes(data)
+        return path
+
+    def list_dataset(self, role_id: str, roi_id: str) -> Dict[str, Any]:
+        base = self.root / "datasets" / role_id / roi_id
+        out: Dict[str, Any] = {"role_id": role_id, "roi_id": roi_id, "classes": {}}
+        if not base.exists():
+            return out
+        for cls in ["ok", "ng"]:
+            d = base / cls
+            if d.exists():
+                files = sorted([f.name for f in d.iterdir() if f.is_file()])
+                out["classes"][cls] = {"count": len(files), "files": files}
+        return out
+
+    def delete_dataset_file(self, role_id: str, roi_id: str, label: str, filename: str) -> bool:
+        fn = Path(filename).name
+        p = self._ds_dir(role_id, roi_id, label) / fn
+        if p.exists() and p.is_file():
+            p.unlink()
+            return True
+        return False
+
+    def clear_dataset_class(self, role_id: str, roi_id: str, label: str) -> int:
+        d = self._ds_dir(role_id, roi_id, label)
+        count = 0
+        for f in list(d.glob("*")):
+            if f.is_file():
+                f.unlink()
+                count += 1
+        return count
+
+    def manifest(self, role_id: str, roi_id: str) -> Dict[str, Any]:
+        return {
+            "role_id": role_id,
+            "roi_id": roi_id,
+            "memory": self.load_memory(role_id, roi_id) is not None,
+            "calib": self.load_calib(role_id, roi_id, default=None),
+            "datasets": self.list_dataset(role_id, roi_id),
+        }

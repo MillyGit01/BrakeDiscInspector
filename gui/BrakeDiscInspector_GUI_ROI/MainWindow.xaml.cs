@@ -257,6 +257,45 @@ namespace BrakeDiscInspector_GUI_ROI
             return null;
         }
 
+        private List<RoiModel> GetInspectionRoiModelsForRescale()
+        {
+            var list = new List<RoiModel>();
+            var seen = new HashSet<RoiModel>();
+
+            void add(RoiModel? roi)
+            {
+                if (roi != null && seen.Add(roi))
+                {
+                    list.Add(roi);
+                }
+            }
+
+            if (_layout != null)
+            {
+                add(_layout.Inspection1);
+                add(_layout.Inspection2);
+                add(_layout.Inspection3);
+                add(_layout.Inspection4);
+                add(_layout.Inspection);
+                add(_layout.InspectionBaseline);
+            }
+
+            add(_inspectionBaselineFixed);
+
+            if (_preset?.Rois != null)
+            {
+                foreach (var roi in _preset.Rois)
+                {
+                    if (roi?.Role == RoiRole.Inspection)
+                    {
+                        add(roi);
+                    }
+                }
+            }
+
+            return list;
+        }
+
         private static string BuildOverlayTag(RoiModel? roi)
         {
             if (roi == null)
@@ -559,6 +598,119 @@ namespace BrakeDiscInspector_GUI_ROI
             catch (Exception ex)
             {
                 LogDebug($"[config] Failed to persist layout options: {ex.Message}");
+            }
+        }
+
+        private void RescaleInspectionRoisToNewImageSize(double newW, double newH)
+        {
+            if (newW <= 0 || newH <= 0)
+            {
+                return;
+            }
+
+            var rois = GetInspectionRoiModelsForRescale();
+            if (rois.Count == 0)
+            {
+                return;
+            }
+
+            bool anyScaled = false;
+
+            foreach (var roi in rois)
+            {
+                if (roi == null)
+                {
+                    continue;
+                }
+
+                int? index = TryParseInspectionIndex(roi);
+                if (!index.HasValue && _layout != null)
+                {
+                    if (ReferenceEquals(roi, _layout.Inspection1)) index = 1;
+                    else if (ReferenceEquals(roi, _layout.Inspection2)) index = 2;
+                    else if (ReferenceEquals(roi, _layout.Inspection3)) index = 3;
+                    else if (ReferenceEquals(roi, _layout.Inspection4)) index = 4;
+                }
+
+                var config = index.HasValue ? GetInspectionConfigByIndex(index.Value) : null;
+
+                double oldW = roi.BaseImgW ?? 0.0;
+                double oldH = roi.BaseImgH ?? 0.0;
+
+                if ((oldW <= 0.0 || oldH <= 0.0) && config != null)
+                {
+                    oldW = config.BaseImgW ?? 0.0;
+                    oldH = config.BaseImgH ?? 0.0;
+                }
+
+                if (oldW <= 0.0 || oldH <= 0.0)
+                {
+                    roi.BaseImgW ??= newW;
+                    roi.BaseImgH ??= newH;
+                    if (config != null)
+                    {
+                        config.BaseImgW ??= newW;
+                        config.BaseImgH ??= newH;
+                    }
+                    continue;
+                }
+
+                double sx = newW / oldW;
+                double sy = newH / oldH;
+
+                if (Math.Abs(sx - 1.0) < 1e-9 && Math.Abs(sy - 1.0) < 1e-9)
+                {
+                    roi.BaseImgW = newW;
+                    roi.BaseImgH = newH;
+                    if (config != null)
+                    {
+                        config.BaseImgW = newW;
+                        config.BaseImgH = newH;
+                    }
+                    continue;
+                }
+
+                switch (roi.Shape)
+                {
+                    case RoiShape.Rectangle:
+                        roi.X *= sx;
+                        roi.Y *= sy;
+                        roi.Width *= sx;
+                        roi.Height *= sy;
+                        break;
+
+                    case RoiShape.Circle:
+                    case RoiShape.Annulus:
+                        roi.CX *= sx;
+                        roi.CY *= sy;
+                        roi.X *= sx;
+                        roi.Y *= sy;
+                        double s = Math.Min(sx, sy);
+                        roi.R *= s;
+                        if (roi.Shape == RoiShape.Annulus)
+                        {
+                            roi.RInner *= s;
+                        }
+                        roi.Width *= s;
+                        roi.Height *= s;
+                        break;
+                }
+
+                roi.BaseImgW = newW;
+                roi.BaseImgH = newH;
+
+                if (config != null)
+                {
+                    config.BaseImgW = newW;
+                    config.BaseImgH = newH;
+                }
+
+                anyScaled = true;
+            }
+
+            if (anyScaled)
+            {
+                TryPersistLayout();
             }
         }
 
@@ -1260,6 +1412,51 @@ namespace BrakeDiscInspector_GUI_ROI
             public RoiShapeType ShapeType => (RoiShapeType)Shape;
         }
         // ---------- Logging helpers ----------
+
+        private void RoiDiag(string line) => RoiDiagLog(line);
+
+        private void LogImgLoadAndRois(string stageTag)
+        {
+            RoiDiag($"[{stageTag}] img=({_imgW}x{_imgH})");
+            foreach (var roi in GetInspectionRoiModelsForRescale())
+            {
+                if (roi == null || roi.Role != RoiRole.Inspection)
+                {
+                    continue;
+                }
+
+                string baseW = roi.BaseImgW.HasValue ? roi.BaseImgW.Value.ToString("F1", CultureInfo.InvariantCulture) : "-";
+                string baseH = roi.BaseImgH.HasValue ? roi.BaseImgH.Value.ToString("F1", CultureInfo.InvariantCulture) : "-";
+
+                if (roi.Shape == RoiShape.Rectangle)
+                {
+                    RoiDiag(string.Format(CultureInfo.InvariantCulture,
+                        "[{0}] INSPECT_RECT id={1} x={2:F1} y={3:F1} w={4:F1} h={5:F1} Base=({6}x{7})",
+                        stageTag,
+                        roi.Id ?? "<null>",
+                        roi.X,
+                        roi.Y,
+                        roi.Width,
+                        roi.Height,
+                        baseW,
+                        baseH));
+                }
+                else
+                {
+                    double rInner = roi.Shape == RoiShape.Annulus ? roi.RInner : 0.0;
+                    RoiDiag(string.Format(CultureInfo.InvariantCulture,
+                        "[{0}] INSPECT_CIRC id={1} cx={2:F1} cy={3:F1} R={4:F1} RInner={5:F1} Base=({6}x{7})",
+                        stageTag,
+                        roi.Id ?? "<null>",
+                        roi.CX,
+                        roi.CY,
+                        roi.R,
+                        rInner,
+                        baseW,
+                        baseH));
+                }
+            }
+        }
 
         private void RoiDiagLog(string line)
         {
@@ -2561,6 +2758,10 @@ namespace BrakeDiscInspector_GUI_ROI
             // RoiOverlay.InvalidateOverlay();
             _imgW = _imgSourceBI.PixelWidth;
             _imgH = _imgSourceBI.PixelHeight;
+
+            LogImgLoadAndRois("imgload:pre-rescale");
+            RescaleInspectionRoisToNewImageSize(_imgW, _imgH);
+            LogImgLoadAndRois("imgload:post-rescale");
 
             try
             {
@@ -4551,7 +4752,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     config.Name = roiModel.Label;
                 }
+                config.BaseImgW = _imgW;
+                config.BaseImgH = _imgH;
             }
+
+            roiModel.BaseImgW = _imgW;
+            roiModel.BaseImgH = _imgH;
 
             GuiLog.Info($"[inspection] save slot={index} roi={roiModel.Label ?? roiModel.Id} shape={roiModel.Shape}");
 

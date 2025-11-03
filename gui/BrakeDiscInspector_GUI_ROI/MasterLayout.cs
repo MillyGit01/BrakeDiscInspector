@@ -81,7 +81,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var raw = File.ReadAllText(filePath, Encoding.UTF8);
                 var json = (raw ?? string.Empty)
                     .Replace("\0", string.Empty)
-                    .TrimStart('\uFEFF', ' ', '\t', '\r', '\n");
+                    .TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
 
                 MasterLayout layout;
                 if (string.IsNullOrWhiteSpace(json))

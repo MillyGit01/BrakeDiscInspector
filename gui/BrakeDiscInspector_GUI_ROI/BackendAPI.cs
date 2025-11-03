@@ -199,7 +199,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return trimmed.TrimEnd('/');
         }
 
-        public static double ResolveMmPerPx(PresetFile? preset, double? overrideValue = null)
+        public static double ResolveMmPerPx(Preset? preset, double? overrideValue = null)
         {
             if (overrideValue.HasValue && overrideValue.Value > 0)
             {
@@ -322,7 +322,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public static async Task<(bool ok, InferResult? result, string? error)> InferAsync(
             string imagePathWin,
             RoiModel roi,
-            PresetFile preset,
+            Preset preset,
             Action<string>? log = null,
             string? roleId = null,
             string? roiId = null,

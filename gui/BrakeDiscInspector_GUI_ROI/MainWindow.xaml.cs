@@ -287,6 +287,16 @@ namespace BrakeDiscInspector_GUI_ROI
 
             add(_inspectionBaselineFixed);
 
+            if (_preset?.Inspection1 != null)
+            {
+                add(_preset.Inspection1);
+            }
+
+            if (_preset?.Inspection2 != null)
+            {
+                add(_preset.Inspection2);
+            }
+
             if (_preset?.Rois != null)
             {
                 foreach (var roi in _preset.Rois)
@@ -378,7 +388,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private enum RoiCorner { TopLeft, TopRight, BottomRight, BottomLeft }
         private MasterState _state = MasterState.DrawM1_Pattern;
 
-        private PresetFile _preset = new();
+        private Preset _preset = new();
         private MasterLayout _layout = new();     // inicio en blanco
 
         // RESULTADO PLAN 12: La GUI canoniza el ROI (G1).
@@ -2260,6 +2270,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var (layout, _) = MasterLayoutManager.LoadOrNew(_preset);
             _layout = layout;
+            ApplyInspectionPresetToUI(_preset);
             InitializeOptionsFromConfig();
 
             InitUI();
@@ -4648,30 +4659,52 @@ namespace BrakeDiscInspector_GUI_ROI
         private IReadOnlyList<RoiModel> CollectSavedInspectionRois()
         {
             var results = new List<RoiModel>();
-            var seen = new HashSet<RoiModel>();
+            var seenRefs = new HashSet<RoiModel>();
+            var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            void add(RoiModel? roi, int? slotIndex = null)
+            {
+                if (roi == null || !IsRoiSaved(roi))
+                {
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(roi.Id))
+                {
+                    if (!seenIds.Add(roi.Id))
+                    {
+                        return;
+                    }
+                }
+                else if (!seenRefs.Add(roi))
+                {
+                    return;
+                }
+
+                int index = slotIndex ?? TryParseInspectionIndex(roi) ?? (results.Count + 1);
+                NormalizeInspectionRoi(roi, Math.Max(1, Math.Min(4, index)));
+                results.Add(roi);
+            }
 
             for (int index = 1; index <= 4; index++)
             {
                 var slot = GetInspectionSlotModel(index);
-                if (slot != null && IsRoiSaved(slot) && seen.Add(slot))
-                {
-                    NormalizeInspectionRoi(slot, index);
-                    results.Add(slot);
-                }
+                add(slot, index);
             }
+
+            add(_preset?.Inspection1, 1);
+            add(_preset?.Inspection2, 2);
 
             if (_preset?.Rois != null)
             {
                 foreach (var roi in _preset.Rois)
                 {
-                    if (roi?.Role != RoiRole.Inspection || !IsRoiSaved(roi) || !seen.Add(roi))
+                    if (roi?.Role != RoiRole.Inspection)
                     {
                         continue;
                     }
 
-                    var index = TryParseInspectionIndex(roi) ?? (results.Count + 1);
-                    NormalizeInspectionRoi(roi, Math.Max(1, Math.Min(4, index)));
-                    results.Add(roi);
+                    add(roi);
                 }
             }
 
@@ -4912,6 +4945,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var savedClone = roiModel.Clone();
             SetInspectionSlotModel(index, savedClone);
+            PresetManager.SaveInspection(_preset, index, savedClone, line => RoiDiag(line));
+            try
+            {
+                PresetManager.Save(_preset);
+            }
+            catch (Exception ex)
+            {
+                RoiDiag($"[save-slot] preset-save-error idx={index} ex={ex.Message}");
+            }
             RefreshInspectionRoiSlots();
             SetActiveInspectionIndex(index);
             EnsureInspectionDatasetStructure();
@@ -4951,6 +4993,33 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
 
             SetInspectionSlotModel(index, null);
+
+            string slotId = $"Inspection_{index}";
+            if (index == 1)
+            {
+                _preset.Inspection1 = null;
+            }
+            else if (index == 2)
+            {
+                _preset.Inspection2 = null;
+            }
+
+            if (_preset.Rois != null && _preset.Rois.Count > 0)
+            {
+                _preset.Rois.RemoveAll(r => r != null &&
+                    !string.IsNullOrWhiteSpace(r.Id) &&
+                    string.Equals(r.Id, slotId, StringComparison.OrdinalIgnoreCase));
+            }
+
+            try
+            {
+                PresetManager.Save(_preset);
+                RoiDiag($"[remove-slot] idx={index} preset-cleared id={slotId}");
+            }
+            catch (Exception ex)
+            {
+                RoiDiag($"[remove-slot] idx={index} preset-clear-error ex={ex.Message}");
+            }
 
             if (index == 1 || _activeInspectionIndex == index)
             {
@@ -7862,7 +7931,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private void ApplyPresetToUI(PresetFile preset)
+        private void ApplyPresetToUI(Preset preset)
         {
             preset.Feature = NormalizeFeature(preset.Feature);
             TxtThr.Text = preset.MatchThr.ToString(CultureInfo.InvariantCulture);
@@ -7870,6 +7939,45 @@ namespace BrakeDiscInspector_GUI_ROI
             TxtSMin.Text = preset.ScaleMin.ToString(CultureInfo.InvariantCulture);
             TxtSMax.Text = preset.ScaleMax.ToString(CultureInfo.InvariantCulture);
             SetFeatureSelection(preset.Feature);
+        }
+
+        private void ApplyInspectionPresetToUI(Preset preset)
+        {
+            if (preset == null || _layout == null)
+            {
+                return;
+            }
+
+            bool applied = false;
+
+            for (int slot = 1; slot <= 2; slot++)
+            {
+                var roi = PresetManager.GetInspection(preset, slot, line => RoiDiag(line));
+                if (roi == null)
+                {
+                    continue;
+                }
+
+                NormalizeInspectionRoi(roi, slot);
+                RoiDiag(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "[preset-apply] slot={0} id={1} shape={2} base=({3}x{4})",
+                    slot,
+                    roi.Id ?? "<null>",
+                    roi.Shape,
+                    roi.BaseImgW,
+                    roi.BaseImgH));
+
+                SetInspectionSlotModel(slot, roi, updateActive: false);
+                applied = true;
+            }
+
+            if (applied)
+            {
+                RefreshInspectionRoiSlots();
+                RedrawAllRois();
+                DumpUiShapesMap("preset-apply");
+            }
         }
 
         private void SyncPresetFromUI()

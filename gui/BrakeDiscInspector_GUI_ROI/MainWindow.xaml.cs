@@ -2262,9 +2262,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 TabSetupInspect.IsEnabled = true;
             }
 
-            if (InspectionRoisGroup != null)
+            var roiGroup = FindName("InspectionRoisGroup") as System.Windows.Controls.GroupBox;
+            if (roiGroup != null)
             {
-                InspectionRoisGroup.IsEnabled = enable;
+                roiGroup.IsEnabled = enable;
             }
         }
 

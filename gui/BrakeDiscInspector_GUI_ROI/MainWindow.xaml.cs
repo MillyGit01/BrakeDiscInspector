@@ -1032,6 +1032,16 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private bool CanAutoSaveLayout()
+        {
+            if (_layout == null)
+            {
+                return false;
+            }
+
+            return IsRoiSaved(_layout.Master1Pattern) && IsRoiSaved(_layout.Master1Search);
+        }
+
         private bool HasAllMastersAndInspectionsDefined()
         {
             if (_layout == null)
@@ -5285,7 +5295,23 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog("[drag] end");
                 CanvasROI.ReleaseMouseCapture();
                 _dragShape = null;
-                MasterLayoutManager.Save(_preset, _layout);
+
+                if (_preset != null && CanAutoSaveLayout())
+                {
+                    try
+                    {
+                        MasterLayoutManager.Save(_preset, _layout);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[drag] auto-save failed: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    AppendLog("[drag] auto-save skipped: Master 1 incompleto o preset no disponible.");
+                }
+
                 e.Handled = true;
                 return;
             }

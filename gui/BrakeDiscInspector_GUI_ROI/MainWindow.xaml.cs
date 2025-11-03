@@ -1941,7 +1941,8 @@ namespace BrakeDiscInspector_GUI_ROI
             // SizeChanged += (_, __) => RoiOverlay.InvalidateOverlay();
             _preset = PresetManager.LoadOrDefault(_preset);
 
-            _layout = MasterLayoutManager.LoadOrNew(_preset);
+            var (layout, _) = MasterLayoutManager.LoadOrNew(_preset);
+            _layout = layout;
             InitializeOptionsFromConfig();
 
             InitUI();
@@ -7643,9 +7644,22 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnSaveLayout_Click(object sender, RoutedEventArgs e)
         {
-            var path = MasterLayoutManager.GetDefaultPath(_preset);
-            MasterLayoutManager.Save(_preset, _layout);
-            Snack("Layout guardado => " + path);
+            try
+            {
+                if (_layout?.Master1Pattern == null || _layout?.Master1Search == null)
+                {
+                    Snack("Falta Master 1 (Pattern/Search). Dibuja y guarda Master 1 antes de guardar el Layout.");
+                    return;
+                }
+
+                MasterLayoutManager.Save(_preset, _layout);
+                Snack("Layout guardado correctamente.");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[layout:save:ERROR] {ex.Message}");
+                MessageBox.Show(ex.Message, "Save Layout", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void BtnLoadLayout_Click(object sender, RoutedEventArgs e)

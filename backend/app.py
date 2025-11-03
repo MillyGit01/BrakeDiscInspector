@@ -358,6 +358,58 @@ def infer(
 
 
 
+@app.post("/datasets/ok/upload")
+def datasets_ok_upload(
+    role_id: str = Form(...),
+    roi_id: str = Form(...),
+    images: List[UploadFile] = File(...)
+):
+    saved = []
+    for up in images:
+        data = up.file.read()
+        ext = Path(up.filename).suffix or ".png"
+        path = store.save_dataset_image(role_id, roi_id, "ok", data, ext)
+        saved.append(Path(path).name)
+    return {"status": "ok", "saved": saved}
+
+
+@app.post("/datasets/ng/upload")
+def datasets_ng_upload(
+    role_id: str = Form(...),
+    roi_id: str = Form(...),
+    images: List[UploadFile] = File(...)
+):
+    saved = []
+    for up in images:
+        data = up.file.read()
+        ext = Path(up.filename).suffix or ".png"
+        path = store.save_dataset_image(role_id, roi_id, "ng", data, ext)
+        saved.append(Path(path).name)
+    return {"status": "ok", "saved": saved}
+
+
+@app.get("/datasets/list")
+def datasets_list(role_id: str, roi_id: str):
+    return store.list_dataset(role_id, roi_id)
+
+
+@app.get("/manifest")
+def manifest(role_id: str, roi_id: str):
+    return store.manifest(role_id, roi_id)
+
+
+@app.delete("/datasets/file")
+def datasets_delete_file(role_id: str, roi_id: str, label: str, filename: str):
+    ok = store.delete_dataset_file(role_id, roi_id, label, filename)
+    return {"deleted": ok, "filename": filename}
+
+
+@app.delete("/datasets/clear")
+def datasets_clear_class(role_id: str, roi_id: str, label: str):
+    n = store.clear_dataset_class(role_id, roi_id, label)
+    return {"cleared": n, "label": label}
+
+
 if __name__ == "__main__":
     if not logging.getLogger().handlers:
         logging.basicConfig(level=logging.INFO)

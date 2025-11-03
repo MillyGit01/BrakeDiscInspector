@@ -185,6 +185,14 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             }
         }
 
+        // --- NEW: base image dimensions used when this ROI was last authored ---
+        [JsonPropertyName("BaseImgW")]
+        public double? BaseImgW { get; set; }
+
+        [JsonPropertyName("BaseImgH")]
+        public double? BaseImgH { get; set; }
+        // --- /NEW ---
+
         [JsonIgnore]
         public bool IsDatasetLoading
         {

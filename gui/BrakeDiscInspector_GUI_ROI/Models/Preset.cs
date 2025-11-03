@@ -66,6 +66,12 @@ namespace BrakeDiscInspector_GUI_ROI
         public double R { get; set; }      // radio para círculo o radio externo para annulus
         public double RInner { get; set; } // sólo annulus
 
+        [JsonPropertyName("BaseImgW")]
+        public double? BaseImgW { get; set; }
+
+        [JsonPropertyName("BaseImgH")]
+        public double? BaseImgH { get; set; }
+
         private bool _isFrozen = true; // default: frozen at app start, only in-memory
 
         [JsonIgnore]
@@ -106,7 +112,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 CY = CY,
                 R = R,
                 RInner = RInner,
-                AngleDeg = AngleDeg
+                AngleDeg = AngleDeg,
+                BaseImgW = BaseImgW,
+                BaseImgH = BaseImgH
             };
         }
 

@@ -7669,8 +7669,36 @@ namespace BrakeDiscInspector_GUI_ROI
                 var loaded = MasterLayoutManager.LoadFromFile(dlg.FileName);
                 _layout = loaded ?? new MasterLayout();
 
-                // minimal refresh path (do not touch resize/heatmap logic)
+                InitializeOptionsFromConfig();
+                EnsureInspectionDatasetStructure();
+                _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
+                RefreshInspectionRoiSlots();
+                RestoreInspectionBaselineForCurrentImage();
+                EnsureInspectionBaselineInitialized();
+
+                var seedKey = ComputeImageSeedKey();
+                if (!string.Equals(seedKey, _lastImageSeedKey, System.StringComparison.Ordinal))
+                {
+                    _inspectionBaselineFixed = null;
+                    _inspectionBaselineSeededForImage = false;
+                    InspLog($"[Seed] New image detected, oldKey='{_lastImageSeedKey}' newKey='{seedKey}' -> reset baseline.");
+                    try
+                    {
+                        SeedInspectionBaselineOnce(_layout?.InspectionBaseline ?? _layout?.Inspection, seedKey);
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+                }
+                else
+                {
+                    InspLog($"[Seed] Same image key='{seedKey}', no re-seed.");
+                }
+
+                ResetAnalysisMarks();
                 UpdateWizardState();
+                OnLayoutLoaded();
                 RequestRoiVisibilityRefresh();
                 RedrawOverlaySafe();
                 Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");

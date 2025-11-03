@@ -64,13 +64,13 @@ namespace BrakeDiscInspector_GUI_ROI
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
-        public static string GetLayoutsFolder(PresetFile preset)
+        public static string GetLayoutsFolder(Preset preset)
             => System.IO.Path.Combine(preset.Home, "Layouts");
 
-        public static string GetDefaultPath(PresetFile preset)
+        public static string GetDefaultPath(Preset preset)
             => System.IO.Path.Combine(GetLayoutsFolder(preset), "last.layout.json");
 
-        public static string GetTimestampedPath(PresetFile preset)
+        public static string GetTimestampedPath(Preset preset)
             => System.IO.Path.Combine(GetLayoutsFolder(preset),
                                       DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".layout.json");
 
@@ -112,7 +112,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        public static (MasterLayout layout, bool loadedFromFile) LoadOrNew(PresetFile preset)
+        public static (MasterLayout layout, bool loadedFromFile) LoadOrNew(Preset preset)
         {
             var path = GetDefaultPath(preset);
             MasterLayout layout;
@@ -156,7 +156,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return (layout, loadedFromFile);
         }
 
-        public static void Save(PresetFile preset, MasterLayout layout)
+        public static void Save(Preset preset, MasterLayout layout)
         {
             var dir = GetLayoutsFolder(preset);
             Directory.CreateDirectory(dir);
@@ -195,6 +195,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (string.IsNullOrWhiteSpace(roi.ModelKey))
                 {
                     roi.ModelKey = $"inspection-{i + 1}";
+                }
+
+                var expectedId = $"Inspection_{i + 1}";
+                if (string.IsNullOrWhiteSpace(roi.Id) || !string.Equals(roi.Id, expectedId, StringComparison.OrdinalIgnoreCase))
+                {
+                    roi.Id = expectedId;
                 }
             }
 

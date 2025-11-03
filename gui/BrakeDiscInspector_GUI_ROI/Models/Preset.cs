@@ -124,9 +124,15 @@ namespace BrakeDiscInspector_GUI_ROI
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    public class PresetFile
+    public class Preset
     {
         public List<RoiModel> Rois { get; set; } = new();
+
+        [JsonPropertyName("Inspection1")]
+        public RoiModel? Inspection1 { get; set; }
+
+        [JsonPropertyName("Inspection2")]
+        public RoiModel? Inspection2 { get; set; }
 
         // Matching/config
         public int MatchThr { get; set; } = 85; // correlación 0..100

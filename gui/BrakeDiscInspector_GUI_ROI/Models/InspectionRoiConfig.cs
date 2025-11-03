@@ -11,6 +11,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
     public class InspectionRoiConfig : INotifyPropertyChanged
     {
         private int _index;
+        private string _id;
         private bool _enabled = true;
         private string _modelKey;
         private double _threshold;
@@ -37,6 +38,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             Index = index;
             _name = $"Inspection {index}";
             _modelKey = $"inspection-{index}";
+            _id = $"Inspection_{index}";
         }
 
         public int Index
@@ -48,10 +50,29 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 _index = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(DisplayName));
+                var expectedId = $"Inspection_{_index}";
+                if (!string.Equals(_id, expectedId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _id = expectedId;
+                    OnPropertyChanged(nameof(Id));
+                }
             }
         }
 
         public string DisplayName => $"Inspection {Index}";
+
+        [JsonPropertyName("Id")]
+        public string Id
+        {
+            get => _id;
+            set
+            {
+                var newValue = string.IsNullOrWhiteSpace(value) ? $"Inspection_{Index}" : value;
+                if (string.Equals(_id, newValue, StringComparison.Ordinal)) return;
+                _id = newValue;
+                OnPropertyChanged();
+            }
+        }
 
         public string Name
         {

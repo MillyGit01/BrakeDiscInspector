@@ -525,6 +525,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _layout.Analyze.PosTolPx = _analyzePosTolPx;
             _layout.Analyze.AngTolDeg = _analyzeAngTolDeg;
             _layout.Analyze.ScaleLock = _scaleLock;
+            _layout.Analyze.UseLocalMatcher = (ChkUseLocalMatcher?.IsChecked == true);
 
             TryPersistLayout();
         }
@@ -2005,6 +2006,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 HeatmapGain = gain;
                 HeatmapGamma = gamma;
                 HeatmapOverlayOpacity = opacity;
+                if (ChkUseLocalMatcher != null)
+                {
+                    ChkUseLocalMatcher.IsChecked = layoutAnalyze?.UseLocalMatcher ?? true;
+                }
             }
             finally
             {
@@ -7638,41 +7643,42 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnSaveLayout_Click(object sender, RoutedEventArgs e)
         {
+            var path = MasterLayoutManager.GetDefaultPath(_preset);
             MasterLayoutManager.Save(_preset, _layout);
-            Snack("Layout guardado.");
+            Snack("Layout guardado => " + path);
         }
 
         private void BtnLoadLayout_Click(object sender, RoutedEventArgs e)
         {
-            _layout = MasterLayoutManager.LoadOrNew(_preset);
-            InitializeOptionsFromConfig();
-            EnsureInspectionDatasetStructure();
-            _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
-            RefreshInspectionRoiSlots();
-            RestoreInspectionBaselineForCurrentImage();
-            EnsureInspectionBaselineInitialized();
+            try
             {
-                var seedKey = ComputeImageSeedKey();
-                if (!string.Equals(seedKey, _lastImageSeedKey, System.StringComparison.Ordinal))
+                var dir = MasterLayoutManager.GetLayoutsFolder(_preset);
+                Directory.CreateDirectory(dir);
+
+                var dlg = new Microsoft.Win32.OpenFileDialog
                 {
-                    _inspectionBaselineFixed = null;
-                    _inspectionBaselineSeededForImage = false;
-                    InspLog($"[Seed] New image detected, oldKey='{_lastImageSeedKey}' newKey='{seedKey}' -> reset baseline.");
-                    try
-                    {
-                        SeedInspectionBaselineOnce(_layout?.InspectionBaseline ?? _layout?.Inspection, seedKey);
-                    }
-                    catch { /* ignore */ }
-                }
-                else
-                {
-                    InspLog($"[Seed] Same image key='{seedKey}', no re-seed.");
-                }
+                    InitialDirectory = dir,
+                    Filter = "Layout (*.json)|*.json",
+                    FileName = "last.layout.json",
+                    Title = "Select layout"
+                };
+
+                if (dlg.ShowDialog(this) != true)
+                    return;
+
+                var loaded = MasterLayoutManager.LoadFromFile(dlg.FileName);
+                _layout = loaded ?? new MasterLayout();
+
+                // minimal refresh path (do not touch resize/heatmap logic)
+                UpdateWizardState();
+                RequestRoiVisibilityRefresh();
+                RedrawOverlaySafe();
+                Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
             }
-            ResetAnalysisMarks();
-            Snack("Layout cargado.");
-            UpdateWizardState();
-            OnLayoutLoaded();
+            catch (Exception ex)
+            {
+                Snack("Load Layout error: " + ex.Message);
+            }
         }
 
         // ====== Logs / Polling ======

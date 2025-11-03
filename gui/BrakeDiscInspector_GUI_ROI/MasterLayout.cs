@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BrakeDiscInspector_GUI_ROI.Models;
 
 namespace BrakeDiscInspector_GUI_ROI
@@ -45,6 +46,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public double PosTolPx { get; set; } = 1.0;
         public double AngTolDeg { get; set; } = 0.5;
         public bool ScaleLock { get; set; } = true;
+        public bool UseLocalMatcher { get; set; } = true;
     }
 
     public sealed class UiOptions
@@ -56,8 +58,59 @@ namespace BrakeDiscInspector_GUI_ROI
 
     public static class MasterLayoutManager
     {
+        private static JsonSerializerOptions s_opts = new()
+        {
+            WriteIndented = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        public static string GetLayoutsFolder(PresetFile preset)
+            => System.IO.Path.Combine(preset.Home, "Layouts");
+
         public static string GetDefaultPath(PresetFile preset)
-            => Path.Combine(preset.Home, "configs", "master_layout.json");
+            => System.IO.Path.Combine(GetLayoutsFolder(preset), "last.layout.json");
+
+        public static string GetTimestampedPath(PresetFile preset)
+            => System.IO.Path.Combine(GetLayoutsFolder(preset),
+                                      DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".layout.json");
+
+        public static MasterLayout LoadFromFile(string filePath)
+        {
+            try
+            {
+                var raw = File.ReadAllText(filePath, Encoding.UTF8);
+                var json = (raw ?? string.Empty)
+                    .Replace("\0", string.Empty)
+                    .TrimStart('\uFEFF', ' ', '\t', '\r', '\n");
+
+                MasterLayout layout;
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    layout = new MasterLayout();
+                }
+                else
+                {
+                    layout = JsonSerializer.Deserialize<MasterLayout>(json, s_opts) ?? new MasterLayout();
+                }
+
+                EnsureInspectionRoiDefaults(layout);
+                EnsureOptionDefaults(layout);
+
+                layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
+                layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
+                return layout;
+            }
+            catch (Exception ex) when (ex is IOException || ex is JsonException)
+            {
+                Debug.WriteLine($"[MasterLayoutManager] LoadFromFile: contenido inválido, se cargan valores por defecto. {ex.Message}");
+                var layout = new MasterLayout();
+                EnsureInspectionRoiDefaults(layout);
+                EnsureOptionDefaults(layout);
+                layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
+                layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
+                return layout;
+            }
+        }
 
         public static MasterLayout LoadOrNew(PresetFile preset)
         {
@@ -73,19 +126,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 else
                 {
-                    var raw = File.ReadAllText(path, Encoding.UTF8);
-                    var json = (raw ?? string.Empty)
-                        .Replace("\0", string.Empty)
-                        .TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
-
-                    if (string.IsNullOrWhiteSpace(json))
-                    {
-                        layout = new MasterLayout();
-                    }
-                    else
-                    {
-                        layout = JsonSerializer.Deserialize<MasterLayout>(json) ?? new MasterLayout();
-                    }
+                    layout = LoadFromFile(path);
                 }
             }
             catch (Exception ex) when (ex is IOException || ex is JsonException)
@@ -109,20 +150,16 @@ namespace BrakeDiscInspector_GUI_ROI
 
         public static void Save(PresetFile preset, MasterLayout layout)
         {
-            var path = GetDefaultPath(preset);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var dir = GetLayoutsFolder(preset);
+            Directory.CreateDirectory(dir);
 
-            var options = new JsonSerializerOptions { WriteIndented = true };
-            var json = JsonSerializer.Serialize(layout, options);
+            var json = JsonSerializer.Serialize(layout, s_opts);
 
-            var tmp = path + ".tmp";
-            File.WriteAllText(tmp, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-#if NET6_0_OR_GREATER
-            File.Move(tmp, path, overwrite: true);
-#else
-            if (File.Exists(path)) File.Delete(path);
-            File.Move(tmp, path);
-#endif
+            var alias = Path.Combine(dir, "last.layout.json");
+            File.WriteAllText(alias, json);
+
+            var snapshot = GetTimestampedPath(preset);
+            File.WriteAllText(snapshot, json);
         }
 
         private static void EnsureInspectionRoiDefaults(MasterLayout layout)

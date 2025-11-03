@@ -147,7 +147,8 @@
                   <CheckBox x:Name="ChkUseLocalMatcher"
                             Content="Use local matcher"
                             Margin="16,0,0,0"
-                            ToolTip="Forzar matcher local"/>
+                            ToolTip="Forzar matcher local"
+                            IsChecked="True"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                   <TextBlock Text="Position tolerance (px)"

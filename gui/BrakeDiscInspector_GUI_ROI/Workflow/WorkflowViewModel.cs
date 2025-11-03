@@ -353,6 +353,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _inspectionRois.CollectionChanged += InspectionRoisCollectionChanged;
                 foreach (var roi in _inspectionRois)
                 {
+                    if (string.IsNullOrWhiteSpace(roi.Id))
+                    {
+                        roi.Id = $"Inspection_{roi.Index}";
+                    }
                     roi.PropertyChanged += InspectionRoiPropertyChanged;
                     if (string.IsNullOrWhiteSpace(roi.DatasetStatus))
                     {

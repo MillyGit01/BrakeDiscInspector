@@ -112,7 +112,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        public static MasterLayout LoadOrNew(PresetFile preset)
+        public static (MasterLayout layout, bool loadedFromFile) LoadOrNew(PresetFile preset)
         {
             var path = GetDefaultPath(preset);
             MasterLayout layout;
@@ -133,6 +133,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 Debug.WriteLine($"[MasterLayoutManager] LoadOrNew: contenido inválido, se cargan valores por defecto. {ex.Message}");
                 layout = new MasterLayout();
+                loadedFromFile = false;
             }
 
             EnsureInspectionRoiDefaults(layout);
@@ -140,12 +141,19 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (loadedFromFile && (layout.Master1Pattern == null || layout.Master1Search == null))
             {
-                throw new InvalidOperationException("Preset incompleto: falta Master 1.");
+                layout.Master1Pattern ??= new RoiModel { Role = RoiRole.Master1Pattern };
+                layout.Master1Search ??= new RoiModel { Role = RoiRole.Master1Search };
+
+                System.Diagnostics.Debug.WriteLine(
+                    "[layout] Archivo incompleto: faltaba Master1Pattern o Master1Search. " +
+                    "Se han creado placeholders. Se recomienda volver a Guardar el layout.");
+
+                loadedFromFile = false;
             }
 
             layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
             layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
-            return layout;
+            return (layout, loadedFromFile);
         }
 
         public static void Save(PresetFile preset, MasterLayout layout)
@@ -153,10 +161,22 @@ namespace BrakeDiscInspector_GUI_ROI
             var dir = GetLayoutsFolder(preset);
             Directory.CreateDirectory(dir);
 
+            if (layout.Master1Pattern == null || layout.Master1Search == null)
+            {
+                throw new InvalidOperationException(
+                    "No se puede guardar el Layout: falta Master 1 (Pattern y/o Search). " +
+                    "Dibuja/guarda Master 1 antes de 'Save Layout'.");
+            }
+
+            var path = GetDefaultPath(preset);
+            System.Diagnostics.Debug.WriteLine(
+                $"[layout:save] path={path} " +
+                $"M1P={(layout.Master1Pattern != null)} M1S={(layout.Master1Search != null)} " +
+                $"M2P={(layout.Master2Pattern != null)} M2S={(layout.Master2Search != null)}");
+
             var json = JsonSerializer.Serialize(layout, s_opts);
 
-            var alias = Path.Combine(dir, "last.layout.json");
-            File.WriteAllText(alias, json);
+            File.WriteAllText(path, json);
 
             var snapshot = GetTimestampedPath(preset);
             File.WriteAllText(snapshot, json);

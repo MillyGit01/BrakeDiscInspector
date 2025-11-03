@@ -5,7 +5,7 @@ Este documento detalla el contrato estable entre la GUI WPF y el backend de insp
 ## 1. Convenciones generales
 - Base URL por defecto: `http://127.0.0.1:8000` (configurable via `BACKEND_BASE_URL`).
 - Autenticación opcional: header `X-API-Key: <token>` (habilitable vía variables de entorno, ver `DEPLOYMENT.md`).
-- Todas las respuestas incluyen encabezado `X-Request-Id` para trazabilidad.
+- Las respuestas incluyen únicamente los campos indicados en cada sección.
 - Los campos numéricos usan punto decimal (`.`).
 - Imágenes enviadas en multipart deben ser ROI canónicas (PNG/JPG) generadas por la GUI sin compresión agresiva.
 
@@ -17,13 +17,9 @@ Este documento detalla el contrato estable entre la GUI WPF y el backend de insp
 ```json
 {
   "status": "ok",
-  "device": "cuda:0",
-  "model": "patchcore-dinov2-s14",
-  "version": "2025.4",
-  "uptime_s": 124,
-  "roles_loaded": ["master", "customer_x"],
-  "rois": ["inspection-1", "inspection-2"],
-  "last_fit_at": "2025-10-02T08:15:42Z"
+  "device": "cuda",
+  "model": "vit_small_patch14_dinov2.lvd142m",
+  "version": "0.1.0"
 }
 ```
 - **Errores**: `503` si la carga del modelo falla (campo `detail`).
@@ -97,7 +93,6 @@ Este documento detalla el contrato estable entre la GUI WPF y el backend de insp
 {
   "score": 0.38,
   "threshold": 0.61,
-  "is_anomaly": false,
   "heatmap_png_base64": "iVBOR...",
   "regions": [
     {
@@ -111,28 +106,10 @@ Este documento detalla el contrato estable entre la GUI WPF y el backend de insp
       "area_mm2": 9.4
     }
   ],
-  "token_shape": [24, 24],
-  "elapsed_ms": 87.4,
-  "model_version": "2025.4"
+  "token_shape": [24, 24]
 }
 ```
 - **Errores**: `428` si no existe calibración previa, `404` si el combo `(role_id, roi_id)` no está entrenado.
-
-### 2.5 `GET /manifests/{role_id}/{roi_id}`
-- Devuelve `manifest.json` persistido (estado fit/calibrate). Útil para diagnósticos.
-- Respuesta típica:
-```json
-{
-  "role_id": "master",
-  "roi_id": "inspection-1",
-  "model_version": "2025.4",
-  "last_fit_at": "2025-10-07T10:11:12Z",
-  "last_calibration_at": "2025-10-07T10:18:05Z",
-  "threshold": 0.61,
-  "mm_per_px": 0.021,
-  "operator_last": "tech-42"
-}
-```
 
 ## 3. Máscaras (`shape`)
 - **Rectángulo**: `{ "kind": "rect", "x": 0, "y": 0, "w": 448, "h": 448 }`
@@ -152,5 +129,4 @@ Ver `docs/curl_examples.md` para scripts listos (`fit_ok`, `calibrate_ng`, `infe
 ## 6. Checklist de integración
 1. Confirmar `mm_per_px` consistente entre GUI y backend.
 2. Enviar `shape` siempre en pixeles de ROI canónica.
-3. Manejar `X-Request-Id` para correlación con logs GUI.
-4. Propagar errores HTTP al usuario con mensajes traducidos (ver `docs/GUI.md`).
+3. Propagar errores HTTP al usuario con mensajes traducidos (ver `docs/GUI.md`).

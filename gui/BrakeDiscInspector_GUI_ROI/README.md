@@ -1,107 +1,55 @@
-
-# 📌 Actualización — 2025-10-07
-
-**Cambios clave (GUI):**
-- Corrección de salto del frame al clicar adorner (círculo/annulus): cálculo y propagación del centro reales en `SyncModelFromShape` y sincronización `X,Y = CX,CY` en `CreateLayoutShape`.
-- Bbox SIEMPRE cuadrado para circle/annulus; overlay heatmap alineado.
-- Decisiones del proyecto y parámetros vigentes documentados.
-
-**Cambios clave (Backend):**
-- PatchCore + DINOv2 ViT-S/14; endpoints `/health`, `/fit_ok`, `/calibrate_ng`, `/infer`; persistencia por `(role_id, roi_id)`.
-
-# BrakeDiscInspector GUI — ROI Workflow
+# GUI ROI — Manual técnico Octubre 2025
 
 ## 1. Objetivo
+Aplicación WPF (.NET 6/7) para definir ROIs, gestionar datasets y consumir los endpoints del backend FastAPI (`/health`, `/fit_ok`, `/calibrate_ng`, `/infer`).
 
-Aplicación WPF (.NET 8) que permite preparar ROIs, gestionar datasets y comunicarse con el backend FastAPI (PatchCore + DINOv2). La GUI exporta ROIs canónicos (crop + rotación) y consume los endpoints `/fit_ok`, `/calibrate_ng`, `/infer`.
+## 2. Flujo operativo
+1. **Cargar imagen** en la vista principal.
+2. **Dibujar ROI** usando adorners (`RoiAdorner`, `ResizeAdorner`, `RoiRotateAdorner`).
+3. **Guardar ROI** (Freeze) para generar crop canónico y bloquear adorners.
+4. **Add to OK/NG**: envía ROI canónica al backend, guarda PNG + JSON (`datasets/<role>/<roi>/<ok|ng>/`).
+5. **Train memory fit**: llama a `/fit_ok`, muestra `n_embeddings`, `coreset_size`, `token_shape`.
+6. **Calibrate threshold**: envía `ok_scores`/`ng_scores` a `/calibrate_ng`, actualiza `threshold`.
+7. **Evaluate**: llama a `/infer`, renderiza heatmap (`heatmap_png_base64`) y regiones.
 
----
+## 3. Contrato con backend
+- Todas las llamadas incluyen `role_id`, `roi_id`, `mm_per_px`.
+- `shape` JSON (rect/circle/annulus) siempre en coordenadas de ROI canónica.
+- Se registra `request_id` devuelto por backend en logs GUI.
+- Los manifests (`manifest.json`) se sincronizan tras cada operación.
 
-## Índice rápido
-
-- [Objetivo](#1-objetivo)
-- [Flujo principal](#2-flujo-principal)
-- [Estructura del proyecto](#3-estructura-del-proyecto)
-- [Configuración](#4-configuración)
-- [Problemas comunes](#5-problemas-comunes)
-- [Registro](#6-registro)
-- [Referencias](#7-referencias)
-
----
-
-## 2. Flujo principal
-
-1. Cargar imagen (BMP/PNG/JPG) en la vista principal.
-2. Dibujar y rotar el ROI con los adorners existentes (`RoiAdorner`, `RoiRotateAdorner`).
-3. **Dataset tab**:
-   - `Add OK/NG from current ROI` → guarda PNG + metadata JSON en `datasets/<role>/<roi>/<ok|ng>/`.
-   - `Remove selected`, `Open folder` para mantenimiento rápido.
-4. **Train tab**:
-   - `Train memory (fit_ok)` → empaqueta todos los PNG OK y llama a `/fit_ok`.
-   - Muestra `n_embeddings`, `coreset_size`, `token_shape` y guarda el log.
-5. **Calibrate tab** (opcional):
-   - Llama a `/calibrate_ng` con scores OK/NG para fijar `threshold` y `area_mm2_thr`.
-6. **Infer tab**:
-   - `Infer current ROI` → llama a `/infer`, decodifica `heatmap_png_base64` y lo superpone.
-   - Permite ajustar visualmente el umbral sin modificar el backend (slider local).
-
----
-
-## 3. Estructura del proyecto
-
-- `App.xaml` / `App.xaml.cs`
-- `MainWindow.xaml` / `.cs` (tabs Dataset/Train/Calibrate/Infer)
-- `Workflow/BackendClient.cs` (HttpClient async)
-- `ROI/` — modelos y adorners (no modificar geometría base)
-- `Overlays/` — sincronización canvas ↔ imagen (`RoiOverlay`)
-- `Workflow/DatasetManager.cs` — helpers para PNG + JSON
-- `ViewModels/` — lógica MVVM para cada tab
-
----
-
-## 4. Configuración
-
-`appsettings.json`:
-```json
-{
-  "Backend": {
-    "BaseUrl": "http://127.0.0.1:8000",
-    "DatasetRoot": "C:\\data\\brakedisc\\datasets"
-  }
-}
+## 4. Estructura del proyecto
+```
+App.xaml / App.xaml.cs
+MainWindow.xaml / .cs
+ViewModels/WorkflowViewModel.cs
+Services/BackendClientService.cs
+Models/RoiShape.cs, RoiManifest.cs
+Controls/RoiOverlay.xaml(.cs)
 ```
 
-También puedes sobreescribir `BaseUrl` mediante variables de entorno:
+## 5. Configuración
+- `settings.json`: backend URL, idioma, opacidad overlay.
+- Variables de entorno: `BDI_BACKEND_BASE_URL`, `BDI_BACKEND_API_KEY`.
+- Barra de estado muestra `/health` (`status`, `device`, `model_version`).
 
-- `BDI_BACKEND_BASEURL` / `BDI_BACKEND_BASE_URL` (alias: `BRAKEDISC_BACKEND_BASEURL` / `BRAKEDISC_BACKEND_BASE_URL`)
-- o `BDI_BACKEND_HOST` + `BDI_BACKEND_PORT` (alias: `BRAKEDISC_BACKEND_HOST` / `BRAKEDISC_BACKEND_PORT`; acepta también `HOST` / `PORT`)
+## 6. Logs
+- `logs/gui/<yyyy-mm-dd>.log`.
+- Formato: `timestamp [level] request_id=<id> action=<fit_ok|calibrate|infer> role=<role> roi=<roi> ...`.
 
-La GUI normaliza automáticamente la URL (añade `http://` si falta) antes de usarla.
+## 7. Buenas prácticas
+- Mantener llamadas HTTP `async/await`.
+- No modificar adorners sin aprobación (ver `agents.md`).
+- Validar `model_version` devuelto por backend; si difiere mostrar advertencia.
+- Generar miniaturas en background (`Task.Run`).
 
----
+## 8. Troubleshooting
+- **Backend no responde**: revisar URL/API Key.
+- **Heatmap desalineado**: confirmar ROI congelada y `shape` correcto.
+- **`409` en `/fit_ok`**: `mm_per_px` incoherente (ver calibración).
 
-## 5. Problemas comunes
-
-- **Adorners desalineados**: ejecutar `SyncOverlayToImage()` al cargar imagen y en `SizeChanged`.
-- **Heatmap invertido**: verificar que el PNG devuelto por `/infer` se muestra con el mismo tamaño del ROI canónico.
-- **Timeouts**: aumentar `HttpClient.Timeout` cuando se suben docenas de muestras a `/fit_ok`.
-- **Memoria no encontrada**: ejecutar `/fit_ok` antes de `/infer` y revisar carpeta `backend/models/<role>/<roi>/`.
-
----
-
-## 6. Registro
-
-Utiliza `AppendLog` (o equivalente) para escribir en `logs/gui.log`:
-```
-2024-06-05 14:23:10.512 [INFO] FitOk role=Master1 roi=Pattern images=48 nEmb=34992 coreset=700
-2024-06-05 14:23:35.901 [INFO] Infer role=Master1 roi=Pattern score=18.7 thr=20.0 regions=1 dt=142ms
-```
-
----
-
-## 7. Referencias
-
-- [README.md](../../README.md) — visión general del proyecto
-- [ARCHITECTURE.md](../../ARCHITECTURE.md) — flujo GUI ↔ backend
-- [API_REFERENCE.md](../../API_REFERENCE.md) — contratos FastAPI
-- [instructions_codex_gui_workflow.md](../../instructions_codex_gui_workflow.md) — guía detallada para agentes/colaboradores GUI
+## 9. Referencias
+- [`README.md`](../../README.md)
+- [`API_REFERENCE.md`](../../API_REFERENCE.md)
+- [`docs/GUI.md`](../../docs/GUI.md)
+- [`docs/DATASET_Y_ROI.md`](../../docs/DATASET_Y_ROI.md)

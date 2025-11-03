@@ -1,52 +1,85 @@
-Arquitectura
-Visión general
+# Arquitectura integral — BrakeDiscInspector 2025
 
-Frontend (WPF/.NET) — Dibujo y gestión de ROIs, presets, datasets y evaluación de resultados.
+> Documento maestro que describe la arquitectura lógica, física y operacional del sistema. Complementa `README.md` y `docs/ARQUITECTURA.md` aportando una vista resumida de alto nivel.
 
-Backend (FastAPI/Python) — Extracción de features (DINOv2), memoria PatchCore y scoring.
+## 1. Componentes principales
 
-Frontend
+### 1.1 Frontend (GUI WPF)
+- Proyecto `.NET 6/7` orientado a escritorio Windows.
+- Arquitectura MVVM ligera (`MainWindow`, `WorkflowViewModel`, `BackendClientService`, modelos de dominio `RoiShape`, `DatasetEntry`).
+- Renderizado de imagen base y adorners para ROIs (rect, circle, annulus) sin modificar geometría legacy (`RoiAdorner`, `ResizeAdorner`, `RoiRotateAdorner`).
+- Generación de ROI canónica mediante `TryBuildRoiCropInfo` → `TryGetRotatedCrop`, asegurando alineación y escala (`mm_per_px`).
+- Gestión de presets: maestros, inspections (1..4), estado “frozen”.
+- Cliente HTTP asíncrono para interactuar con endpoints `GET /health`, `POST /fit_ok`, `POST /calibrate_ng`, `POST /infer`.
+- Persistencia local: carpetas `datasets/{role}/{roi}/ok|ng`, manifiestos JSON, thumbnails PNG.
 
-MainWindow.xaml — Maquetación principal por pestañas con foco en Inspection ROIs.
+### 1.2 Backend (FastAPI + PatchCore/DINOv2)
+- Servicio Python 3.11+ desplegable via `uvicorn` o Docker.
+- Capas:
+  - **API Layer** (`app.py`): routers, validación de payloads, logging estructurado (JSON).
+  - **Domain Layer** (`infer.py`, `calib.py`, `patchcore.py`): ejecución de PatchCore, cálculos de thresholds.
+  - **Infrastructure Layer** (`storage.py`, `roi_mask.py`, `utils.py`): IO datasets, cachés FAISS, máscaras ROI.
+- Modelo `PatchCore` con backbone `dinov2_vits14` + pre-procesamiento `torchvision`.
+- Persistencia en `models/{role_id}/{roi_id}/`: embeddings `.npy`, coreset `.faiss`, `calibration.json`, `manifest.json`.
+- Escalable a GPU (CUDA 12.x) con device negotiation (`torch.cuda.is_available`).
 
-MainWindow.xaml.cs — Orquestación UI, wiring de eventos, dibujo en CanvasROI, redibujado de overlays y llamadas al VM.
+### 1.3 Infraestructura auxiliar
+- Directorio `configs/` con YAML de cámaras, presets.
+- `docker/` contiene Dockerfile para backend + compose con GPU.
+- `scripts/` incluye utilidades CLI (sincronización datasets, conversión imagen).
+- CI/CD (`docs/CI_CD.md`) se basa en GitHub Actions: lint + `pytest` backend.
 
-Workflow/WorkflowViewModel.cs — Estado de la sesión: imagen actual, selección de ROI, flags de overlays, comandos (load image, load preset, analyze master, add-to-ok/ng, train, calibrate, evaluate), datasets.
+## 2. Flujo de datos extremo a extremo
 
-MasterLayout.cs — Modelo cargado en preset: Master1, Master1Inspection, Master2, Master2Inspection y ajustes globales (scale_lock, use_local_matcher, mm_per_px, etc.). NO incluye Inspections 1–4.
+```
+Imagen cruda cámara
+   ↓ (GUI)                             Estado actual (manifiestos JSON)
+Renderizado WPF + adorners --------> Persistencia local datasets
+   ↓ crop/rotación                            ↓ sincronización
+ROI canónica (PNG + shape JSON) --------> Backend FastAPI
+                                       ↓
+                                 PatchCore (fit/calib/infer)
+                                       ↓
+                             Respuesta JSON + heatmap (b64)
+                                       ↓
+                             GUI: overlay, logs, dashboards
+```
 
-RoiModel.cs — ROI genérico: Id, Name, Shape (square|circle|annulus), Center, Size/Radius/InnerRadius, RotationDeg, IsFrozen (default true, en memoria), snapshots, etc.
+## 3. Contrato y responsabilidades
+- **Frontend**
+  - Debe generar siempre la ROI canónica y enviar `mm_per_px` real.
+  - Ejecuta llamadas HTTP de forma asíncrona, captura errores y muestra feedback.
+  - No realiza inferencia ni entrenamiento local (solo reenvía datasets a backend).
+- **Backend**
+  - No realiza cropping/rotación: confía en el input de la GUI.
+  - Mantiene estructura de persistencia y versión de modelo (`model_version` en manifest).
+  - Devuelve `heatmap_png_base64` alineada con ROI canónica y `regions[]` ya mapeadas en pixeles canónicos.
 
-Backend
+## 4. Diagramas de despliegue
 
-FastAPI con endpoints:
+```
+[Operario PC Windows] --HTTP--> [Servidor Backend]
+      |                               |
+  GUI WPF (.NET)            FastAPI + Torch + FAISS
+      |                               |
+  Local datasets            GPU (opcional) / CPU
+```
 
-GET /health
+- **Modo standalone**: GUI y backend en la misma estación (localhost) con GPU compartida.
+- **Modo célula**: GUI en estación de inspección; backend en servidor con múltiples GPUs; comunicación LAN segura.
 
-POST /infer — devuelve score, heatmap opcional, threshold (nullable), regions.
+## 5. Escenarios clave
+- **Entrenamiento incremental**: el operario agrega muestras, lanza `fit_ok`. Backend actualiza coreset sin borrar histórico.
+- **Recalibración**: cambios de lote requieren recalcular threshold; GUI consolida `ok_scores`/`ng_scores` y llama `/calibrate_ng`.
+- **Producción continua**: cada ROI evaluada genera logs y heatmaps. Threshold se puede ajustar manualmente en GUI pero se registra.
 
-POST /fit_ok — entrena la memoria OK (evitar CORS preflight 405; ver API_REFERENCE.md).
+## 6. Seguridad y observabilidad
+- Autenticación opcional mediante header API Key (ver `DEPLOYMENT.md`).
+- Logs estructurados (JSON) tanto en GUI (archivo local) como en backend (stdout). Integración con Splunk/ELK.
+- Métricas: backend expone `/metrics` (Prometheus) opcional, con tiempos de inferencia, memoria GPU, tamaño coreset.
 
-Pipeline: preprocesado 448×448, patch=14, grid 32×32, tokens=1025, embeddings; memoria PatchCore; scoring y mapa de calor.
-
-Reposicionado y matching
-
-Analyze Master calcula offset y rotación usando patrones (cruces) de Master1 y Master2.
-
-Aplicación de transformaciones:
-
-A Master1/2 y a Master1/2 Inspection siempre.
-
-A Inspection 1–4 solo si IsFrozen == false (si están congelados, permanecen fijos).
-
-Centro shape-aware:
-
-square: centro del rectángulo.
-
-circle: centro del círculo, radio = Size/2.
-
-annulus: centro común, con InnerRadius usado para recortes/miniaturas y enmascarado.
-
-Miniaturas
-
-Generadas desde la imagen actual aplicando la geometría real. Annulus recorta el anillo, no el disco completo. Ver DATA_FORMATS.md para rutas.
+## 7. Referencias cruzadas
+- Detalles técnicos exhaustivos del backend: `docs/BACKEND.md`, `backend/README_backend.md`.
+- Especificaciones GUI y UX: `docs/GUI.md`.
+- Diagramas detallados: `docs/ARQUITECTURA.md`.
+- Contrato API extendido: `API_REFERENCE.md` y `docs/API.md`.

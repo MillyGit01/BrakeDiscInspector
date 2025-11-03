@@ -1,37 +1,58 @@
-# Arquitectura de BrakeDiscInspector
+# Arquitectura detallada — Octubre 2025
 
-## Visión global
-BrakeDiscInspector combina una interfaz de escritorio WPF con un backend Python especializado en visión por computador. La separación permite evolucionar cada capa de forma independiente y desplegar el backend en estaciones con GPU mientras la GUI se ejecuta en los puestos de inspección. La comunicación se realiza mediante HTTP (REST) y JSON, manteniendo un contrato estable documentado en `agents.md`.
+Este documento amplía `ARCHITECTURE.md` con diagramas y flujos específicos.
 
-- **GUI (WPF .NET)**: define ROIs canónicas (rectángulo, círculo, anillo), orquesta acciones de dataset (añadir OK/NG, entrenar, calibrar, evaluar), muestra overlays y miniaturas, y expone controles de modo “Master/Search”. Se apoya en MVVM ligero (`WorkflowViewModel`) y comandos asincrónicos que delegan la lógica de negocio al backend.
-- **Backend (FastAPI + PyTorch/timm/OpenCV/FAISS)**: expone endpoints `/health`, `/fit_ok`, `/calibrate_ng` y `/infer` para gestionar memorias PatchCore, calibraciones y predicción sobre ROIs canónicas. Persiste artefactos en `models/` y aprovecha GPU cuando `torch.cuda.is_available()`.
+## 1. Visión general
+- GUI WPF (frontend) en estación Windows.
+- Backend FastAPI (Python) en servidor o misma estación.
+- Comunicación vía HTTP (REST + multipart), contrato detallado en `API_REFERENCE.md`.
 
-## Diagrama de componentes (texto)
+## 2. Capas GUI
+1. **Presentación**: `MainWindow.xaml`, controles `WorkflowControl`, `RoiOverlay`.
+2. **ViewModels**: `WorkflowViewModel`, `BackendClientService`, `DatasetViewModel`.
+3. **Servicios**: `BackendClient` (HTTP), `FileStorage`, `ThumbnailGenerator`.
+4. **Modelos**: `RoiShape`, `RoiManifest`, `DatasetEntry`.
+
+## 3. Capas backend
+1. **API**: `app.py` (routers), `schemas.py` (pydantic, si aplica).
+2. **Dominio**: `infer.py`, `calib.py`, `patchcore.py`.
+3. **Infraestructura**: `storage.py`, `roi_mask.py`, `utils.py`.
+4. **ML**: `features.py` (DINOv2, torch).
+
+## 4. Flujo `fit_ok`
+1. GUI prepara ROI canónica (`image`, `mm_per_px`, `shape`).
+2. Envia `POST /fit_ok` con multipart.
+3. Backend genera embeddings + coreset.
+4. Persistencia en `models/{role}/{roi}/`.
+5. Respuesta con `n_embeddings`, `coreset_size`, `token_shape`.
+6. GUI actualiza manifest y contadores.
+
+## 5. Flujo `calibrate_ng`
+1. GUI recopila `ok_scores`/`ng_scores` de evaluaciones previas.
+2. Llama `POST /calibrate_ng` (JSON).
+3. Backend calcula `threshold`, actualiza `calibration.json`.
+4. GUI sincroniza manifest, muestra `threshold` y `p99_ok/p5_ng`.
+
+## 6. Flujo `infer`
+1. GUI envía ROI canónica + `shape`.
+2. Backend produce heatmap, `score`, `regions`.
+3. GUI renderiza overlay (alpha) y lista regiones.
+4. Logs correlacionados por `request_id`.
+
+## 7. Diagramas
 ```
-MainWindow.xaml / MainWindow.xaml.cs
-        ↓ (binding, eventos)
-Workflow/WorkflowViewModel.cs (comandos, estado)
-        ↓ (DataContext)
-Controls/WorkflowControl.xaml (UI de dataset/acciones)
-        ↓
-HttpClient (async) ↔ Backend REST (FastAPI app)
-        ↓
-backend/app.py → features.py → (timm/torch, faiss)
-               → storage.py → persistencia en `models/`
+GUI (WPF) --/health--> Backend (FastAPI)
+GUI (WPF) --/fit_ok--> Backend (PatchCore)
+GUI (WPF) --/calibrate_ng--> Backend (Calib)
+GUI (WPF) --/infer--> Backend (Inferencia)
 ```
 
-## Interacciones clave entre capas
-- **Fit OK / Calibrate NG**: la GUI recorta la ROI canónica, empaqueta campos como `role_id`, `roi_id`, `mm_per_px` y envía peticiones `POST /fit_ok` y `POST /calibrate_ng`. El backend extrae embeddings, construye el coreset PatchCore, guarda memorias en `models/` y registra el umbral resultante.
-- **Toggle Inspection**: la GUI alterna `IsFrozen` en el modelo de ROI. Cuando está congelado, se deshabilitan adorners (`IsHitTestVisible=false`) y se evita el arrastre hasta que el usuario pulse “Editar ROI”. El backend no participa en esta acción pero depende del ROI canónico resultante.
-- **Infer**: la GUI envía `POST /infer` con la ROI actual (y máscara opcional). El backend ejecuta PatchCore + DINOv2, devuelve `score`, `threshold`, `heatmap` y regiones destacadas. La GUI interpreta la respuesta y actualiza indicadores visuales.
+## 8. Persistencia
+- `datasets/`: muestras OK/NG + metadatos JSON.
+- `models/`: embeddings, coreset, manifest, calibration.
+- `logs/`: JSON (backend) y texto (GUI).
 
-## Concerns transversales
-- **Sincronización de metadatos**: cada ROI tiene un identificador (`roi_id`), resolución (mm/px) y estado de congelación que deben mantenerse consistentes entre GUI y backend.
-- **Gestión de errores**: la GUI ejecuta las llamadas HTTP en tareas asíncronas, captura excepciones y muestra mensajes sin bloquear el hilo principal. El backend valida campos obligatorios y devuelve errores JSON estructurados.
-- **Escalabilidad**: el backend puede desplegarse como servicio independiente (Docker/WSL). La GUI puede apuntar a distintos hosts configurando la URL base.
-
-## Relación con documentación complementaria
-- [docs/BACKEND.md](BACKEND.md) detalla módulos Python, rutas y esquemas.
-- [docs/GUI.md](GUI.md) describe componentes WPF, comandos y UX.
-- [docs/PIPELINE_DETECCION.md](PIPELINE_DETECCION.md) explica las etapas de PatchCore/DINOv2 y estrategias de rendimiento.
-- [docs/DATASET_Y_ROI.md](DATASET_Y_ROI.md) resume la persistencia de imágenes y metadatos en disco.
+## 9. Integraciones futuras
+- Exportación OPC-UA (en evaluación).
+- Monitoreo Prometheus (`/metrics`).
+- Caching local de heatmaps.

@@ -1,51 +1,58 @@
-# Ejemplos `curl`
+# Ejemplos curl — Octubre 2025
 
-## Health
+## 1. Variables
 ```bash
-curl http://127.0.0.1:8000/health
+BASE=http://127.0.0.1:8000
+ROLE=master
+ROI=inspection-1
+API_KEY=demo-token
+MM=0.021
 ```
 
-## fit_ok (multipart, varias imágenes OK)
+Añade `-H "X-API-Key: $API_KEY"` si el backend lo exige.
+
+## 2. Health
 ```bash
-curl -X POST http://127.0.0.1:8000/fit_ok \
-  -F role_id=R1 \
-  -F roi_id=ROI_A \
-  -F mm_per_px=0.20 \
-  -F images=@ok1.jpg \
-  -F images=@ok2.jpg \
-  -F memory_fit=false
+curl -s $BASE/health | jq
 ```
 
-## calibrate_ng (JSON)
+## 3. Fit OK
 ```bash
-curl -X POST http://127.0.0.1:8000/calibrate_ng \
-  -H "Content-Type: application/json" \
+curl -X POST "$BASE/fit_ok" \
+  -F "role_id=$ROLE" \
+  -F "roi_id=$ROI" \
+  -F "mm_per_px=$MM" \
+  -F "images=@samples/$ROLE/$ROI/ok_001.png"
+```
+
+## 4. Calibrate NG
+```bash
+curl -X POST "$BASE/calibrate_ng" \
+  -H 'Content-Type: application/json' \
   -d '{
-        "role_id": "R1",
-        "roi_id": "ROI_A",
-        "mm_per_px": 0.20,
-        "ok_scores": [0.01, 0.02, 0.015],
-        "ng_scores": [0.35, 0.40],
-        "area_mm2_thr": 1.0,
-        "score_percentile": 99
+        "role_id": "'$ROLE'",
+        "roi_id": "'$ROI'",
+        "mm_per_px": '$MM',
+        "ok_scores": [0.2, 0.25, 0.3],
+        "ng_scores": [0.7, 0.8],
+        "score_percentile": 0.995,
+        "area_mm2_thr": 12.5
       }'
 ```
 
-## infer (multipart, `shape` opcional)
+## 5. Infer
 ```bash
-curl -X POST http://127.0.0.1:8000/infer \
-  -F role_id=R1 -F roi_id=ROI_A -F mm_per_px=0.20 \
-  -F image=@test.jpg
+curl -X POST "$BASE/infer" \
+  -F "role_id=$ROLE" \
+  -F "roi_id=$ROI" \
+  -F "mm_per_px=$MM" \
+  -F "image=@samples/$ROLE/$ROI/infer.png" \
+  -F 'shape={"kind":"annulus","cx":224,"cy":224,"r":210,"r_inner":140}'
+```
 
-# Con shape circular:
-curl -X POST http://127.0.0.1:8000/infer \
-  -F role_id=R1 -F roi_id=ROI_A -F mm_per_px=0.20 \
-  -F image=@test.jpg \
-  -F 'shape={"kind":"circle","cx":512,"cy":512,"r":480}'
+La respuesta incluye `score`, `threshold`, `heatmap_png_base64`, `regions`, `token_shape`.
 
-# Con annulus:
-curl -X POST http://127.0.0.1:8000/infer \
-  -F role_id=R1 -F roi_id=ROI_A -F mm_per_px=0.20 \
-  -F image=@test.jpg \
-  -F 'shape={"kind":"annulus","cx":512,"cy":512,"r":480,"r_inner":440}'
+## 6. Manifest
+```bash
+curl -s $BASE/manifests/$ROLE/$ROI | jq
 ```

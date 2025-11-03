@@ -1,38 +1,31 @@
-# Preguntas Frecuentes (FAQ)
+# FAQ — Octubre 2025
 
-**¿Dónde se guardan las memorias y calibraciones?**
-En `models/`, codificando `role_id` y `roi_id` en los nombres de archivo. Ejemplos:
-- `models/<role>__<roi>.npz` para la memoria PatchCore (embeddings + token grid).
-- `models/<role>__<roi>_calib.json` para umbrales y percentiles.
-- `models/<role>__<roi>_index.faiss` si se generó un índice FAISS opcional.
+## ¿Qué diferencia hay entre Master y Inspection ROIs?
+- Master define la transformación global (anclaje). Inspection 1..4 son zonas específicas evaluadas. Solo las Inspection se envían al backend.
 
-**¿Qué información adicional se almacena?**
-Los `.npz` incluyen `coreset_rate` aplicado, mientras que los `.json` guardan `threshold`, `mm_per_px`, `score_percentile` y `area_mm2_thr`. No se almacenan imágenes OK/NG en esta versión del backend; la GUI conserva los datasets originales.
+## ¿Por qué debo enviar `mm_per_px`?
+- Para convertir áreas en mm² y validar consistencia del dataset. Se guarda en manifest y calibración.
 
-**¿Qué hace `memory_fit`?**
-Permite forzar que el coreset use el 100% de los embeddings enviados en esa llamada (útil para recalibraciones rápidas). Si es `false`, se aplica el `coreset_rate` configurado para reducir memoria y disco.
+## ¿Puedo usar el backend sin la GUI?
+- Sí, enviando ROI canónicas y `shape` válidos vía API. Ver `docs/curl_examples.md`.
 
-**¿Cómo activo GPU para el backend?**
-Instala las ruedas CUDA de PyTorch (ver [docs/SETUP.md](SETUP.md)) y verifica con `python -c "import torch; print(torch.cuda.is_available())"`. Asegúrate de tener drivers NVIDIA y CUDA 12.1 compatibles.
+## ¿Cómo manejo múltiples clientes?
+- Usar `role_id` distinto por planta/cliente. Cada combinación mantiene su dataset y modelo.
 
-**¿Qué devuelve `POST /infer`?**
-Un JSON con `score`, `threshold`, `heatmap_png_base64`, `regions` y `token_shape`. Incluye metadatos (`extractor`, `input_size`, `coreset_rate`, `score_percentile`) para depuración.
+## ¿Qué ocurre si cambio la forma de la ROI?
+- Debes reentrenar (`/fit_ok`) y recalibrar (`/calibrate_ng`). La GUI bloqueará inferencias si detecta mismatch.
 
-**¿Se pueden enviar varias imágenes en una sola petición?**
-Sí, `/fit_ok` acepta múltiples archivos (`images=@...`) y procesa cada ROI en lote. `/infer` espera una única imagen y `/calibrate_ng` recibe puntuaciones en JSON.
+## ¿Cómo integro autenticación?
+- Habilita `BACKEND_API_KEY` y añade header `X-API-Key` en la GUI. Para OAuth/proxy ver `DEPLOYMENT.md`.
 
-**¿Cómo reentreno el modelo?**
-Desde la GUI, añade nuevas muestras OK y vuelve a llamar a `/fit_ok`. Si necesitas recalcular el umbral con NG, ejecuta inferencias para obtener scores y luego invoca `/calibrate_ng`.
+## ¿Por qué recibo `428` en `/infer`?
+- No existe `calibration.json` para esa ROI. Ejecuta `Calibrate threshold` desde GUI.
 
-**¿Qué hacer si el backend tarda en iniciar por primera vez?**
-La primera carga del modelo DINOv2 puede tardar unos segundos (descarga de weights, compilación JIT). Revisa los logs y espera a que se muestre `Model ready` antes de ejecutar peticiones.
+## ¿Se puede ejecutar todo en CPU?
+- Sí, aunque la inferencia será más lenta. Configura `BACKEND_DEVICE=cpu`.
 
-**¿Dónde encuentro documentación más detallada?**
-Consulta:
-- [docs/ARQUITECTURA.md](ARQUITECTURA.md) para visión global.
-- [docs/BACKEND.md](BACKEND.md) para detalles de implementación Python.
-- [docs/GUI.md](GUI.md) para interacciones WPF.
-- [docs/PIPELINE_DETECCION.md](PIPELINE_DETECCION.md) para conocer el flujo PatchCore.
+## ¿Dónde están los logs?
+- GUI: `logs/gui/`. Backend: stdout JSON (configurable). Ambos comparten `request_id`.
 
-**¿Cómo reporto un bug?**
-Abre un issue en GitHub describiendo el problema, versión, logs relevantes y pasos para reproducirlo. Adjunta capturas o archivos si procede.
+## ¿Cuál es el roadmap?
+- Migración a .NET 8, batch inferencia, reportes PDF, métricas avanzadas.

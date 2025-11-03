@@ -1,52 +1,38 @@
-# CI/CD
+# CI/CD — Octubre 2025
 
-La integración continua se gestiona mediante GitHub Actions (`.github/workflows/`). El objetivo es validar el backend sin requerir GPU y asegurar que las rutas críticas permanecen estables.
+## 1. Objetivo
+Garantizar calidad y despliegues consistentes tanto del backend como de la GUI.
 
-## Estrategia general
-- Ejecutar el workflow solo cuando cambien archivos relevantes (`backend/**`, `docs/**`, `.github/workflows/**`).
-- Preparar un entorno Python controlado (3.11) con dependencias fijadas.
-- Ejecutar pruebas unitarias (`pytest`) y validaciones estáticas ligeras (opcional `flake8`, `mypy`).
+## 2. Pipelines
+- **GitHub Actions** (default):
+  - Job `backend-tests`: instala deps, ejecuta `pytest`.
+  - Job `lint` (opcional): `ruff` + `black --check`.
+  - Artefactos: reports `pytest.xml`.
+- **Build GUI**: pipeline separado (Azure DevOps/TeamCity) que compila binarios WPF y firma ejecutables.
 
-## Pasos recomendados en el workflow
-```yaml
-jobs:
-  backend-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Instalar dependencias mínimas
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install --index-url https://download.pytorch.org/whl/cpu \
-            torch==2.5.1+cpu torchvision==0.20.1+cpu
-          pip install -r backend/requirements.txt
-      - name: Ejecutar tests backend
-        env:
-          PYTHONPATH: ${{ github.workspace }}/backend
-          BDI_LIGHT_IMPORT: '1'
-        run: |
-          source .venv/bin/activate
-          python -m pytest backend/tests
-```
+## 3. Requisitos de PR
+- Tests backend verdes.
+- Documentación actualizada (`README.md`, etc.).
+- Capturas si hay cambios visuales.
 
-## Notas importantes
-- **Torch CPU**: usar ruedas CPU evita dependencias CUDA en runners sin GPU.
-- **TensorFlow (opcional)**: si el runner tiene TensorFlow preinstalado por otros proyectos, desinstálalo para evitar conflictos con `torchvision`. El backend ya no depende de TensorFlow.
-- **BDI_LIGHT_IMPORT**: desactiva imports pesados y hace que los tests se ejecuten en segundos.
-- **PYTHONPATH**: apuntar a `backend/` simplifica los imports relativos en pruebas.
+## 4. Deploy backend
+- Git tag → build Docker (`docker/`).
+- Publicación en registry privado (`brakedisc/backends`).
+- Rollout mediante `docker compose pull && up -d`.
 
-## Extensiones opcionales
-- Agregar un job de `lint` (`flake8`, `black --check`) para mantener estilo consistente.
-- Publicar artefactos (logs, reportes pytest-html) en caso de fallo para facilitar debugging.
-- Integrar escaneos de seguridad (`pip-audit`) en ejecuciones semanales.
+## 5. Deploy GUI
+- Build MSIX/installer.
+- Distribución vía servidor interno o Intune.
+- Validar handshake `/health` tras actualización.
 
-## CD / Despliegue
-Aunque no hay pipeline automatizado de despliegue, se recomienda:
-- Construir imágenes Docker del backend con las dependencias fijadas.
-- Publicar la imagen en un registro interno y desplegar en estaciones GPU.
-- Versionar la GUI y backend en paralelo para garantizar compatibilidad (usar tags `gui-vX.Y`, `backend-vX.Y`).
+## 6. Observabilidad
+- Logs agregados en ELK/Splunk.
+- Métricas Prometheus + Grafana.
+- Alertas en Slack/Teams cuando `score > threshold` consecutivo.
+
+## 7. Checklist release
+- [ ] Documentación actualizada (este repo).
+- [ ] Changelog preparado.
+- [ ] Binarios GUI firmados.
+- [ ] Imagen Docker probada (`/health`, `/infer`).
+- [ ] Backup datasets/models antes de despliegue.

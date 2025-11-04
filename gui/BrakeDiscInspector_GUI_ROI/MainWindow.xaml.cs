@@ -4951,17 +4951,39 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            var roiModel = GetInspectionSlotModelClone(index);
-            LogSaveSlot("pre", index, roiModel);
+            var slotSnapshot = GetInspectionSlotModelClone(index);
+            LogSaveSlot("pre-slot", index, slotSnapshot);
 
-            if (roiModel == null)
+            var roiModel = BuildCurrentRoiModel();
+            LogSaveSlot("pre-current", index, roiModel);
+
+            if (!HasDrawableGeometry(roiModel))
             {
-                AppendLog($"[save-slot] idx={index} ABORT: no model in slot");
-                MessageBox.Show($"No hay ROI en el slot {index}.",
+                AppendLog($"[save-slot] idx={index} ABORT: current ROI has no geometry");
+                MessageBox.Show($"Dibuja un ROI antes de guardar el slot {index}.",
                                 $"Inspection {index}",
                                 MessageBoxButton.OK,
                                 MessageBoxImage.Warning);
                 return;
+            }
+
+            if (slotSnapshot != null)
+            {
+                roiModel.Id = slotSnapshot.Id;
+                if (string.IsNullOrWhiteSpace(roiModel.Label))
+                {
+                    roiModel.Label = slotSnapshot.Label;
+                }
+
+                if (!roiModel.BaseImgW.HasValue && slotSnapshot.BaseImgW.HasValue)
+                {
+                    roiModel.BaseImgW = slotSnapshot.BaseImgW;
+                }
+
+                if (!roiModel.BaseImgH.HasValue && slotSnapshot.BaseImgH.HasValue)
+                {
+                    roiModel.BaseImgH = slotSnapshot.BaseImgH;
+                }
             }
 
             roiModel.IsFrozen = false;
@@ -5014,12 +5036,30 @@ namespace BrakeDiscInspector_GUI_ROI
 
             DumpUiShapesMap($"save-slot:{index}");
 
-            LogSaveSlot("post", index, roiModel);
+            LogSaveSlot("post", index, GetInspectionSlotModelClone(index));
             AppendLog($"[inspection] saved slot={index} ok");
             MessageBox.Show($"Inspection {index} guardado.",
                             $"Inspection {index}",
                             MessageBoxButton.OK,
                             MessageBoxImage.Information);
+        }
+
+        private static bool HasDrawableGeometry(RoiModel roi)
+        {
+            if (roi == null)
+            {
+                return false;
+            }
+
+            static bool IsPositive(double value) => !double.IsNaN(value) && !double.IsInfinity(value) && value > 1.0;
+
+            return roi.Shape switch
+            {
+                RoiShape.Rectangle => IsPositive(roi.Width) && IsPositive(roi.Height),
+                RoiShape.Circle or RoiShape.Annulus =>
+                    IsPositive(roi.R) || IsPositive(Math.Max(roi.Width, roi.Height) / 2.0),
+                _ => false,
+            };
         }
 
         private void BtnSaveInspection1_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(1);

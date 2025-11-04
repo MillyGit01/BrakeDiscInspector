@@ -2265,6 +2265,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
+            try
+            {
+                var exRoi = export.RoiImage;
+                var crop = export.CropRect;
+                _log($"[eval] export -> slotIdx={roi.Index} roiId='{exRoi?.Id}' shape={exRoi?.Shape} " +
+                     $"crop=({crop.X},{crop.Y},{crop.Width},{crop.Height})");
+            }
+            catch
+            {
+                // logging best-effort
+            }
+
             if (export.PngBytes == null || export.PngBytes.Length == 0)
             {
                 _log("[eval] export produced empty payload");

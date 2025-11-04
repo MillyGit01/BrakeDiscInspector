@@ -7538,18 +7538,29 @@ namespace BrakeDiscInspector_GUI_ROI
 
             await Dispatcher.InvokeAsync(() =>
             {
-                RoiModel? candidate;
+                // Usar siempre la geometría del slot activo (o buffer del mismo slot) para evitar
+                // mezclar ROIs cuando _layout.Inspection se reutiliza temporalmente.
+                RoiModel? candidate = null;
+                int slotIndex = _activeInspectionIndex;
+                var slotModel = GetInspectionSlotModel(slotIndex);
+
                 if (_tmpBuffer != null && _tmpBuffer.Role == RoiRole.Inspection)
                 {
-                    candidate = _tmpBuffer.Clone();
+                    var tmpIdx = TryParseInspectionIndex(_tmpBuffer);
+                    if (tmpIdx.HasValue && tmpIdx.Value == slotIndex)
+                    {
+                        candidate = _tmpBuffer.Clone();
+                    }
                 }
-                else if (_layout.Inspection != null)
+
+                if (candidate == null)
                 {
-                    candidate = _layout.Inspection.Clone();
+                    candidate = slotModel?.Clone();
                 }
-                else
+
+                if (candidate == null)
                 {
-                    candidate = BuildCurrentRoiModel(RoiRole.Inspection);
+                    candidate = _layout?.Inspection?.Clone() ?? BuildCurrentRoiModel(RoiRole.Inspection);
                 }
 
                 if (candidate != null)
@@ -7557,6 +7568,20 @@ namespace BrakeDiscInspector_GUI_ROI
                     roiImage = LooksLikeCanvasCoords(candidate)
                         ? CanvasToImage(candidate)
                         : candidate.Clone();
+
+                    try
+                    {
+                        AppendLog($"[EVAL-EXPORT] slot={slotIndex} roiId='{roiImage.Id}' " +
+                                  $"L={roiImage.Left:0.###} T={roiImage.Top:0.###} " +
+                                  $"W={roiImage.Width:0.###} H={roiImage.Height:0.###} " +
+                                  $"CX={roiImage.CX:0.###} CY={roiImage.CY:0.###} " +
+                                  $"R={roiImage.R:0.###} Rin={roiImage.RInner:0.###} " +
+                                  $"Ang={roiImage.AngleDeg:0.###}");
+                    }
+                    catch
+                    {
+                        // logging best-effort
+                    }
                 }
 
                 var src = _currentImageSource ?? ImgMain?.Source as BitmapSource;

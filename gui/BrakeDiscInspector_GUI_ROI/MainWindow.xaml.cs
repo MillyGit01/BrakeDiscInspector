@@ -3374,10 +3374,10 @@ namespace BrakeDiscInspector_GUI_ROI
 
                             if (isMasterRole)
                             {
-                                var mapped = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, 0);
-                                cx = mapped.c.X;
-                                cy = mapped.c.Y;
-                                d = Math.Max(1.0, mapped.rOuter * 2.0);
+                                var circleMapped1 = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, 0);
+                                cx = circleMapped1.c.X;
+                                cy = circleMapped1.c.Y;
+                                d = Math.Max(1.0, circleMapped1.rOuter * 2.0);
                             }
                             else
                             {
@@ -3405,9 +3405,9 @@ namespace BrakeDiscInspector_GUI_ROI
                             canvasRoi.Y = cy;
                             canvasRoi.R = d / 2.0;
                             canvasRoi.RInner = 0;
-                            var mapped = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, 0);
-                            double mappedDiameter = Math.Max(1.0, mapped.rOuter * 2.0);
-                            expectedCanvasRect = new SWRect(mapped.c.X - mappedDiameter / 2.0, mapped.c.Y - mappedDiameter / 2.0, mappedDiameter, mappedDiameter);
+                            var circleMapped2 = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, 0);
+                            double mappedDiameter = Math.Max(1.0, circleMapped2.rOuter * 2.0);
+                            expectedCanvasRect = new SWRect(circleMapped2.c.X - mappedDiameter / 2.0, circleMapped2.c.Y - mappedDiameter / 2.0, mappedDiameter, mappedDiameter);
                             expectedRectValid = true;
                             break;
                         }
@@ -3420,12 +3420,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
                             if (isMasterRole)
                             {
-                                var mapped = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, roi.RInner);
-                                cx = mapped.c.X;
-                                cy = mapped.c.Y;
-                                double outerRadius = Math.Max(0.0, mapped.rOuter);
+                                var annulusMapped1 = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, roi.RInner);
+                                cx = annulusMapped1.c.X;
+                                cy = annulusMapped1.c.Y;
+                                double outerRadius = Math.Max(0.0, annulusMapped1.rOuter);
                                 d = Math.Max(1.0, outerRadius * 2.0);
-                                innerCanvas = Math.Max(0.0, Math.Min(mapped.rInner, d / 2.0));
+                                innerCanvas = Math.Max(0.0, Math.Min(annulusMapped1.rInner, d / 2.0));
                             }
                             else
                             {
@@ -3459,9 +3459,9 @@ namespace BrakeDiscInspector_GUI_ROI
                             canvasRoi.X = cx;
                             canvasRoi.Y = cy;
                             canvasRoi.R = d / 2.0;
-                            var mapped = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, roi.RInner);
-                            double mappedDiameter = Math.Max(1.0, mapped.rOuter * 2.0);
-                            expectedCanvasRect = new SWRect(mapped.c.X - mappedDiameter / 2.0, mapped.c.Y - mappedDiameter / 2.0, mappedDiameter, mappedDiameter);
+                            var annulusMapped2 = MapImageCircleToCanvas(roi.CX, roi.CY, roi.R, roi.RInner);
+                            double mappedDiameter = Math.Max(1.0, annulusMapped2.rOuter * 2.0);
+                            expectedCanvasRect = new SWRect(annulusMapped2.c.X - mappedDiameter / 2.0, annulusMapped2.c.Y - mappedDiameter / 2.0, mappedDiameter, mappedDiameter);
                             expectedRectValid = true;
                             break;
                         }

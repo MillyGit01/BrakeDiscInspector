@@ -256,10 +256,21 @@ namespace BrakeDiscInspector_GUI_ROI
                 slotRef.Role = RoiRole.Inspection;
                 slotRef.Id = $"Inspection_{idx}";
             }
-            FixSlot(ref layout.Inspection1, 1);
-            FixSlot(ref layout.Inspection2, 2);
-            FixSlot(ref layout.Inspection3, 3);
-            FixSlot(ref layout.Inspection4, 4);
+            var inspection1 = layout.Inspection1;
+            FixSlot(ref inspection1, 1);
+            layout.Inspection1 = inspection1;
+
+            var inspection2 = layout.Inspection2;
+            FixSlot(ref inspection2, 2);
+            layout.Inspection2 = inspection2;
+
+            var inspection3 = layout.Inspection3;
+            FixSlot(ref inspection3, 3);
+            layout.Inspection3 = inspection3;
+
+            var inspection4 = layout.Inspection4;
+            FixSlot(ref inspection4, 4);
+            layout.Inspection4 = inspection4;
 
             // 3) Normalizar baselines por imagen (sólo 'Inspection_1..4', sin duplicados, clon profundo)
             if (layout.InspectionBaselinesByImage != null)

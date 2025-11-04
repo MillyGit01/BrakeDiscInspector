@@ -651,15 +651,46 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            TryAutosaveLayout("persist layout options");
+        }
+
+        private static bool MastersReady(MasterLayout? layout)
+            => layout?.Master1Pattern != null && layout.Master1Search != null;
+
+        private bool TrySaveLayoutGuarded(string prefix, string context, bool requireMasters, out string? errorMessage)
+        {
+            errorMessage = null;
+
+            if (_preset == null || _layout == null)
+            {
+                AppendLog($"{prefix} skipped ({context}) layout/preset null");
+                errorMessage = "Layout o preset no inicializados.";
+                return false;
+            }
+
+            if (requireMasters && !MastersReady(_layout))
+            {
+                AppendLog($"{prefix} skipped ({context}) Master1 incompleto");
+                errorMessage = "Master 1 incompleto.";
+                return false;
+            }
+
             try
             {
                 MasterLayoutManager.Save(_preset, _layout);
+                AppendLog($"{prefix} layout saved ({context})");
+                return true;
             }
             catch (Exception ex)
             {
-                LogDebug($"[config] Failed to persist layout options: {ex.Message}");
+                AppendLog($"{prefix} layout-save ERROR ({context}): {ex.Message}");
+                errorMessage = ex.Message;
+                return false;
             }
         }
+
+        private bool TryAutosaveLayout(string context)
+            => TrySaveLayoutGuarded("[autosave]", context, requireMasters: true, out _);
 
         private void RescaleInspectionRoisToNewImageSize(double newW, double newH)
         {
@@ -5766,7 +5797,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog("[drag] end");
                 CanvasROI.ReleaseMouseCapture();
                 _dragShape = null;
-                MasterLayoutManager.Save(_preset, _layout);
+                TryAutosaveLayout("drag end");
                 e.Handled = true;
                 return;
             }
@@ -5779,6 +5810,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 EndDraw(_currentShape, _p0, p1);
                 CanvasROI.ReleaseMouseCapture();
                 AppendLog($"[mouse] Up   @ {p1.X:0},{p1.Y:0}");
+                TryAutosaveLayout("draw end");
                 e.Handled = true;
                 return;
             }
@@ -6149,21 +6181,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                Exception? clearException = null;
-                try
+                if (!TrySaveLayoutGuarded("[wizard]", $"clear => {layoutPath}", requireMasters: true, out var clearError))
                 {
-                    MasterLayoutManager.Save(_preset, _layout);
-                    AppendLog($"[wizard] layout saved => {layoutPath}");
-                }
-                catch (Exception ex)
-                {
-                    clearException = ex;
-                    AppendLog($"[wizard] layout save FAILED => {layoutPath} :: {ex}");
-                }
-
-                if (clearException != null)
-                {
-                    Snack("Error guardando layout: " + clearException.Message);
+                    Snack("Error guardando layout: " + (clearError ?? "desconocido"));
                     return;
                 }
 
@@ -6350,17 +6370,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // Limpia preview/adorner y persiste
             ClearPreview();
 
-            Exception? saveException = null;
-            try
-            {
-                MasterLayoutManager.Save(_preset, _layout);
-                AppendLog($"[wizard] layout saved => {layoutPath}");
-            }
-            catch (Exception ex)
-            {
-                saveException = ex;
-                AppendLog($"[wizard] layout save FAILED => {layoutPath} :: {ex}");
-            }
+            var saved = TrySaveLayoutGuarded("[wizard]", $"save => {layoutPath}", requireMasters: true, out var saveError);
 
             if (!skipRedrawForMasterInspection)
             {
@@ -6371,9 +6381,9 @@ namespace BrakeDiscInspector_GUI_ROI
             // IMPORTANTE: recalcula habilitaciones (esto ya deja el botón "Analizar Master" activo si M1+M2 están listos)
             UpdateWizardState();
 
-            if (saveException != null)
+            if (!saved)
             {
-                Snack("Error guardando layout: " + saveException.Message);
+                Snack("Error guardando layout: " + (saveError ?? "desconocido"));
                 return;
             }
 
@@ -6751,8 +6761,10 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             SaveInspectionBaselineForCurrentImage();
-            MasterLayoutManager.Save(_preset, _layout);
-            AppendLog("[FLOW] Layout guardado");
+            if (TryAutosaveLayout("analyze masters"))
+            {
+                AppendLog("[FLOW] Layout guardado");
+            }
 
             await Dispatcher.InvokeAsync(() =>
             {
@@ -7958,7 +7970,7 @@ namespace BrakeDiscInspector_GUI_ROI
         // ====== Overlay persistente + Adorner ======
         private void OnRoiChanged(Shape shape, RoiModel roi)
         {
-            MasterLayoutManager.Save(_preset, _layout);
+            TryAutosaveLayout("adorner change");
             AppendLog($"[adorner] ROI actualizado: {roi.Role} => {DescribeRoi(roi)}");
         }
 
@@ -8195,22 +8207,28 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnSaveLayout_Click(object sender, RoutedEventArgs e)
         {
+            if (!MastersReady(_layout))
+            {
+                AppendLog("[layout-save] blocked (Master1 incompleto)");
+                MessageBox.Show(
+                    "Dibuja/guarda Master 1 (Pattern y Search) antes de 'Save Layout'.",
+                    "Save Layout",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             try
             {
-                if (_layout?.Master1Pattern == null || _layout?.Master1Search == null)
-                {
-                    Snack("Falta Master 1 (Pattern/Search). Dibuja y guarda Master 1 antes de guardar el Layout.");
-                    return;
-                }
-
                 MasterLayoutManager.Save(_preset, _layout);
                 AppendLog("[layout-save] ok");
-                MessageBox.Show("Layout guardado.", "Save Layout", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Layout guardado.", "Save Layout",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
                 AppendLog($"[layout-save] ERROR: {ex.Message}");
-                MessageBox.Show($"Error al guardar el layout:\n{ex.Message}", "Save Layout", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Error al guardar el layout:\n{ex.Message}",
+                    "Save Layout", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

@@ -76,6 +76,132 @@ namespace BrakeDiscInspector_GUI_ROI
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+        private int _freezeRoiRepositionCounter;
+        private bool _pendingActiveInspectionSync;
+        private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
+
+        private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
+            => new ActionOnDispose(
+                () =>
+                {
+                    _freezeRoiRepositionCounter++;
+                    if (!string.IsNullOrEmpty(scope))
+                    {
+                        AppendLog($"[freeze] enter {scope}");
+                    }
+                },
+                () =>
+                {
+                    if (_freezeRoiRepositionCounter > 0)
+                    {
+                        _freezeRoiRepositionCounter--;
+                    }
+
+                    if (_freezeRoiRepositionCounter <= 0)
+                    {
+                        _freezeRoiRepositionCounter = 0;
+
+                        if (!string.IsNullOrEmpty(scope))
+                        {
+                            AppendLog($"[freeze] exit {scope}");
+                        }
+
+                        if (_pendingActiveInspectionSync)
+                        {
+                            _pendingActiveInspectionSync = false;
+                            try
+                            {
+                                SyncActiveInspectionToLayout();
+                            }
+                            catch (Exception ex)
+                            {
+                                AppendLog($"[freeze] deferred sync failed: {ex.Message}");
+                            }
+                        }
+                    }
+                });
+
+        private sealed class ActionOnDispose : IDisposable
+        {
+            private readonly Action? _onExit;
+            private bool _disposed;
+
+            public ActionOnDispose(Action? onEnter, Action? onExit)
+            {
+                _onExit = onExit;
+
+                try
+                {
+                    onEnter?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+
+                try
+                {
+                    _onExit?.Invoke();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                }
+            }
+        }
+
+        private void LogRoi(string prefix, int slotIndex, RoiModel? roi)
+        {
+            try
+            {
+                if (roi == null)
+                {
+                    AppendLog($"{prefix} slot={slotIndex} roi=NULL");
+                    return;
+                }
+
+                string baseW = roi.BaseImgW.HasValue
+                    ? roi.BaseImgW.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                    : "-";
+                string baseH = roi.BaseImgH.HasValue
+                    ? roi.BaseImgH.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                    : "-";
+
+                AppendLog(string.Format(CultureInfo.InvariantCulture,
+                    "{0} slot={1} id='{2}' role={3} L={4:0.###} T={5:0.###} W={6:0.###} H={7:0.###} " +
+                    "CX={8:0.###} CY={9:0.###} R={10:0.###} Rin={11:0.###} Ang={12:0.###} Base=({13}x{14})",
+                    prefix,
+                    slotIndex,
+                    roi.Id ?? "<null>",
+                    roi.Role,
+                    roi.Left,
+                    roi.Top,
+                    roi.Width,
+                    roi.Height,
+                    roi.CX,
+                    roi.CY,
+                    roi.R,
+                    roi.RInner,
+                    roi.AngleDeg,
+                    baseW,
+                    baseH));
+            }
+            catch
+            {
+                // Logging must never throw.
+            }
+        }
+
         private void SetInspectionSlot(ref RoiModel? slot, RoiModel? value, string propertyName)
         {
             if (ReferenceEquals(slot, value))
@@ -211,6 +337,12 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (roi == null)
             {
+                return;
+            }
+
+            if (IsRoiRepositionFrozen)
+            {
+                LogRoi("[normalize] skip (frozen)", index, roi);
                 return;
             }
 
@@ -380,12 +512,26 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (IsRoiRepositionFrozen)
+            {
+                _pendingActiveInspectionSync = true;
+                LogRoi("[sync-active] deferred", _activeInspectionIndex, GetInspectionSlotModel(_activeInspectionIndex));
+                return;
+            }
+
+            _pendingActiveInspectionSync = false;
+
             var slot = GetInspectionSlotModel(_activeInspectionIndex);
             _layout.Inspection = slot?.Clone();
             if (_layout.Inspection != null)
             {
                 NormalizeInspectionRoi(_layout.Inspection, _activeInspectionIndex);
                 _layout.Inspection.IsFrozen = false;
+                LogRoi("[sync-active] applied", _activeInspectionIndex, _layout.Inspection);
+            }
+            else
+            {
+                LogRoi("[sync-active] applied", _activeInspectionIndex, null);
             }
         }
 
@@ -400,12 +546,28 @@ namespace BrakeDiscInspector_GUI_ROI
             int clamped = Math.Max(1, Math.Min(4, index));
             if (_activeInspectionIndex == clamped && !_updatingActiveInspection)
             {
-                SyncActiveInspectionToLayout();
+                if (IsRoiRepositionFrozen)
+                {
+                    _pendingActiveInspectionSync = true;
+                    LogRoi("[active-index] deferred", clamped, GetInspectionSlotModel(clamped));
+                }
+                else
+                {
+                    SyncActiveInspectionToLayout();
+                }
                 return;
             }
 
             _activeInspectionIndex = clamped;
-            SyncActiveInspectionToLayout();
+            if (IsRoiRepositionFrozen)
+            {
+                _pendingActiveInspectionSync = true;
+                LogRoi("[active-index] deferred", clamped, GetInspectionSlotModel(clamped));
+            }
+            else
+            {
+                SyncActiveInspectionToLayout();
+            }
 
             if (!_updatingActiveInspection && ViewModel?.SelectedInspectionRoi?.Index != _activeInspectionIndex)
             {
@@ -9569,6 +9731,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private async void BtnLoadModel_Click(object sender, RoutedEventArgs e)
         {
+            using var freeze = FreezeRoiRepositionScope(nameof(BtnLoadModel_Click));
+
             int index = _activeInspectionIndex;
             if (sender is FrameworkElement fe && fe.Tag != null)
             {

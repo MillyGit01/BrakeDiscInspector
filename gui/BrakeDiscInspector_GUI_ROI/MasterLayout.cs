@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -168,6 +169,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     "Dibuja/guarda Master 1 antes de 'Save Layout'.");
             }
 
+            // === Sanitizar antes de serializar ===
+            SanitizeForSave(layout);
+
             var path = GetDefaultPath(preset);
             System.Diagnostics.Debug.WriteLine(
                 $"[layout:save] path={path} " +
@@ -204,12 +208,20 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            layout.Inspection1 ??= layout.Inspection;
-            layout.Inspection ??= layout.Inspection1;
+            // Migración legacy: si sólo existe 'Inspection' global y no hay slots, volcar a slot 1 y borrar el global.
+            if (layout.Inspection1 == null && layout.Inspection2 == null && layout.Inspection3 == null && layout.Inspection4 == null)
+            {
+                if (layout.Inspection != null)
+                {
+                    layout.Inspection1 = layout.Inspection.CloneDeep();
+                    layout.Inspection1.Role = RoiRole.Inspection;
+                    layout.Inspection1.Id = "Inspection_1";
+                    System.Diagnostics.Debug.WriteLine("[layout:migrate] Inspection -> Inspection1");
+                }
+            }
 
-            layout.Inspection2 ??= null;
-            layout.Inspection3 ??= null;
-            layout.Inspection4 ??= null;
+            // A partir de aquí, no usar 'Inspection' global como fuente de verdad.
+            layout.Inspection = null;
         }
 
         private static void EnsureOptionDefaults(MasterLayout layout)
@@ -224,6 +236,62 @@ namespace BrakeDiscInspector_GUI_ROI
             else if (!Equals(layout.InspectionBaselinesByImage.Comparer, StringComparer.OrdinalIgnoreCase))
             {
                 layout.InspectionBaselinesByImage = new Dictionary<string, List<RoiModel>>(layout.InspectionBaselinesByImage, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        // ====== Sanitización previa al guardado ======
+        private static void SanitizeForSave(MasterLayout layout)
+        {
+            // 1) Nunca persistir 'Inspection' global: sólo por slots.
+            if (layout.Inspection != null)
+            {
+                System.Diagnostics.Debug.WriteLine("[layout:sanitize] dropping global 'Inspection' (use slots)");
+                layout.Inspection = null;
+            }
+
+            // 2) Asegurar IDs de slot y rol correcto
+            void FixSlot(ref RoiModel? slotRef, int idx)
+            {
+                if (slotRef == null) return;
+                slotRef.Role = RoiRole.Inspection;
+                slotRef.Id = $"Inspection_{idx}";
+            }
+            FixSlot(ref layout.Inspection1, 1);
+            FixSlot(ref layout.Inspection2, 2);
+            FixSlot(ref layout.Inspection3, 3);
+            FixSlot(ref layout.Inspection4, 4);
+
+            // 3) Normalizar baselines por imagen (sólo 'Inspection_1..4', sin duplicados, clon profundo)
+            if (layout.InspectionBaselinesByImage != null)
+            {
+                foreach (var key in layout.InspectionBaselinesByImage.Keys.ToList())
+                {
+                    var list = layout.InspectionBaselinesByImage[key] ?? new List<RoiModel>();
+                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var normalized = new List<RoiModel>(capacity: list.Count);
+
+                    foreach (var roi in list)
+                    {
+                        if (roi == null) continue;
+                        var id = roi.Id;
+                        if (string.IsNullOrWhiteSpace(id)) continue;
+
+                        // Aceptar solo Ids 'Inspection_n' con n=1..4
+                        const string prefix = "Inspection_";
+                        if (!id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!int.TryParse(id.Substring(prefix.Length), out int idx) || idx < 1 || idx > 4) continue;
+
+                        var fixedId = $"Inspection_{idx}";
+                        if (!seen.Add(fixedId)) continue; // evitar duplicados por imagen
+
+                        var clone = roi.CloneDeep();
+                        clone.Role = RoiRole.Inspection;
+                        clone.Id = fixedId;
+                        normalized.Add(clone);
+                    }
+
+                    layout.InspectionBaselinesByImage[key] = normalized;
+                }
             }
         }
     }

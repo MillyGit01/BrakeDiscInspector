@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -61,14 +62,29 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SyncInspectionList(preset, clone);
 
+            static string FormatNullable(double? value) => value.HasValue
+                ? value.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                : "null";
+
             log?.Invoke(string.Format(
-                System.Globalization.CultureInfo.InvariantCulture,
-                "[preset] SaveInspection slot={0} id={1} shape={2} base=({3}x{4})",
+                CultureInfo.InvariantCulture,
+                "[preset] SaveInspection slot={0} id={1} role={2} shape={3} L={4:0.###} T={5:0.###} W={6:0.###} H={7:0.###} " +
+                "CX={8:0.###} CY={9:0.###} R={10:0.###} Rin={11:0.###} Ang={12:0.###} Base=({13}x{14})",
                 slot,
                 clone.Id ?? "<null>",
+                clone.Role,
                 clone.Shape,
-                clone.BaseImgW,
-                clone.BaseImgH));
+                clone.Left,
+                clone.Top,
+                clone.Width,
+                clone.Height,
+                clone.CX,
+                clone.CY,
+                clone.R,
+                clone.RInner,
+                clone.AngleDeg,
+                FormatNullable(clone.BaseImgW),
+                FormatNullable(clone.BaseImgH)));
         }
 
         public static RoiModel? GetInspection(Preset preset, int slot, Action<string>? log = null)

@@ -109,6 +109,51 @@ namespace BrakeDiscInspector_GUI_ROI
             };
         }
 
+        private RoiModel? GetInspectionSlotModelClone(int slotIndex)
+        {
+            var model = GetInspectionSlotModel(slotIndex);
+            return model?.Clone();
+        }
+
+        private void LogSaveSlot(string phase, int slotIndex, RoiModel? roi)
+        {
+            try
+            {
+                if (roi == null)
+                {
+                    AppendLog($"[save-slot:{phase}] idx={slotIndex} roi=NULL");
+                    return;
+                }
+
+                static string FormatNullable(double? value) => value.HasValue
+                    ? value.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                    : "null";
+
+                AppendLog(string.Format(CultureInfo.InvariantCulture,
+                    "[save-slot:{0}] idx={1} id='{2}' role={3} L={4:0.###} T={5:0.###} W={6:0.###} H={7:0.###} " +
+                    "CX={8:0.###} CY={9:0.###} R={10:0.###} Rin={11:0.###} Ang={12:0.###} Base=({13}x{14})",
+                    phase,
+                    slotIndex,
+                    roi.Id ?? "<null>",
+                    roi.Role,
+                    roi.Left,
+                    roi.Top,
+                    roi.Width,
+                    roi.Height,
+                    roi.CX,
+                    roi.CY,
+                    roi.R,
+                    roi.RInner,
+                    roi.AngleDeg,
+                    FormatNullable(roi.BaseImgW),
+                    FormatNullable(roi.BaseImgH)));
+            }
+            catch
+            {
+                // Logging must not throw.
+            }
+        }
+
         private void SetInspectionSlotModel(int index, RoiModel? model, bool updateActive = true)
         {
             if (_layout == null)
@@ -4906,19 +4951,29 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            var roiModel = BuildCurrentRoiModel(RoiRole.Inspection);
-            if (!IsRoiSaved(roiModel))
+            var roiModel = GetInspectionSlotModelClone(index);
+            LogSaveSlot("pre", index, roiModel);
+
+            if (roiModel == null)
             {
-                MessageBox.Show($"Dibuja un ROI válido antes de guardar (Inspection {index}).",
+                AppendLog($"[save-slot] idx={index} ABORT: no model in slot");
+                MessageBox.Show($"No hay ROI en el slot {index}.",
                                 $"Inspection {index}",
                                 MessageBoxButton.OK,
-                                MessageBoxImage.Information);
+                                MessageBoxImage.Warning);
                 return;
             }
 
             roiModel.IsFrozen = false;
             NormalizeInspectionRoi(roiModel, index);
-            RoiDiag($"[save-slot] idx={index} roiId={roiModel.Id} role={roiModel.Role} shape={roiModel.Shape} img=({_imgW}x{_imgH}) base=({roiModel.BaseImgW}x{roiModel.BaseImgH}) rect=({roiModel.Left:F1},{roiModel.Top:F1},{roiModel.Width:F1},{roiModel.Height:F1})");
+
+            if (_imgW > 0 && _imgH > 0)
+            {
+                roiModel.BaseImgW = _imgW;
+                roiModel.BaseImgH = _imgH;
+            }
+
+            RoiDiag($"[save-slot] idx={index} source=slot roiId={roiModel.Id} role={roiModel.Role} shape={roiModel.Shape} img=({_imgW}x{_imgH}) base=({roiModel.BaseImgW}x{roiModel.BaseImgH}) rect=({roiModel.Left:F1},{roiModel.Top:F1},{roiModel.Width:F1},{roiModel.Height:F1})");
 
             var config = GetInspectionConfigByIndex(index);
             if (config != null)
@@ -4931,13 +4986,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     config.Name = roiModel.Label;
                 }
-                config.BaseImgW = _imgW;
-                config.BaseImgH = _imgH;
+                config.BaseImgW = roiModel.BaseImgW ?? _imgW;
+                config.BaseImgH = roiModel.BaseImgH ?? _imgH;
                 RoiDiag($"[save-slot] idx={index} configId={config.Id} shape={config.Shape} base=({config.BaseImgW}x{config.BaseImgH}) name='{config.Name}'");
             }
-
-            roiModel.BaseImgW = _imgW;
-            roiModel.BaseImgH = _imgH;
 
             GuiLog.Info($"[inspection] save slot={index} roi={roiModel.Label ?? roiModel.Id} shape={roiModel.Shape}");
 
@@ -4954,6 +5006,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RoiDiag($"[save-slot] preset-save-error idx={index} ex={ex.Message}");
             }
+
             RefreshInspectionRoiSlots();
             SetActiveInspectionIndex(index);
             EnsureInspectionDatasetStructure();
@@ -4961,7 +5014,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
             DumpUiShapesMap($"save-slot:{index}");
 
-            MessageBox.Show($"Inspection {index} guardada",
+            LogSaveSlot("post", index, roiModel);
+            AppendLog($"[inspection] saved slot={index} ok");
+            MessageBox.Show($"Inspection {index} guardado.",
                             $"Inspection {index}",
                             MessageBoxButton.OK,
                             MessageBoxImage.Information);
@@ -8149,12 +8204,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 MasterLayoutManager.Save(_preset, _layout);
-                Snack("Layout guardado correctamente.");
+                AppendLog("[layout-save] ok");
+                MessageBox.Show("Layout guardado.", "Save Layout", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                AppendLog($"[layout:save:ERROR] {ex.Message}");
-                MessageBox.Show(ex.Message, "Save Layout", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppendLog($"[layout-save] ERROR: {ex.Message}");
+                MessageBox.Show($"Error al guardar el layout:\n{ex.Message}", "Save Layout", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

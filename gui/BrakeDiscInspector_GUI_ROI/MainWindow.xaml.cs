@@ -429,6 +429,23 @@ namespace BrakeDiscInspector_GUI_ROI
             RedrawOverlaySafe();
         }
 
+        private int ResolveActiveInspectionIndex()
+        {
+            int index = ViewModel?.SelectedInspectionRoi?.Index ?? _activeInspectionIndex;
+
+            if (index < 1 || index > 4)
+            {
+                index = _activeInspectionIndex;
+            }
+
+            if (index < 1)
+            {
+                index = 1;
+            }
+
+            return Math.Max(1, Math.Min(4, index));
+        }
+
         private enum MasterState { DrawM1_Pattern, DrawM1_Search, DrawM2_Pattern, DrawM2_Search, DrawInspection, Ready }
         private enum RoiCorner { TopLeft, TopRight, BottomRight, BottomLeft }
         private MasterState _state = MasterState.DrawM1_Pattern;
@@ -7648,8 +7665,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 // Usar siempre la geometría del slot activo (o buffer del mismo slot) para evitar
                 // mezclar ROIs cuando _layout.Inspection se reutiliza temporalmente.
                 RoiModel? candidate = null;
-                int slotIndex = _activeInspectionIndex;
-                var slotModel = GetInspectionSlotModel(slotIndex);
+                string candidateSource = "none";
+                int slotIndex = ResolveActiveInspectionIndex();
 
                 if (_tmpBuffer != null && _tmpBuffer.Role == RoiRole.Inspection)
                 {
@@ -7657,17 +7674,37 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (tmpIdx.HasValue && tmpIdx.Value == slotIndex)
                     {
                         candidate = _tmpBuffer.Clone();
+                        candidateSource = "tmpBuffer";
+                    }
+                    else if (tmpIdx.HasValue)
+                    {
+                        LogDebug($"[Eval] tmpBuffer slot mismatch tmpIdx={tmpIdx.Value} active={slotIndex}");
                     }
                 }
 
                 if (candidate == null)
                 {
-                    candidate = slotModel?.Clone();
+                    var slotModel = GetInspectionSlotModel(slotIndex);
+                    if (slotModel != null)
+                    {
+                        candidate = slotModel.Clone();
+                        candidateSource = $"slot:{slotIndex}";
+                    }
+                }
+
+                if (candidate == null && _layout?.Inspection != null)
+                {
+                    candidate = _layout.Inspection.Clone();
+                    candidateSource = "layoutInspection";
                 }
 
                 if (candidate == null)
                 {
-                    candidate = _layout?.Inspection?.Clone() ?? BuildCurrentRoiModel(RoiRole.Inspection);
+                    candidate = BuildCurrentRoiModel(RoiRole.Inspection);
+                    if (candidate != null)
+                    {
+                        candidateSource = "buildCurrent";
+                    }
                 }
 
                 if (candidate != null)
@@ -7678,17 +7715,31 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     try
                     {
-                        AppendLog($"[EVAL-EXPORT] slot={slotIndex} roiId='{roiImage.Id}' " +
-                                  $"L={roiImage.Left:0.###} T={roiImage.Top:0.###} " +
-                                  $"W={roiImage.Width:0.###} H={roiImage.Height:0.###} " +
-                                  $"CX={roiImage.CX:0.###} CY={roiImage.CY:0.###} " +
-                                  $"R={roiImage.R:0.###} Rin={roiImage.RInner:0.###} " +
-                                  $"Ang={roiImage.AngleDeg:0.###}");
+                        var message = string.Format(
+                            CultureInfo.InvariantCulture,
+                            "[EVAL-EXPORT] slot={0} source={1} roiId='{2}' L={3:0.###} T={4:0.###} W={5:0.###} H={6:0.###} CX={7:0.###} CY={8:0.###} R={9:0.###} Rin={10:0.###} Ang={11:0.###}",
+                            slotIndex,
+                            candidateSource,
+                            roiImage.Id ?? "<null>",
+                            roiImage.Left,
+                            roiImage.Top,
+                            roiImage.Width,
+                            roiImage.Height,
+                            roiImage.CX,
+                            roiImage.CY,
+                            roiImage.R,
+                            roiImage.RInner,
+                            roiImage.AngleDeg);
+                        AppendLog(message);
                     }
                     catch
                     {
                         // logging best-effort
                     }
+                }
+                else
+                {
+                    LogDebug($"[Eval] No ROI candidate available for slot {slotIndex}.");
                 }
 
                 var src = _currentImageSource ?? ImgMain?.Source as BitmapSource;

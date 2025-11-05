@@ -212,7 +212,7 @@ namespace BrakeDiscInspector_GUI_ROI
             slot = value;
             if (slot is not null)
             {
-                slot.IsFrozen = false; // Allow ROI to move and rotate during Analyze Master
+                slot.IsFrozen = true;
             }
 
             OnPropertyChanged(propertyName);
@@ -555,6 +555,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     SyncActiveInspectionToLayout();
                 }
+                ApplyInspectionInteractionPolicy("active-index:noop");
                 return;
             }
 
@@ -589,6 +590,7 @@ namespace BrakeDiscInspector_GUI_ROI
             RequestRoiVisibilityRefresh();
             UpdateRoiHud();
             RedrawOverlaySafe();
+            ApplyInspectionInteractionPolicy("active-index:set");
         }
 
         private int ResolveActiveInspectionIndex()
@@ -903,6 +905,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 var config = index.HasValue ? GetInspectionConfigByIndex(index.Value) : null;
+                string slotLabel = index.HasValue ? index.Value.ToString(CultureInfo.InvariantCulture) : "?";
+                string roiId = !string.IsNullOrWhiteSpace(roi.Id) ? roi.Id : "<null>";
 
                 double oldW = roi.BaseImgW ?? 0.0;
                 double oldH = roi.BaseImgH ?? 0.0;
@@ -922,11 +926,28 @@ namespace BrakeDiscInspector_GUI_ROI
                         config.BaseImgW ??= newW;
                         config.BaseImgH ??= newH;
                     }
+                    AppendLog(string.Format(CultureInfo.InvariantCulture,
+                        "[scale] slot={0} id={1} base-missing -> base set to ({2:0.###}x{3:0.###})",
+                        slotLabel,
+                        roiId,
+                        newW,
+                        newH));
                     continue;
                 }
 
                 double sx = newW / oldW;
                 double sy = newH / oldH;
+
+                AppendLog(string.Format(CultureInfo.InvariantCulture,
+                    "[scale] slot={0} id={1} sx={2:0.###} sy={3:0.###} base=({4:0.###}x{5:0.###}) -> ({6:0.###}x{7:0.###})",
+                    slotLabel,
+                    roiId,
+                    sx,
+                    sy,
+                    oldW,
+                    oldH,
+                    newW,
+                    newH));
 
                 if (Math.Abs(sx - 1.0) < 1e-9 && Math.Abs(sy - 1.0) < 1e-9)
                 {
@@ -3329,12 +3350,14 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RedrawOverlay();
                 _overlayNeedsRedraw = false;
+                ApplyInspectionInteractionPolicy("redraw");
             }
             else
             {
                 _overlayNeedsRedraw = true;
                 ScheduleSyncOverlay(force: true);
                 AppendLog("[guard] Redraw pospuesto (overlay aún no alineado)");
+                ApplyInspectionInteractionPolicy("redraw-deferred");
             }
         }
 
@@ -5151,6 +5174,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _workflowViewModel?.SetInspectionRoiModels(Inspection1, Inspection2, Inspection3, Inspection4);
             SetActiveInspectionIndex(_activeInspectionIndex);
+            ApplyInspectionInteractionPolicy("slot-refresh");
         }
 
         private void SaveCurrentInspectionToSlot(int index)
@@ -5229,7 +5253,17 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var savedClone = roiModel.Clone();
             SetInspectionSlotModel(index, savedClone);
-            PresetManager.SaveInspection(_preset, index, savedClone, line => RoiDiag(line));
+
+            var persistedSlot = GetInspectionSlotModel(index);
+            if (persistedSlot != null)
+            {
+                LogRoi("[save-slot] persisted", index, persistedSlot);
+                PresetManager.SaveInspection(_preset, index, persistedSlot, line => RoiDiag(line));
+            }
+            else
+            {
+                AppendLog($"[save-slot] idx={index} WARN: persisted slot missing after update");
+            }
             try
             {
                 PresetManager.Save(_preset);
@@ -5395,6 +5429,114 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             return _roiShapesById.TryGetValue(roiId, out var shape) ? shape : null;
+        }
+
+        private int CountRoiAdornersForShape(Shape shape)
+        {
+            if (shape == null)
+            {
+                return 0;
+            }
+
+            var layer = AdornerLayer.GetAdornerLayer(shape);
+            if (layer == null)
+            {
+                return 0;
+            }
+
+            var adorners = layer.GetAdorners(shape);
+            if (adorners == null)
+            {
+                return 0;
+            }
+
+            return adorners.OfType<RoiAdorner>().Count();
+        }
+
+        private int CountActiveInspectionAdorners()
+        {
+            if (CanvasROI == null)
+            {
+                return 0;
+            }
+
+            int total = 0;
+            foreach (var shape in CanvasROI.Children.OfType<Shape>())
+            {
+                if (shape?.Tag is RoiModel roi && roi.Role == RoiRole.Inspection)
+                {
+                    total += CountRoiAdornersForShape(shape);
+                }
+            }
+
+            return total;
+        }
+
+        private void ApplyInspectionInteractionPolicy(string reason)
+        {
+            try
+            {
+                int activeIndex = Math.Max(1, Math.Min(4, _activeInspectionIndex));
+                int removed = 0;
+                bool attached = false;
+
+                for (int index = 1; index <= 4; index++)
+                {
+                    var roi = GetInspectionSlotModel(index);
+                    if (roi == null)
+                    {
+                        continue;
+                    }
+
+                    bool isActive = index == activeIndex;
+                    roi.IsFrozen = !isActive;
+
+                    if (string.IsNullOrWhiteSpace(roi.Id))
+                    {
+                        continue;
+                    }
+
+                    var shape = FindRoiShapeById(roi.Id);
+                    if (shape == null)
+                    {
+                        continue;
+                    }
+
+                    bool interactive = isActive && ShouldEnableRoiEditing(roi.Role);
+                    shape.IsHitTestVisible = interactive;
+
+                    if (interactive)
+                    {
+                        AttachRoiAdorner(shape);
+                        attached = true;
+                    }
+                    else
+                    {
+                        removed += CountRoiAdornersForShape(shape);
+                        RemoveRoiAdorners(shape);
+                    }
+                }
+
+                int adornerCount = CountActiveInspectionAdorners();
+                string suffix = attached ? " attached" : string.Empty;
+                if (!string.IsNullOrWhiteSpace(reason))
+                {
+                    AppendLog($"[adorner] policy reason={reason} active={activeIndex} count={adornerCount} removed={removed}{suffix}");
+                }
+                else
+                {
+                    AppendLog($"[adorner] policy active={activeIndex} count={adornerCount} removed={removed}{suffix}");
+                }
+
+                if (adornerCount > 1)
+                {
+                    AppendLog($"[adorner] WARN multiple inspection adorners active -> {adornerCount}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[adorner] policy error: {ex.Message}");
+            }
         }
 
         private void WorkflowViewModelOnPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -8474,14 +8616,12 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 MasterLayoutManager.Save(_preset, _layout);
                 AppendLog("[layout-save] ok");
-                MessageBox.Show("Layout guardado.", "Save Layout",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+                Snack("Layout guardado correctamente.");
             }
             catch (Exception ex)
             {
                 AppendLog($"[layout-save] ERROR: {ex.Message}");
-                MessageBox.Show($"Error al guardar el layout:\n{ex.Message}",
-                    "Save Layout", MessageBoxButton.OK, MessageBoxImage.Error);
+                Snack("Error al guardar layout: " + ex.Message);
             }
         }
 

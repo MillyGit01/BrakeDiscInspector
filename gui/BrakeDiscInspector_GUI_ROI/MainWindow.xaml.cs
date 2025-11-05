@@ -1343,10 +1343,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 roisToMove.Add((roi, roi.Clone()));
             }
 
-            EnqueueInspection(_layout.Inspection1);
-            EnqueueInspection(_layout.Inspection2);
-            EnqueueInspection(_layout.Inspection3);
-            EnqueueInspection(_layout.Inspection4);
+            EnqueueInspection(_layout.Inspection1, always: true);
+            EnqueueInspection(_layout.Inspection2, always: true);
+            EnqueueInspection(_layout.Inspection3, always: true);
+            EnqueueInspection(_layout.Inspection4, always: true);
             EnqueueInspection(_layout.Inspection, always: true);
 
             foreach (var (target, baseline) in roisToMove)
@@ -4708,17 +4708,35 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
 
-        private void ResetAnalysisMarks()
+        private void ResetAnalysisMarks(bool preserveLastCenters = false)
         {
             RemoveAnalysisMarks();
-            _lastM1CenterPx = null;
-            _lastM2CenterPx = null;
-            _lastMidCenterPx = null;
-            RedrawAnalysisCrosses();
+
+            bool hadCenters = _lastM1CenterPx.HasValue || _lastM2CenterPx.HasValue || _lastMidCenterPx.HasValue;
+
+            if (!preserveLastCenters)
+            {
+                _lastM1CenterPx = null;
+                _lastM2CenterPx = null;
+                _lastMidCenterPx = null;
+            }
+
+            if (!preserveLastCenters || hadCenters)
+            {
+                RedrawAnalysisCrosses();
+            }
+
             ClearHeatmapOverlay();
             RedrawOverlaySafe();
-            _analysisViewActive = false;
-            AppendLog("[ANALYZE] Limpiadas marcas de análisis (cruces).");
+
+            if (!preserveLastCenters)
+            {
+                _analysisViewActive = false;
+            }
+
+            AppendLog(preserveLastCenters
+                ? "[ANALYZE] Limpieza de análisis preservando cruces previas."
+                : "[ANALYZE] Limpiadas marcas de análisis (cruces).");
         }
 
         private void RemoveAnalysisMarks()
@@ -6925,7 +6943,7 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog("[FLOW] Entrando en AnalyzeMastersAsync");
 
             // Limpia cruces, mantiene ROIs
-            ResetAnalysisMarks();
+            ResetAnalysisMarks(preserveLastCenters: true);
 
             SWPoint? c1 = null, c2 = null;
             double s1 = 0, s2 = 0;
@@ -8342,10 +8360,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            // 2) limpiar cruces de análisis anteriores (no borra los ROIs)
-            ResetAnalysisMarks();
-
-            // 3) Validaciones rápidas
+            // 2) Validaciones rápidas
             if (string.IsNullOrWhiteSpace(_currentImagePathWin))
             {
                 Snack("No hay imagen actual"); return;

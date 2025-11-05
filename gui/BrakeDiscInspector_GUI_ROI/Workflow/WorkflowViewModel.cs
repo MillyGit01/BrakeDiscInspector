@@ -445,10 +445,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             field = value;
-            if (field != null)
-            {
-                field.IsFrozen = false;
-            }
 
             OnPropertyChanged(propertyName);
         }

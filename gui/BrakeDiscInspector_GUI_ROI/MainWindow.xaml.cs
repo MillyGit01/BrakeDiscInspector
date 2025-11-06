@@ -78,6 +78,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private int _freezeRoiRepositionCounter;
         private bool _pendingActiveInspectionSync;
+        private bool _globalUnlocked = false;
+        private string? _activeEditableRoiId = null;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
@@ -233,6 +235,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 4 => _layout.Inspection4,
                 _ => null
             };
+        }
+
+        private bool HasInspectionRoi(int index)
+        {
+            return GetInspectionSlotModel(index) != null;
         }
 
         private RoiModel? GetInspectionSlotModelClone(int slotIndex)
@@ -2743,6 +2750,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     WorkflowHost.LoadModelRequested -= WorkflowHostOnLoadModelRequested;
                     WorkflowHost.LoadModelRequested += WorkflowHostOnLoadModelRequested;
+                    WorkflowHost.ToggleEditRequested -= WorkflowHostOnToggleEditRequested;
+                    WorkflowHost.ToggleEditRequested += WorkflowHostOnToggleEditRequested;
                     WorkflowHost.DataContext = _workflowViewModel;
                 }
 
@@ -3046,15 +3055,88 @@ namespace BrakeDiscInspector_GUI_ROI
             };
         }
 
-        private bool ShouldEnableRoiEditing(RoiRole role)
+        private bool ShouldEnableRoiEditing(RoiRole role, RoiModel? roi = null)
         {
             if (role == RoiRole.Inspection)
             {
-                return _state == MasterState.DrawInspection || _state == MasterState.Ready;
+                if (_state != MasterState.DrawInspection && _state != MasterState.Ready)
+                {
+                    return false;
+                }
+
+                if (!_globalUnlocked || string.IsNullOrWhiteSpace(_activeEditableRoiId) || roi == null)
+                {
+                    return false;
+                }
+
+                return string.Equals(roi.Id, _activeEditableRoiId, StringComparison.OrdinalIgnoreCase);
             }
 
             var currentRole = GetCurrentStateRole();
             return currentRole.HasValue && currentRole.Value == role;
+        }
+
+        private void ResetEditState()
+        {
+            _activeEditableRoiId = null;
+            _globalUnlocked = false;
+            UpdateEditableConfigState();
+        }
+
+        private void ToggleEditByRoiId(string roiId, int inspectionIndex)
+        {
+            if (string.IsNullOrWhiteSpace(roiId))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_activeEditableRoiId)
+                && string.Equals(_activeEditableRoiId, roiId, StringComparison.OrdinalIgnoreCase))
+            {
+                ResetEditState();
+                RemoveAllRoiAdorners();
+                ApplyInspectionInteractionPolicy("toggle-off");
+                RedrawOverlaySafe();
+                UpdateRoiHud();
+                return;
+            }
+
+            var slotRoi = GetInspectionSlotModel(inspectionIndex);
+            if (slotRoi == null || string.IsNullOrWhiteSpace(slotRoi.Id) ||
+                !string.Equals(slotRoi.Id, roiId, StringComparison.OrdinalIgnoreCase))
+            {
+                Snack($"Inspection {inspectionIndex} no tiene un ROI para editar.");
+                return;
+            }
+
+            _activeEditableRoiId = roiId;
+            _globalUnlocked = true;
+            UpdateEditableConfigState();
+
+            GoToInspectionTab();
+            SetActiveInspectionIndex(inspectionIndex);
+
+            RemoveAllRoiAdorners();
+            ApplyInspectionInteractionPolicy($"toggle-on:{roiId}");
+            RedrawOverlaySafe();
+            UpdateRoiHud();
+        }
+
+        private void UpdateEditableConfigState()
+        {
+            if (ViewModel?.InspectionRois == null)
+            {
+                return;
+            }
+
+            bool hasActive = _globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId);
+
+            foreach (var cfg in ViewModel.InspectionRois)
+            {
+                bool editable = hasActive && !string.IsNullOrWhiteSpace(cfg.Id)
+                    && string.Equals(cfg.Id, _activeEditableRoiId, StringComparison.OrdinalIgnoreCase);
+                cfg.IsEditable = editable;
+            }
         }
 
         private bool TryClearCurrentStatePersistedRoi(out RoiRole? clearedRole)
@@ -3536,7 +3618,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     CanvasROI.Children.Add(shape);
                     _roiShapesById[roi.Id] = shape;
 
-                    if (ShouldEnableRoiEditing(roi.Role) && !roi.IsFrozen)
+                    if (ShouldEnableRoiEditing(roi.Role, roi) && !roi.IsFrozen)
                     {
                         AttachRoiAdorner(shape);
                     }
@@ -3553,7 +3635,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         shape.StrokeDashArray = style.dash;
                     else
                         shape.StrokeDashArray = null;
-                    shape.IsHitTestVisible = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role);
+                    shape.IsHitTestVisible = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role, roi);
                     Panel.SetZIndex(shape, style.zIndex);
                 }
                 catch
@@ -3563,7 +3645,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     shape.Fill = Brushes.Transparent;
                     shape.StrokeThickness = 1.0;
                     shape.StrokeDashArray = null;
-                    shape.IsHitTestVisible = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role);
+                    shape.IsHitTestVisible = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role, roi);
                     Panel.SetZIndex(shape, 5);
                 }
 
@@ -3837,7 +3919,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (style.dash != null)
                 shape.StrokeDashArray = style.dash;
             shape.SnapsToDevicePixels = true;
-            shape.IsHitTestVisible = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role);
+            shape.IsHitTestVisible = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role, roi);
             Panel.SetZIndex(shape, style.zIndex);
 
             // Persist canvas ROI info on Tag; geometry will be updated during RedrawOverlay().
@@ -3897,8 +3979,31 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void AttachRoiAdorner(Shape shape)
         {
-            if (!ShouldEnableRoiEditing((shape.Tag as RoiModel)?.Role ?? RoiRole.Inspection))
+            if (shape.Tag is not RoiModel roiInfo)
+            {
                 return;
+            }
+
+            if (!ShouldEnableRoiEditing(roiInfo.Role, roiInfo))
+            {
+                if (roiInfo.Role == RoiRole.Inspection)
+                {
+                    var guardLayer = AdornerLayer.GetAdornerLayer(shape);
+                    if (guardLayer != null)
+                    {
+                        var adorners = guardLayer.GetAdorners(shape);
+                        if (adorners != null)
+                        {
+                            foreach (var adorner in adorners.OfType<RoiAdorner>())
+                            {
+                                guardLayer.Remove(adorner);
+                            }
+                        }
+                    }
+                }
+
+                return;
+            }
 
             var layer = AdornerLayer.GetAdornerLayer(shape);
             if (layer == null)
@@ -3910,9 +4015,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 foreach (var adorner in existing.OfType<RoiAdorner>())
                     layer.Remove(adorner);
             }
-
-            if (shape.Tag is not RoiModel roiInfo)
-                return;
 
             if (RoiOverlay == null)
                 return;
@@ -3940,6 +4042,34 @@ namespace BrakeDiscInspector_GUI_ROI
 
             foreach (var adorner in adorners.OfType<RoiAdorner>())
                 layer.Remove(adorner);
+        }
+
+        private void RemoveAllRoiAdorners()
+        {
+            if (CanvasROI == null)
+            {
+                return;
+            }
+
+            var layer = AdornerLayer.GetAdornerLayer(CanvasROI);
+            if (layer == null)
+            {
+                return;
+            }
+
+            foreach (var child in CanvasROI.Children.OfType<Shape>())
+            {
+                var adorners = layer.GetAdorners(child);
+                if (adorners == null)
+                {
+                    continue;
+                }
+
+                foreach (var adorner in adorners.OfType<RoiAdorner>())
+                {
+                    layer.Remove(adorner);
+                }
+            }
         }
 
 
@@ -5168,6 +5298,35 @@ namespace BrakeDiscInspector_GUI_ROI
             RedrawAllRois();
         }
 
+        private void RefreshCreateButtonsEnabled()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(RefreshCreateButtonsEnabled);
+                return;
+            }
+
+            if (BtnCreateInspection1 != null)
+            {
+                BtnCreateInspection1.IsEnabled = !HasInspectionRoi(1);
+            }
+
+            if (BtnCreateInspection2 != null)
+            {
+                BtnCreateInspection2.IsEnabled = !HasInspectionRoi(2);
+            }
+
+            if (BtnCreateInspection3 != null)
+            {
+                BtnCreateInspection3.IsEnabled = !HasInspectionRoi(3);
+            }
+
+            if (BtnCreateInspection4 != null)
+            {
+                BtnCreateInspection4.IsEnabled = !HasInspectionRoi(4);
+            }
+        }
+
         private void RefreshInspectionRoiSlots(IReadOnlyList<RoiModel>? rois = null)
         {
             var source = rois ?? CollectSavedInspectionRois();
@@ -5188,6 +5347,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _workflowViewModel?.SetInspectionRoiModels(Inspection1, Inspection2, Inspection3, Inspection4);
             SetActiveInspectionIndex(_activeInspectionIndex);
+            RefreshCreateButtonsEnabled();
+            UpdateEditableConfigState();
             ApplyInspectionInteractionPolicy("slot-refresh");
         }
 
@@ -5328,6 +5489,152 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnSaveInspection4_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(4);
 
+        private void BtnCreateInspection_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button btn || btn.Tag is not string tag ||
+                !int.TryParse(tag, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index))
+            {
+                return;
+            }
+
+            if (_imgW <= 0 || _imgH <= 0)
+            {
+                Snack("Carga primero una imagen antes de crear un ROI de inspección.");
+                return;
+            }
+
+            if (HasInspectionRoi(index))
+            {
+                Snack($"Inspection {index} ya existe.");
+                return;
+            }
+
+            var shape = ReadInspectionShapeForIndex(index);
+            var roi = CreateDefaultInspectionRoi(index, shape);
+
+            AppendLog($"[inspection] create slot={index} shape={shape} id={roi.Id}");
+
+            SaveInspectionRoiToLayout(index, roi);
+            RefreshInspectionRoiSlots();
+
+            var stored = GetInspectionSlotModel(index);
+            if (stored != null)
+            {
+                SyncCurrentRoiFromInspection(stored);
+            }
+
+            SetActiveInspectionIndex(index);
+
+            var targetId = stored?.Id ?? roi.Id;
+            ToggleEditByRoiId(targetId, index);
+            UpdateRoiHud();
+        }
+
+        private RoiModel CreateDefaultInspectionRoi(int index, RoiShape shape)
+        {
+            double imgW = Math.Max(1, _imgW);
+            double imgH = Math.Max(1, _imgH);
+            double cx = imgW / 2.0;
+            double cy = imgH / 2.0;
+            double minSide = Math.Min(imgW, imgH);
+
+            var roi = new RoiModel
+            {
+                Id = $"Inspection_{index}",
+                Role = RoiRole.Inspection,
+                Shape = shape,
+                BaseImgW = imgW,
+                BaseImgH = imgH,
+                AngleDeg = 0,
+                IsFrozen = false
+            };
+
+            switch (shape)
+            {
+                case RoiShape.Rectangle:
+                    {
+                        double width = Math.Max(100, imgW * 0.25);
+                        double height = Math.Max(100, imgH * 0.25);
+                        width = Math.Min(width, imgW - 20);
+                        height = Math.Min(height, imgH - 20);
+                        width = Math.Max(40, width);
+                        height = Math.Max(40, height);
+
+                        roi.Width = width;
+                        roi.Height = height;
+                        roi.X = cx;
+                        roi.Y = cy;
+                        roi.CX = cx;
+                        roi.CY = cy;
+                        roi.R = Math.Min(width, height) / 2.0;
+                        break;
+                    }
+                case RoiShape.Circle:
+                    {
+                        double radius = Math.Max(60, minSide * 0.12);
+                        radius = Math.Min(radius, (minSide / 2.0) - 10);
+                        if (radius <= 0)
+                        {
+                            radius = Math.Max(30, minSide / 3.0);
+                        }
+
+                        roi.R = radius;
+                        roi.CX = cx;
+                        roi.CY = cy;
+                        roi.Width = radius * 2.0;
+                        roi.Height = radius * 2.0;
+                        roi.X = cx;
+                        roi.Y = cy;
+                        break;
+                    }
+                case RoiShape.Annulus:
+                    {
+                        double outer = Math.Max(60, minSide * 0.16);
+                        outer = Math.Min(outer, (minSide / 2.0) - 10);
+                        if (outer <= 0)
+                        {
+                            outer = Math.Max(40, minSide / 3.0);
+                        }
+
+                        double inner = Math.Max(30, outer * 0.5);
+                        inner = Math.Min(inner, outer - 15);
+                        inner = Math.Max(10, inner);
+
+                        roi.R = outer;
+                        roi.RInner = inner;
+                        roi.CX = cx;
+                        roi.CY = cy;
+                        roi.Width = outer * 2.0;
+                        roi.Height = outer * 2.0;
+                        roi.X = cx;
+                        roi.Y = cy;
+                        break;
+                    }
+            }
+
+            return roi;
+        }
+
+        private void SaveInspectionRoiToLayout(int index, RoiModel roi)
+        {
+            if (_layout == null)
+            {
+                return;
+            }
+
+            roi.Role = RoiRole.Inspection;
+            roi.Id = $"Inspection_{index}";
+            roi.IsFrozen = false;
+
+            if (_imgW > 0 && _imgH > 0)
+            {
+                roi.BaseImgW = _imgW;
+                roi.BaseImgH = _imgH;
+            }
+
+            SetInspectionSlotModel(index, roi, updateActive: false);
+        }
+
         private void BtnRemoveInspection1_Click(object sender, RoutedEventArgs e) => RemoveInspectionRoi(1);
 
         private void BtnRemoveInspection2_Click(object sender, RoutedEventArgs e) => RemoveInspectionRoi(2);
@@ -5344,6 +5651,16 @@ namespace BrakeDiscInspector_GUI_ROI
             var roiModel = GetInspectionSlotModel(index);
             if (roiModel == null)
                 return;
+
+            bool wasActive = !string.IsNullOrWhiteSpace(_activeEditableRoiId)
+                && !string.IsNullOrWhiteSpace(roiModel.Id)
+                && string.Equals(_activeEditableRoiId, roiModel.Id, StringComparison.OrdinalIgnoreCase);
+
+            if (wasActive)
+            {
+                ResetEditState();
+                RemoveAllRoiAdorners();
+            }
 
             SetInspectionSlotModel(index, null);
 
@@ -5385,6 +5702,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
             RefreshInspectionRoiSlots();
             RedrawAllRois();
+
+            if (wasActive)
+            {
+                ApplyInspectionInteractionPolicy("remove-active");
+                UpdateRoiHud();
+            }
         }
 
         private void SetRoiAdornersVisible(string? roiId, bool visible)
@@ -5408,7 +5731,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (visible)
             {
-                if (shape.Tag is RoiModel roi && ShouldEnableRoiEditing(roi.Role) && !roi.IsFrozen)
+                if (shape.Tag is RoiModel roi && ShouldEnableRoiEditing(roi.Role, roi) && !roi.IsFrozen)
                 {
                     AttachRoiAdorner(shape);
                 }
@@ -5493,6 +5816,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 int activeIndex = Math.Max(1, Math.Min(4, _activeInspectionIndex));
                 int removed = 0;
                 bool attached = false;
+                string? activeId = _globalUnlocked ? _activeEditableRoiId : null;
 
                 for (int index = 1; index <= 4; index++)
                 {
@@ -5502,8 +5826,12 @@ namespace BrakeDiscInspector_GUI_ROI
                         continue;
                     }
 
-                    bool isActive = index == activeIndex;
-                    roi.IsFrozen = !isActive;
+                    bool matchesId = !string.IsNullOrWhiteSpace(activeId)
+                        && !string.IsNullOrWhiteSpace(roi.Id)
+                        && string.Equals(roi.Id, activeId, StringComparison.OrdinalIgnoreCase);
+                    bool interactive = matchesId && index == activeIndex;
+
+                    roi.IsFrozen = !interactive;
 
                     if (string.IsNullOrWhiteSpace(roi.Id))
                     {
@@ -5516,7 +5844,6 @@ namespace BrakeDiscInspector_GUI_ROI
                         continue;
                     }
 
-                    bool interactive = isActive && ShouldEnableRoiEditing(roi.Role);
                     shape.IsHitTestVisible = interactive;
 
                     if (interactive)
@@ -5535,11 +5862,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 string suffix = attached ? " attached" : string.Empty;
                 if (!string.IsNullOrWhiteSpace(reason))
                 {
-                    AppendLog($"[adorner] policy reason={reason} active={activeIndex} count={adornerCount} removed={removed}{suffix}");
+                    AppendLog($"[adorner] policy reason={reason} active={activeIndex} unlocked={_globalUnlocked} id={(activeId ?? "<none>")} count={adornerCount} removed={removed}{suffix}");
                 }
                 else
                 {
-                    AppendLog($"[adorner] policy active={activeIndex} count={adornerCount} removed={removed}{suffix}");
+                    AppendLog($"[adorner] policy active={activeIndex} unlocked={_globalUnlocked} id={(activeId ?? "<none>")} count={adornerCount} removed={removed}{suffix}");
                 }
 
                 if (adornerCount > 1)
@@ -5676,6 +6003,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _workflowViewModel?.RefreshDatasetCommand.Execute(null);
             _workflowViewModel?.RefreshHealthCommand.Execute(null);
+            RefreshCreateButtonsEnabled();
         }
 
         private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -5843,6 +6171,31 @@ namespace BrakeDiscInspector_GUI_ROI
         private RoiShape ReadCurrentInspectionShape()
         {
             return _currentDrawTool;
+        }
+
+        private RoiShape ReadInspectionShapeForIndex(int index)
+        {
+            ComboBox? combo = index switch
+            {
+                1 => CmbShapeInspection1,
+                2 => CmbShapeInspection2,
+                3 => CmbShapeInspection3,
+                4 => CmbShapeInspection4,
+                _ => null
+            };
+
+            if (combo?.SelectedItem is RoiShape shape)
+            {
+                return shape;
+            }
+
+            var config = GetInspectionConfigByIndex(index);
+            if (config != null)
+            {
+                return config.Shape;
+            }
+
+            return ReadCurrentInspectionShape();
         }
 
         // ====== Ratón & dibujo ======
@@ -6113,7 +6466,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // 2) Arrastre de ROI existente
-            if (e.OriginalSource is Shape sShape && sShape.Tag is RoiModel roiHit && ShouldEnableRoiEditing(roiHit.Role))
+            if (e.OriginalSource is Shape sShape && sShape.Tag is RoiModel roiHit && ShouldEnableRoiEditing(roiHit.Role, roiHit))
             {
                 _dragShape = sShape;
                 _dragStart = e.GetPosition(CanvasROI);
@@ -6131,6 +6484,13 @@ namespace BrakeDiscInspector_GUI_ROI
             // 3) Dibujo nuevo ROI en canvas vacío
             if (e.OriginalSource is Canvas)
             {
+                if (_globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
+                {
+                    AppendLog("[canvas+] Down ignorado (modo edición activo)");
+                    e.Handled = true;
+                    return;
+                }
+
                 _isDrawing = true;
                 _p0 = e.GetPosition(CanvasROI);
                 _currentShape = ReadShapeForCurrentStep();
@@ -6206,6 +6566,22 @@ namespace BrakeDiscInspector_GUI_ROI
                 e.Handled = true;
                 return;
             }
+        }
+
+        protected override void OnPreviewKeyDown(KeyEventArgs e)
+        {
+            if (e != null && e.Key == Key.Escape && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
+            {
+                ResetEditState();
+                RemoveAllRoiAdorners();
+                ApplyInspectionInteractionPolicy("esc");
+                RedrawOverlaySafe();
+                UpdateRoiHud();
+                e.Handled = true;
+                return;
+            }
+
+            base.OnPreviewKeyDown(e);
         }
 
         private void EndDraw(RoiShape shape, System.Windows.Point p0, System.Windows.Point p1)
@@ -9978,6 +10354,16 @@ namespace BrakeDiscInspector_GUI_ROI
                         MessageBoxImage.Error);
                 });
             }
+        }
+
+        private void WorkflowHostOnToggleEditRequested(object? sender, ToggleEditRequestedEventArgs e)
+        {
+            if (e == null)
+            {
+                return;
+            }
+
+            Dispatcher.Invoke(() => ToggleEditByRoiId(e.RoiId, e.Index));
         }
 
         private async void WorkflowHostOnLoadModelRequested(object? sender, LoadModelRequestedEventArgs e)

@@ -211,6 +211,18 @@
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[0].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnCreateInspection1"
+                          Margin="8,0,0,0"
+                          MinWidth="100"
+                          MinHeight="28"
+                          Tag="1"
+                          Click="BtnCreateInspection_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
                   <Button x:Name="BtnSaveInspection1"
                           Margin="8,0,0,0"
                           MinWidth="120"
@@ -257,6 +269,18 @@
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[1].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnCreateInspection2"
+                          Margin="8,0,0,0"
+                          MinWidth="100"
+                          MinHeight="28"
+                          Tag="2"
+                          Click="BtnCreateInspection_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
                   <Button x:Name="BtnSaveInspection2"
                           Margin="8,0,0,0"
                           MinWidth="120"
@@ -303,6 +327,18 @@
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[2].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnCreateInspection3"
+                          Margin="8,0,0,0"
+                          MinWidth="100"
+                          MinHeight="28"
+                          Tag="3"
+                          Click="BtnCreateInspection_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
                   <Button x:Name="BtnSaveInspection3"
                           Margin="8,0,0,0"
                           MinWidth="120"
@@ -349,6 +385,18 @@
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[3].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
+                  <Button x:Name="BtnCreateInspection4"
+                          Margin="8,0,0,0"
+                          MinWidth="100"
+                          MinHeight="28"
+                          Tag="4"
+                          Click="BtnCreateInspection_Click">
+                    <Button.Content>
+                      <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
+                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                      </StackPanel>
+                    </Button.Content>
+                  </Button>
                   <Button x:Name="BtnSaveInspection4"
                           Margin="8,0,0,0"
                           MinWidth="120"

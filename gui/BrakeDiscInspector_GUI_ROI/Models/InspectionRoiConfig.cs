@@ -13,6 +13,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         private int _index;
         private string _id;
         private bool _enabled = true;
+        private bool _isEditable;
         private string _modelKey;
         private double _threshold;
         private RoiShape _shape = RoiShape.Rectangle;
@@ -93,6 +94,18 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             {
                 if (_enabled == value) return;
                 _enabled = value;
+                OnPropertyChanged();
+            }
+        }
+
+        [JsonIgnore]
+        public bool IsEditable
+        {
+            get => _isEditable;
+            set
+            {
+                if (_isEditable == value) return;
+                _isEditable = value;
                 OnPropertyChanged();
             }
         }

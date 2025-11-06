@@ -5831,7 +5831,9 @@ namespace BrakeDiscInspector_GUI_ROI
                         && string.Equals(roi.Id, activeId, StringComparison.OrdinalIgnoreCase);
                     bool interactive = matchesId && index == activeIndex;
 
-                    roi.IsFrozen = !interactive;
+                    // Freeze competing inspection ROIs only while the global edit mode is unlocked;
+                    // otherwise keep them unfrozen so automatic repositioning during analysis works.
+                    roi.IsFrozen = _globalUnlocked && !interactive;
 
                     if (string.IsNullOrWhiteSpace(roi.Id))
                     {

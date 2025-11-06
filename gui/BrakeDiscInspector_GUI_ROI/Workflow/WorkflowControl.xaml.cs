@@ -8,6 +8,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
     public partial class WorkflowControl : UserControl
     {
         public event EventHandler<LoadModelRequestedEventArgs>? LoadModelRequested;
+        public event EventHandler<ToggleEditRequestedEventArgs>? ToggleEditRequested;
 
         public WorkflowControl()
         {
@@ -46,6 +47,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             LoadModelRequested?.Invoke(this, new LoadModelRequestedEventArgs(roiIndex));
         }
+
+        private void BtnToggleEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.DataContext is InspectionRoiConfig cfg)
+            {
+                ToggleEditRequested?.Invoke(this, new ToggleEditRequestedEventArgs(cfg.Id, cfg.Index));
+            }
+        }
     }
 
     public sealed class LoadModelRequestedEventArgs : EventArgs
@@ -55,6 +64,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Index = index;
         }
 
+        public int Index { get; }
+    }
+
+    public sealed class ToggleEditRequestedEventArgs : EventArgs
+    {
+        public ToggleEditRequestedEventArgs(string roiId, int index)
+        {
+            RoiId = roiId;
+            Index = index;
+        }
+
+        public string RoiId { get; }
         public int Index { get; }
     }
 }

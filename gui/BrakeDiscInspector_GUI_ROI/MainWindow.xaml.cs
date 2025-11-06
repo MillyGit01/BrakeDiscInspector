@@ -2750,12 +2750,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 _workflowViewModel.SetInspectionRoisCollection(_layout?.InspectionRois);
 
                 SyncDrawToolFromViewModel();
-
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    _workflowViewModel?.RefreshDatasetCommand.Execute(null);
-                    _workflowViewModel?.RefreshHealthCommand.Execute(null);
-                }), DispatcherPriority.Background);
             }
             catch (Exception ex)
             {
@@ -5637,7 +5631,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 // no-op
             }
         }
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             if (_loadedOnce)
             {
@@ -5665,6 +5659,23 @@ namespace BrakeDiscInspector_GUI_ROI
 
             WireExistingHeatmapControls();
             SyncDrawToolFromViewModel();
+
+            try
+            {
+                if (_workflowViewModel != null)
+                {
+                    GuiLog.Info("[BOOT] Workflow initialization begin");
+                    await _workflowViewModel.InitializeAsync();
+                    GuiLog.Info("[BOOT] Workflow initialization end");
+                }
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] Workflow initialization failed", ex);
+            }
+
+            _workflowViewModel?.RefreshDatasetCommand.Execute(null);
+            _workflowViewModel?.RefreshHealthCommand.Execute(null);
         }
 
         private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)

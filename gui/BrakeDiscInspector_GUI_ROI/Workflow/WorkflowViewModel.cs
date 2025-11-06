@@ -73,6 +73,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Dictionary<InspectionRoiConfig, FitOkResult> _lastFitResultsByRoi = new();
         private readonly Dictionary<InspectionRoiConfig, CalibResult> _lastCalibResultsByRoi = new();
         private readonly Func<InspectionRoiConfig, string?>? _resolveModelDirectory;
+        private readonly object _initLock = new();
+        private Task? _initializationTask;
+        private bool _initialized;
+        private bool _isInitializing;
 
         private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
         {
@@ -366,7 +370,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     {
                         roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
                         roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
-                        _ = RefreshRoiDatasetStateAsync(roi);
+                        if (_initialized && !_isInitializing)
+                        {
+                            _ = RefreshRoiDatasetStateAsync(roi);
+                        }
                     }
                     else
                     {
@@ -390,6 +397,76 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             UpdateSelectedRoiState();
             EvaluateAllRoisCommand.RaiseCanExecuteChanged();
             UpdateGlobalBadge();
+        }
+
+        public Task InitializeAsync(CancellationToken ct = default)
+        {
+            lock (_initLock)
+            {
+                if (_initialized)
+                {
+                    return Task.CompletedTask;
+                }
+
+                if (_initializationTask == null || _initializationTask.IsCompleted)
+                {
+                    _initializationTask = InitializeCoreAsync(ct);
+                }
+
+                return _initializationTask;
+            }
+        }
+
+        private async Task InitializeCoreAsync(CancellationToken ct)
+        {
+            if (_initialized)
+            {
+                return;
+            }
+
+            _isInitializing = true;
+            GuiLog.Info("[workflow] InitializeAsync START");
+
+            try
+            {
+                var snapshot = InspectionRois?.ToList() ?? new List<InspectionRoiConfig>();
+                foreach (var roi in snapshot)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    if (roi == null)
+                    {
+                        continue;
+                    }
+
+                    var initPath = string.IsNullOrWhiteSpace(roi.DatasetPath) ? "<none>" : roi.DatasetPath;
+                    GuiLog.Info($"[dataset:init] ROI='{roi.DisplayName}' path='{initPath}'");
+
+                    if (!roi.HasDatasetPath)
+                    {
+                        continue;
+                    }
+
+                    await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
+                }
+
+                _initialized = true;
+                GuiLog.Info("[workflow] InitializeAsync END");
+            }
+            catch (OperationCanceledException)
+            {
+                GuiLog.Warn("[workflow] InitializeAsync cancelled");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[workflow] InitializeAsync failed", ex);
+                throw;
+            }
+            finally
+            {
+                _isInitializing = false;
+            }
         }
 
         public void SetInspectionRoiModels(RoiModel? inspection1, RoiModel? inspection2, RoiModel? inspection3, RoiModel? inspection4)
@@ -1548,6 +1625,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             roi.DatasetReady = false;
             roi.DatasetStatus = roi.HasDatasetPath ? "Validating dataset..." : "Select a dataset";
 
+            var refreshPath = string.IsNullOrWhiteSpace(datasetPath) ? "<none>" : datasetPath;
+            GuiLog.Info($"[dataset] Refresh START roi='{roi.DisplayName}' path='{refreshPath}'");
+
             var analysis = await Task.Run(() => AnalyzeDatasetPath(datasetPath)).ConfigureAwait(false);
             _roiDatasetCache[roi] = analysis;
 
@@ -1559,6 +1639,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 roi.DatasetReady = analysis.IsValid;
                 roi.DatasetStatus = analysis.StatusMessage;
             });
+
+            GuiLog.Info($"[dataset] Refresh END roi='{roi.DisplayName}' ok={analysis.OkCount} ng={analysis.KoCount} ready={analysis.IsValid} status='{analysis.StatusMessage}'");
 
             await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
 

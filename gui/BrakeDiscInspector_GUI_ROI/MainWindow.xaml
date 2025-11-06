@@ -247,11 +247,6 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                  <Button x:Name="BtnLoadModelInspection1"
-                          Margin="8,0,0,0"
-                          Content="Load model"
-                          Tag="1"
-                          Click="BtnLoadModel_Click"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
@@ -298,11 +293,6 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                  <Button x:Name="BtnLoadModelInspection2"
-                          Margin="8,0,0,0"
-                          Content="Load model"
-                          Tag="2"
-                          Click="BtnLoadModel_Click"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
@@ -349,11 +339,6 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                  <Button x:Name="BtnLoadModelInspection3"
-                          Margin="8,0,0,0"
-                          Content="Load model"
-                          Tag="3"
-                          Click="BtnLoadModel_Click"/>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,12">
@@ -400,11 +385,6 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                  <Button x:Name="BtnLoadModelInspection4"
-                          Margin="8,0,0,0"
-                          Content="Load model"
-                          Tag="4"
-                          Click="BtnLoadModel_Click"/>
                 </StackPanel>
 
                 <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>

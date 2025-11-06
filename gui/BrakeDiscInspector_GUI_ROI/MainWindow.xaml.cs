@@ -2741,6 +2741,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (WorkflowHost != null)
                 {
+                    WorkflowHost.LoadModelRequested -= WorkflowHostOnLoadModelRequested;
+                    WorkflowHost.LoadModelRequested += WorkflowHostOnLoadModelRequested;
                     WorkflowHost.DataContext = _workflowViewModel;
                 }
 
@@ -9886,9 +9888,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private async void BtnLoadModel_Click(object sender, RoutedEventArgs e)
         {
-            using var freeze = FreezeRoiRepositionScope(nameof(BtnLoadModel_Click));
-
-            int index = _activeInspectionIndex;
+            var index = _activeInspectionIndex;
             if (sender is FrameworkElement fe && fe.Tag != null)
             {
                 if (fe.Tag is int intTag)
@@ -9901,7 +9901,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            index = Math.Max(1, Math.Min(4, index));
+            await LoadModelForInspectionAsync(index);
+        }
+
+        private async Task LoadModelForInspectionAsync(int requestedIndex)
+        {
+            using var freeze = FreezeRoiRepositionScope(nameof(LoadModelForInspectionAsync));
+
+            var index = Math.Max(1, Math.Min(4, requestedIndex));
 
             try
             {
@@ -9951,12 +9958,20 @@ namespace BrakeDiscInspector_GUI_ROI
             catch (Exception ex)
             {
                 AppendLog("[model] Error al cargar modelo: " + ex.Message);
-                MessageBox.Show(
-                    "No se pudo cargar el modelo seleccionado. Revisa el log para más detalles.",
-                    "Error",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show(
+                        "No se pudo cargar el modelo seleccionado. Revisa el log para más detalles.",
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                });
             }
+        }
+
+        private async void WorkflowHostOnLoadModelRequested(object? sender, LoadModelRequestedEventArgs e)
+        {
+            await LoadModelForInspectionAsync(e.Index);
         }
 
         private void BtnClearCanvas_Click(object sender, RoutedEventArgs e)

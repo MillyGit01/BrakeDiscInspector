@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Threading.Tasks;
 using OpenCvSharp;
@@ -229,6 +230,32 @@ namespace BrakeDiscInspector_GUI_ROI
         public static string ResolveRoiId(RoiModel roi)
         {
             if (roi == null) return "ROI";
+
+            if (roi.Role == RoiRole.Inspection)
+            {
+                var label = roi.Label;
+                if (!string.IsNullOrWhiteSpace(label))
+                {
+                    var sanitized = SanitizeId(label, string.Empty);
+                    var labelMatch = Regex.Match(sanitized, @"inspection[\-_]?([1-4])", RegexOptions.IgnoreCase);
+                    if (labelMatch.Success)
+                    {
+                        return $"inspection-{labelMatch.Groups[1].Value}";
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(roi.Id))
+                {
+                    var idMatch = Regex.Match(roi.Id, @"inspection[\s_\-]?([1-4])", RegexOptions.IgnoreCase);
+                    if (idMatch.Success)
+                    {
+                        return $"inspection-{idMatch.Groups[1].Value}";
+                    }
+                }
+
+                return "inspection-1";
+            }
+
             if (!string.IsNullOrWhiteSpace(roi.Label))
             {
                 return SanitizeId(roi.Label, "ROI");
@@ -240,7 +267,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 RoiRole.Master1Search => "Search",
                 RoiRole.Master2Pattern => "Pattern",
                 RoiRole.Master2Search => "Search",
-                RoiRole.Inspection => "Inspection",
                 _ => "ROI",
             };
         }

@@ -80,6 +80,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _pendingActiveInspectionSync;
         private bool _globalUnlocked = false;
         private string? _activeEditableRoiId = null;
+        private bool _hasInspectionAnalysisTransform;
+        private bool _isFirstImageForCurrentKey = true;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
@@ -2564,6 +2566,8 @@ namespace BrakeDiscInspector_GUI_ROI
             ImgMain.SizeChanged += ImgMain_SizeChanged;
             this.SizeChanged += MainWindow_SizeChanged;
             this.Loaded += MainWindow_Loaded;
+
+            RemoveAllRoiAdorners();
         }
 
         private void InitializeOptionsFromConfig()
@@ -3076,6 +3080,81 @@ namespace BrakeDiscInspector_GUI_ROI
             return currentRole.HasValue && currentRole.Value == role;
         }
 
+        private void CaptureCurrentUiShapeIntoSlot(string? roiId)
+        {
+            if (CanvasROI == null || string.IsNullOrWhiteSpace(roiId))
+            {
+                return;
+            }
+
+            Shape? shape = CanvasROI.Children
+                .OfType<Shape>()
+                .FirstOrDefault(s => s.Tag is RoiModel roiTag
+                    && !string.IsNullOrWhiteSpace(roiTag.Id)
+                    && string.Equals(roiTag.Id, roiId, StringComparison.OrdinalIgnoreCase));
+
+            if (shape?.Tag is not RoiModel canvasRoi)
+            {
+                return;
+            }
+
+            try
+            {
+                SyncModelFromShape(shape);
+            }
+            catch
+            {
+                // best-effort; keep going with existing tag geometry
+            }
+
+            var pixelRoi = CanvasToImage(canvasRoi);
+
+            if (_imgW > 0 && _imgH > 0)
+            {
+                pixelRoi.BaseImgW ??= _imgW;
+                pixelRoi.BaseImgH ??= _imgH;
+            }
+
+            int? slotIndex = TryParseInspectionIndex(pixelRoi);
+            if (!slotIndex.HasValue)
+            {
+                slotIndex = TryParseInspectionIndex(canvasRoi);
+            }
+
+            if (!slotIndex.HasValue)
+            {
+                slotIndex = ResolveActiveInspectionIndex();
+            }
+
+            if (!slotIndex.HasValue)
+            {
+                return;
+            }
+
+            NormalizeInspectionRoi(pixelRoi, slotIndex.Value);
+            pixelRoi.IsFrozen = false;
+
+            bool updateActive = slotIndex.Value == _activeInspectionIndex;
+            SetInspectionSlotModel(slotIndex.Value, pixelRoi, updateActive);
+            RefreshInspectionRoiSlots();
+        }
+
+        private void ExitEditMode(string reason = "edit-exit", bool skipCapture = false)
+        {
+            string? exitingId = _activeEditableRoiId;
+
+            if (!skipCapture && !string.IsNullOrWhiteSpace(exitingId))
+            {
+                CaptureCurrentUiShapeIntoSlot(exitingId);
+            }
+
+            ResetEditState();
+            RemoveAllRoiAdorners();
+            ApplyInspectionInteractionPolicy(reason);
+            RedrawOverlaySafe();
+            UpdateRoiHud();
+        }
+
         private void ResetEditState()
         {
             _activeEditableRoiId = null;
@@ -3093,12 +3172,13 @@ namespace BrakeDiscInspector_GUI_ROI
             if (!string.IsNullOrWhiteSpace(_activeEditableRoiId)
                 && string.Equals(_activeEditableRoiId, roiId, StringComparison.OrdinalIgnoreCase))
             {
-                ResetEditState();
-                RemoveAllRoiAdorners();
-                ApplyInspectionInteractionPolicy("toggle-off");
-                RedrawOverlaySafe();
-                UpdateRoiHud();
+                ExitEditMode("toggle-off");
                 return;
+            }
+
+            if (_globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
+            {
+                ExitEditMode("toggle-switch");
             }
 
             var slotRoi = GetInspectionSlotModel(inspectionIndex);
@@ -3236,6 +3316,9 @@ namespace BrakeDiscInspector_GUI_ROI
             _inspectionBaselineSeededForImage = false;   // force reseed of inspection baseline for this image
             _imageKeyForMasters = string.Empty;          // so masters won't be considered already seeded
             _mastersSeededForImage = false;              // seed again during auto Analyze Master
+            _hasInspectionAnalysisTransform = false;
+            _isFirstImageForCurrentKey = true;
+            RemoveAllRoiAdorners();
             LogDebug($"[roi-diag] load image → seeded=false, mastersSeeded={_mastersSeededForImage}, imageKey='{_imageKeyForMasters}'");
             OnImageLoaded_SetCurrentSource(_imgSourceBI);
             _currentImageHash = ComputeImageSeedKey();
@@ -3493,6 +3576,7 @@ namespace BrakeDiscInspector_GUI_ROI
             try { ClearCanvasShapesAndLabels(); } catch { }
             try { ClearCanvasInternalMaps(); } catch { }
             try { DetachPreviewAndAdorner(); } catch { }
+            try { RemoveAllRoiAdorners(); } catch { }
             try { ResetAnalysisMarks(); } catch { }
 
             _currentImageHash = string.Empty;
@@ -4920,8 +5004,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 Tag = ANALYSIS_TAG
             };
 
-            Panel.SetZIndex(lineH, 30);
-            Panel.SetZIndex(lineV, 30);
+            Panel.SetZIndex(lineH, 2000);
+            Panel.SetZIndex(lineV, 2000);
 
             CanvasROI.Children.Add(lineH);
             CanvasROI.Children.Add(lineV);
@@ -5457,6 +5541,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             LogSaveSlot("post", index, GetInspectionSlotModelClone(index));
             AppendLog($"[inspection] saved slot={index} ok");
+            ExitEditMode("save");
             MessageBox.Show($"Inspection {index} guardado.",
                             $"Inspection {index}",
                             MessageBoxButton.OK,
@@ -5658,8 +5743,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (wasActive)
             {
-                ResetEditState();
-                RemoveAllRoiAdorners();
+                ExitEditMode("remove-active", skipCapture: true);
             }
 
             SetInspectionSlotModel(index, null);
@@ -5703,9 +5787,9 @@ namespace BrakeDiscInspector_GUI_ROI
             RefreshInspectionRoiSlots();
             RedrawAllRois();
 
-            if (wasActive)
+            if (!wasActive)
             {
-                ApplyInspectionInteractionPolicy("remove-active");
+                ApplyInspectionInteractionPolicy("remove-inactive");
                 UpdateRoiHud();
             }
         }
@@ -6574,11 +6658,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (e != null && e.Key == Key.Escape && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
             {
-                ResetEditState();
-                RemoveAllRoiAdorners();
-                ApplyInspectionInteractionPolicy("esc");
-                RedrawOverlaySafe();
-                UpdateRoiHud();
+                ExitEditMode("esc");
                 e.Handled = true;
                 return;
             }
@@ -7333,9 +7413,6 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog("[ANALYZE] Begin AnalyzeMastersAsync");
             AppendLog("[FLOW] Entrando en AnalyzeMastersAsync");
 
-            // Limpia cruces, mantiene ROIs
-            ResetAnalysisMarks(preserveLastCenters: true);
-
             SWPoint? c1 = null, c2 = null;
             double s1 = 0, s2 = 0;
 
@@ -7536,6 +7613,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog("[FLOW] Layout guardado");
             }
 
+            _hasInspectionAnalysisTransform = true;
+            _isFirstImageForCurrentKey = false;
+
             await Dispatcher.InvokeAsync(() =>
             {
                 try
@@ -7543,6 +7623,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     // Lanza el pipeline: SyncOverlayToImage → RedrawOverlay → UpdateHeatmapOverlayLayoutAndClip → RedrawAnalysisCrosses
                     ScheduleSyncOverlay(true);
                     AppendLog("[UI] Post-Analyze refresh scheduled (ScheduleSyncOverlay(true)).");
+                    try { RedrawOverlaySafe(); } catch { }
                 }
                 catch (Exception ex)
                 {
@@ -7779,6 +7860,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private void RestoreInspectionBaselineForCurrentImage()
         {
             if (string.IsNullOrWhiteSpace(_currentImageHash))
+            {
+                return;
+            }
+
+            if (!_hasInspectionAnalysisTransform || _isFirstImageForCurrentKey)
             {
                 return;
             }
@@ -9020,15 +9106,138 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
-                MasterLayoutManager.Save(_preset, _layout);
-                AppendLog("[layout-save] ok");
-                Snack("Layout guardado correctamente.");
+                if (!string.IsNullOrWhiteSpace(_activeEditableRoiId))
+                {
+                    CaptureCurrentUiShapeIntoSlot(_activeEditableRoiId);
+                }
+
+                SyncActiveInspectionToLayout();
+
+                var snapshot = BuildLayoutSnapshotForSave();
+                var targetPath = MasterLayoutManager.GetDefaultPath(_preset);
+                MasterLayoutManager.Save(_preset, snapshot);
+                AppendLog($"[layout-save] ok -> {targetPath}");
+                Snack("Layout guardado ✅");
             }
             catch (Exception ex)
             {
                 AppendLog($"[layout-save] ERROR: {ex.Message}");
-                Snack("Error al guardar layout: " + ex.Message);
+                Snack("❌ Error guardando layout (ver log).");
             }
+        }
+
+        private MasterLayout BuildLayoutSnapshotForSave()
+        {
+            var source = _layout ?? new MasterLayout();
+            var snapshot = new MasterLayout
+            {
+                Master1Pattern = CloneRoiForSave(source.Master1Pattern),
+                Master1PatternImagePath = source.Master1PatternImagePath,
+                Master1Search = CloneRoiForSave(source.Master1Search),
+                Master2Pattern = CloneRoiForSave(source.Master2Pattern),
+                Master2PatternImagePath = source.Master2PatternImagePath,
+                Master2Search = CloneRoiForSave(source.Master2Search),
+                Inspection = CloneRoiForSave(source.Inspection),
+                InspectionBaseline = CloneRoiForSave(source.InspectionBaseline),
+                Inspection1 = CloneRoiForSave(source.Inspection1),
+                Inspection2 = CloneRoiForSave(source.Inspection2),
+                Inspection3 = CloneRoiForSave(source.Inspection3),
+                Inspection4 = CloneRoiForSave(source.Inspection4)
+            };
+
+            snapshot.Analyze.PosTolPx = source.Analyze?.PosTolPx ?? _analyzePosTolPx;
+            snapshot.Analyze.AngTolDeg = source.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
+            snapshot.Analyze.ScaleLock = source.Analyze?.ScaleLock ?? _scaleLock;
+            snapshot.Analyze.UseLocalMatcher = source.Analyze?.UseLocalMatcher ?? (ChkUseLocalMatcher?.IsChecked == true);
+
+            snapshot.Ui.HeatmapOverlayOpacity = _heatmapOverlayOpacity;
+            snapshot.Ui.HeatmapGain = _heatmapGain;
+            snapshot.Ui.HeatmapGamma = _heatmapGamma;
+
+            snapshot.InspectionBaselinesByImage.Clear();
+            if (source.InspectionBaselinesByImage != null)
+            {
+                foreach (var kv in source.InspectionBaselinesByImage)
+                {
+                    if (string.IsNullOrWhiteSpace(kv.Key) || kv.Value == null || kv.Value.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var clones = kv.Value
+                        .Select(CloneRoiForSave)
+                        .Where(r => r != null)
+                        .Cast<RoiModel>()
+                        .ToList();
+
+                    if (clones.Count > 0)
+                    {
+                        snapshot.InspectionBaselinesByImage[kv.Key] = clones;
+                    }
+                }
+            }
+
+            snapshot.InspectionRois.Clear();
+            if (source.InspectionRois != null)
+            {
+                foreach (var cfg in source.InspectionRois)
+                {
+                    if (cfg == null)
+                    {
+                        continue;
+                    }
+
+                    snapshot.InspectionRois.Add(CloneInspectionConfigForSave(cfg));
+                }
+            }
+
+            return snapshot;
+        }
+
+        private RoiModel? CloneRoiForSave(RoiModel? roi)
+        {
+            if (roi == null)
+            {
+                return null;
+            }
+
+            var clone = roi.Clone();
+            if (_imgW > 0 && _imgH > 0)
+            {
+                clone.BaseImgW ??= _imgW;
+                clone.BaseImgH ??= _imgH;
+            }
+
+            return clone;
+        }
+
+        private InspectionRoiConfig CloneInspectionConfigForSave(InspectionRoiConfig cfg)
+        {
+            var clone = new InspectionRoiConfig(cfg.Index)
+            {
+                Id = cfg.Id,
+                Name = cfg.Name,
+                Enabled = cfg.Enabled,
+                ModelKey = cfg.ModelKey,
+                DatasetPath = cfg.DatasetPath,
+                TrainMemoryFit = cfg.TrainMemoryFit,
+                CalibratedThreshold = cfg.CalibratedThreshold,
+                ThresholdDefault = cfg.ThresholdDefault,
+                Shape = cfg.Shape,
+                BaseImgW = cfg.BaseImgW,
+                BaseImgH = cfg.BaseImgH,
+                HasFitOk = cfg.HasFitOk,
+                DatasetReady = cfg.DatasetReady,
+                Threshold = cfg.Threshold,
+                LastScore = cfg.LastScore,
+                LastResultOk = cfg.LastResultOk,
+                LastEvaluatedAt = cfg.LastEvaluatedAt,
+                DatasetStatus = cfg.DatasetStatus,
+                DatasetOkCount = cfg.DatasetOkCount,
+                DatasetKoCount = cfg.DatasetKoCount
+            };
+
+            return clone;
         }
 
         private void BtnLoadLayout_Click(object sender, RoutedEventArgs e)
@@ -10390,6 +10599,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
+                ExitEditMode("reset", skipCapture: true);
                 _isDrawing = false;
                 _dragShape = null;
                 _tmpBuffer = null;
@@ -10399,6 +10609,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 try { ClearCanvasShapesAndLabels(); } catch { }
                 try { ClearCanvasInternalMaps(); } catch { }
                 try { ClearPersistedRoisFromCanvas(); } catch { }
+                try { RemoveAllRoiAdorners(); } catch { }
 
                 if (RoiOverlay != null)
                 {

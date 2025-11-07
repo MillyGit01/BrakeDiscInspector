@@ -177,7 +177,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (string.IsNullOrWhiteSpace(roiId)) throw new ArgumentException("ROI id required", nameof(roiId));
 
             using var form = new MultipartFormDataContent();
-            form.Add(new StringContent(roleId), "role_id");
+            var effectiveRoleId = NormalizeRoleId(roleId, roiId);
+            form.Add(new StringContent(effectiveRoleId), "role_id");
             form.Add(new StringContent(roiId), "roi_id");
             form.Add(new StringContent(mmPerPx.ToString(CultureInfo.InvariantCulture)), "mm_per_px");
             form.Add(new StringContent(memoryFit ? "true" : "false"), "memory_fit");
@@ -311,7 +312,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             CancellationToken ct)
         {
             using var form = new MultipartFormDataContent();
-            form.Add(new StringContent(roleId), "role_id");
+            var effectiveRoleId = NormalizeRoleId(roleId, roiId);
+            form.Add(new StringContent(effectiveRoleId), "role_id");
             form.Add(new StringContent(roiId), "roi_id");
             form.Add(new StringContent(mmPerPx.ToString(CultureInfo.InvariantCulture)), "mm_per_px");
 
@@ -362,6 +364,35 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             payload.threshold ??= 0.5;
 
             return payload;
+        }
+
+        private static string NormalizeRoleId(string roleId, string? roiId)
+        {
+            if (!string.IsNullOrWhiteSpace(roiId))
+            {
+                var trimmed = roiId.Trim();
+                if (trimmed.StartsWith("inspection", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Inspection";
+                }
+
+                if (trimmed.IndexOf("master1", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Master1";
+                }
+
+                if (trimmed.IndexOf("master2", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return "Master2";
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(roleId))
+            {
+                return roleId;
+            }
+
+            return "Inspection";
         }
 
         public async Task<HealthInfo?> GetHealthAsync(CancellationToken ct = default)

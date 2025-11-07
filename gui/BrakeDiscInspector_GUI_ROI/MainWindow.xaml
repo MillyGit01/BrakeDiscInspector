@@ -213,7 +213,7 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection1"
                           Margin="8,0,0,0"
-                          MinWidth="100"
+                          MinWidth="90"
                           MinHeight="28"
                           Tag="1"
                           Click="BtnCreateInspection_Click">
@@ -225,7 +225,7 @@
                   </Button>
                   <Button x:Name="BtnSaveInspection1"
                           Margin="8,0,0,0"
-                          MinWidth="120"
+                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection1_Click">
                     <Button.Content>
@@ -271,7 +271,7 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection2"
                           Margin="8,0,0,0"
-                          MinWidth="100"
+                          MinWidth="90"
                           MinHeight="28"
                           Tag="2"
                           Click="BtnCreateInspection_Click">
@@ -283,7 +283,7 @@
                   </Button>
                   <Button x:Name="BtnSaveInspection2"
                           Margin="8,0,0,0"
-                          MinWidth="120"
+                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection2_Click">
                     <Button.Content>
@@ -329,7 +329,7 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection3"
                           Margin="8,0,0,0"
-                          MinWidth="100"
+                          MinWidth="90"
                           MinHeight="28"
                           Tag="3"
                           Click="BtnCreateInspection_Click">
@@ -341,7 +341,7 @@
                   </Button>
                   <Button x:Name="BtnSaveInspection3"
                           Margin="8,0,0,0"
-                          MinWidth="120"
+                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection3_Click">
                     <Button.Content>
@@ -387,7 +387,7 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection4"
                           Margin="8,0,0,0"
-                          MinWidth="100"
+                          MinWidth="90"
                           MinHeight="28"
                           Tag="4"
                           Click="BtnCreateInspection_Click">
@@ -399,7 +399,7 @@
                   </Button>
                   <Button x:Name="BtnSaveInspection4"
                           Margin="8,0,0,0"
-                          MinWidth="120"
+                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection4_Click">
                     <Button.Content>

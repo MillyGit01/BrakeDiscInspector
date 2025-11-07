@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using BrakeDiscInspector_GUI_ROI.Models;
 
 namespace BrakeDiscInspector_GUI_ROI
@@ -186,6 +187,19 @@ namespace BrakeDiscInspector_GUI_ROI
             File.WriteAllText(snapshot, json);
         }
 
+        private static readonly Regex s_inspectionKeyRegex = new("inspection[\\s_\\-]?([1-4])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static string NormalizeInspectionKey(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return key ?? string.Empty;
+            }
+
+            var match = s_inspectionKeyRegex.Match(key);
+            return match.Success ? $"inspection-{match.Groups[1].Value}" : key.Trim();
+        }
+
         private static void EnsureInspectionRoiDefaults(MasterLayout layout)
         {
             for (int i = 0; i < layout.InspectionRois.Count; i++)
@@ -196,10 +210,12 @@ namespace BrakeDiscInspector_GUI_ROI
                     roi.Name = $"Inspection {i + 1}";
                 }
 
-                if (string.IsNullOrWhiteSpace(roi.ModelKey))
+                var normalizedKey = NormalizeInspectionKey(roi.ModelKey);
+                if (string.IsNullOrWhiteSpace(normalizedKey))
                 {
-                    roi.ModelKey = $"inspection-{i + 1}";
+                    normalizedKey = $"inspection-{i + 1}";
                 }
+                roi.ModelKey = normalizedKey;
 
                 var expectedId = $"Inspection_{i + 1}";
                 if (string.IsNullOrWhiteSpace(roi.Id) || !string.Equals(roi.Id, expectedId, StringComparison.OrdinalIgnoreCase))

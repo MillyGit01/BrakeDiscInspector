@@ -11,6 +11,7 @@ using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -308,6 +309,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (value != null)
                     {
+                        RoleId = "Inspection";
+                        var normalizedKey = NormalizeInspectionKey(value.ModelKey, value.Index);
+                        if (!string.Equals(RoiId, normalizedKey, StringComparison.Ordinal))
+                        {
+                            RoiId = normalizedKey;
+                        }
+                        if (!string.Equals(value.ModelKey, normalizedKey, StringComparison.Ordinal))
+                        {
+                            value.ModelKey = normalizedKey;
+                        }
+
                         _log($"[ui] SelectedInspectionRoi -> {value.DisplayName} idx={value.Index} key={value.ModelKey}");
                         try
                         {
@@ -2363,9 +2375,29 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             var inferFileName = $"roi_{DateTime.UtcNow:yyyyMMddHHmmssfff}.png";
+            var resolvedRoiId = NormalizeInspectionKey(
+                string.Equals(RoleId, "Inspection", StringComparison.OrdinalIgnoreCase) ? RoiId : roi.ModelKey,
+                roi.Index);
+
+            if (!string.IsNullOrWhiteSpace(roi.ModelKey) &&
+                !string.Equals(roi.ModelKey, resolvedRoiId, StringComparison.Ordinal))
+            {
+                roi.ModelKey = resolvedRoiId;
+            }
+
+            if (!string.Equals(RoiId, resolvedRoiId, StringComparison.Ordinal))
+            {
+                RoiId = resolvedRoiId;
+            }
+
             try
             {
-                var result = await _client.InferAsync(RoleId, roi.ModelKey, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
+                if (string.Equals(RoleId, "Inspection", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _client.EnsureFittedAsync(RoleId, RoiId, MmPerPx, ct: ct).ConfigureAwait(false);
+                }
+
+                var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
                 _lastExport = export;
                 _lastInferResult = result;
                 InferenceScore = result.score;
@@ -2523,6 +2555,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return false;
             }
 
+            if (string.Equals(RoleId, "Inspection", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(RoiId) ||
+                    !Regex.IsMatch(RoiId, @"^inspection-[1-4]$", RegexOptions.IgnoreCase))
+                {
+                    message = "Solo son válidos ROI de inspección: inspection-1..inspection-4.";
+                    return false;
+                }
+            }
+
             if (!roi.HasFitOk)
             {
                 message = $"Run fit_ok for ROI '{roi.Name}' before inference.";
@@ -2577,6 +2619,24 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 sb.Append(InferenceScore.Value > thr ? " → NG" : " → OK");
             }
             InferenceSummary = sb.ToString();
+        }
+
+        private static string NormalizeInspectionKey(string? key, int index)
+        {
+            var clamped = index;
+            if (clamped < 1) clamped = 1;
+            if (clamped > 4) clamped = 4;
+
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                var match = Regex.Match(key, @"inspection[\s_\-]?([1-4])", RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    return $"inspection-{match.Groups[1].Value}";
+                }
+            }
+
+            return $"inspection-{clamped}";
         }
 
         private void EnsureRoleRoi()

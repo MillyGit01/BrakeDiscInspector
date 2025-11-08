@@ -225,9 +225,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             int scorePercentile = 99,
             CancellationToken ct = default)
         {
+            var effectiveRoleId = NormalizeRoleId(roleId, roiId);
             var body = new
             {
-                role_id = roleId,
+                role_id = effectiveRoleId,
                 roi_id = roiId,
                 mm_per_px = mmPerPx,
                 ok_scores = okScores,

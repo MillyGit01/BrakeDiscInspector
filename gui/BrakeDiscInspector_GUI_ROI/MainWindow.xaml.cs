@@ -82,6 +82,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private string? _activeEditableRoiId = null;
         private bool _hasInspectionAnalysisTransform;
         private bool _isFirstImageForCurrentKey = true;
+        private bool _inspectionBaselineRestorePending;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
@@ -3318,6 +3319,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _mastersSeededForImage = false;              // seed again during auto Analyze Master
             _hasInspectionAnalysisTransform = false;
             _isFirstImageForCurrentKey = true;
+            _inspectionBaselineRestorePending = false;
             RemoveAllRoiAdorners();
             LogDebug($"[roi-diag] load image → seeded=false, mastersSeeded={_mastersSeededForImage}, imageKey='{_imageKeyForMasters}'");
             OnImageLoaded_SetCurrentSource(_imgSourceBI);
@@ -7616,6 +7618,11 @@ namespace BrakeDiscInspector_GUI_ROI
             _hasInspectionAnalysisTransform = true;
             _isFirstImageForCurrentKey = false;
 
+            if (_inspectionBaselineRestorePending)
+            {
+                RestoreInspectionBaselineForCurrentImage();
+            }
+
             await Dispatcher.InvokeAsync(() =>
             {
                 try
@@ -7861,13 +7868,17 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (string.IsNullOrWhiteSpace(_currentImageHash))
             {
+                _inspectionBaselineRestorePending = false;
                 return;
             }
 
             if (!_hasInspectionAnalysisTransform || _isFirstImageForCurrentKey)
             {
+                _inspectionBaselineRestorePending = true;
                 return;
             }
+
+            _inspectionBaselineRestorePending = false;
 
             if (_inspectionBaselinesByImage.TryGetValue(_currentImageHash, out var snapshot) && snapshot.Count > 0)
             {

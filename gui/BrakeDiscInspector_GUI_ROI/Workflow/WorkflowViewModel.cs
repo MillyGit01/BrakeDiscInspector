@@ -26,13 +26,6 @@ using Forms = System.Windows.Forms;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
-    public enum BatchCellStatus
-    {
-        Unknown,
-        Ok,
-        Nok
-    }
-
     public sealed class BatchRow : INotifyPropertyChanged
     {
         private BatchCellStatus _roi1 = BatchCellStatus.Unknown;

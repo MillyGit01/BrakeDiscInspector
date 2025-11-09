@@ -481,7 +481,13 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Batch Inspection" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
-        <Grid Margin="0" RowDefinitions="Auto,Auto,*,Auto">
+        <Grid Margin="0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal" Margin="8">
             <TextBox Width="420"
                      IsReadOnly="True"

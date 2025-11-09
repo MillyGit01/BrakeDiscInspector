@@ -3200,6 +3200,122 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             });
         }
 
+        private static BitmapSource NormalizeDpiTo96(BitmapSource src)
+        {
+            if (src == null)
+            {
+                throw new ArgumentNullException(nameof(src));
+            }
+
+            if (Math.Abs(src.DpiX - 96.0) < 0.01 && Math.Abs(src.DpiY - 96.0) < 0.01)
+            {
+                return src;
+            }
+
+            var converted = src.Format == PixelFormats.Bgra32 || src.Format == PixelFormats.Pbgra32
+                ? src
+                : new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+
+            if (converted.CanFreeze)
+            {
+                converted.Freeze();
+            }
+
+            int width = converted.PixelWidth;
+            int height = converted.PixelHeight;
+            int stride = (width * converted.Format.BitsPerPixel + 7) / 8;
+            var pixels = new byte[stride * height];
+            converted.CopyPixels(pixels, stride, 0);
+
+            var writable = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
+            writable.WritePixels(new Int32Rect(0, 0, width, height), pixels, stride, 0);
+            writable.Freeze();
+            return writable;
+        }
+
+        private static BitmapSource DecodeImageTo96Dpi(byte[] bytes)
+        {
+            using var ms = new MemoryStream(bytes, writable: false);
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+            bmp.StreamSource = ms;
+            bmp.EndInit();
+            bmp.Freeze();
+            return NormalizeDpiTo96(bmp);
+        }
+
+        private static WriteableBitmap ApplyRedGreenPalette(BitmapSource grayLike, int cutoffPercent)
+        {
+            if (grayLike == null)
+            {
+                throw new ArgumentNullException(nameof(grayLike));
+            }
+
+            var gray = grayLike.Format == PixelFormats.Gray8
+                ? grayLike
+                : new FormatConvertedBitmap(grayLike, PixelFormats.Gray8, null, 0);
+
+            if (gray.CanFreeze)
+            {
+                gray.Freeze();
+            }
+
+            int width = gray.PixelWidth;
+            int height = gray.PixelHeight;
+            int strideGray = (width * gray.Format.BitsPerPixel + 7) / 8;
+            var grayBuffer = new byte[strideGray * height];
+            gray.CopyPixels(grayBuffer, strideGray, 0);
+
+            var output = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
+            int strideOut = (width * output.Format.BitsPerPixel + 7) / 8;
+            var outBuffer = new byte[strideOut * height];
+
+            int cutoffByte = Math.Clamp((int)(cutoffPercent * 255 / 100.0), 0, 255);
+
+            for (int y = 0; y < height; y++)
+            {
+                int grayRow = y * strideGray;
+                int outRow = y * strideOut;
+                for (int x = 0; x < width; x++)
+                {
+                    byte value = grayBuffer[grayRow + x];
+                    int offset = outRow + x * 4;
+
+                    if (value == 0)
+                    {
+                        outBuffer[offset + 0] = 0;
+                        outBuffer[offset + 1] = 0;
+                        outBuffer[offset + 2] = 0;
+                        outBuffer[offset + 3] = 0;
+                        continue;
+                    }
+
+                    byte alpha = value;
+
+                    if (value >= cutoffByte)
+                    {
+                        outBuffer[offset + 0] = 0;
+                        outBuffer[offset + 1] = 0;
+                        outBuffer[offset + 2] = alpha;
+                        outBuffer[offset + 3] = alpha;
+                    }
+                    else
+                    {
+                        outBuffer[offset + 0] = 0;
+                        outBuffer[offset + 1] = alpha;
+                        outBuffer[offset + 2] = 0;
+                        outBuffer[offset + 3] = alpha;
+                    }
+                }
+            }
+
+            output.WritePixels(new Int32Rect(0, 0, width, height), outBuffer, strideOut, 0);
+            output.Freeze();
+            return output;
+        }
+
         private void SetBatchBaseImage(string path)
         {
             InvokeOnUi(() =>
@@ -3212,7 +3328,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     bmp.UriSource = new Uri(path, UriKind.Absolute);
                     bmp.EndInit();
                     bmp.Freeze();
-                    BatchImageSource = bmp;
+                    BatchImageSource = NormalizeDpiTo96(bmp);
                 }
                 catch (Exception ex)
                 {
@@ -3245,104 +3361,49 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             InvokeOnUi(() =>
             {
-                using var ms = new MemoryStream(_lastHeatmapPngBytes);
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.StreamSource = ms;
-                bmp.EndInit();
-                bmp.Freeze();
-
-                BitmapSource source = bmp;
-                if (bmp.Format != PixelFormats.Bgra32)
+                try
                 {
-                    var converted = new FormatConvertedBitmap();
-                    converted.BeginInit();
-                    converted.Source = bmp;
-                    converted.DestinationFormat = PixelFormats.Bgra32;
-                    converted.EndInit();
-                    converted.Freeze();
-                    source = converted;
-                }
+                    var decoded = DecodeImageTo96Dpi(_lastHeatmapPngBytes);
+                    BitmapSource graySource = decoded;
+                    if (decoded.Format != PixelFormats.Gray8)
+                    {
+                        var converted = new FormatConvertedBitmap(decoded, PixelFormats.Gray8, null, 0);
+                        converted.Freeze();
+                        graySource = converted;
+                    }
 
-                var writable = new WriteableBitmap(source);
-                writable.Freeze();
-                _lastHeatmapBitmap = writable;
-                ApplyHeatmapCutoffCore();
+                    var writableGray = graySource as WriteableBitmap ?? new WriteableBitmap(graySource);
+                    writableGray.Freeze();
+                    _lastHeatmapBitmap = writableGray;
+                    UpdateHeatmapThreshold();
+                }
+                catch (Exception ex)
+                {
+                    GuiLog.Warn("[heatmap] failed to decode batch heatmap", ex);
+                    ClearBatchHeatmap();
+                }
             });
         }
 
         private void UpdateHeatmapThreshold()
         {
             HeatmapInfo = $"Cutoff: {HeatmapCutoffPercent}%";
-            ApplyHeatmapCutoff();
-        }
 
-        private void ApplyHeatmapCutoff()
-        {
-            InvokeOnUi(ApplyHeatmapCutoffCore);
-        }
-
-        private void ApplyHeatmapCutoffCore()
-        {
-            if (_lastHeatmapBitmap == null || HeatmapCutoffPercent <= 0)
+            if (_lastHeatmapBitmap == null)
             {
-                ClearBatchHeatmap();
+                BatchHeatmapSource = null;
                 return;
             }
 
-            var source = _lastHeatmapBitmap;
-            int bpp = (source.Format.BitsPerPixel + 7) / 8;
-            if (bpp <= 0)
+            try
             {
-                ClearBatchHeatmap();
-                return;
+                var colored = ApplyRedGreenPalette(_lastHeatmapBitmap, HeatmapCutoffPercent);
+                BatchHeatmapSource = colored;
             }
-
-            int stride = source.PixelWidth * bpp;
-            var buffer = new byte[source.PixelHeight * stride];
-            source.CopyPixels(buffer, stride, 0);
-
-            byte threshold = (byte)Math.Clamp((int)Math.Round(255 * HeatmapCutoffPercent / 100.0), 0, 255);
-            bool anyVisible = false;
-
-            for (int y = 0; y < source.PixelHeight; y++)
+            catch (Exception ex)
             {
-                int rowOffset = y * stride;
-                for (int x = 0; x < source.PixelWidth; x++)
-                {
-                    int idx = rowOffset + x * bpp;
-                    if (idx + 3 >= buffer.Length)
-                    {
-                        continue;
-                    }
-
-                    byte red = buffer[idx + 2];
-                    if (red < threshold)
-                    {
-                        buffer[idx + 3] = 0;
-                    }
-                    else
-                    {
-                        if (buffer[idx + 3] == 0)
-                        {
-                            buffer[idx + 3] = 255;
-                        }
-                        anyVisible = true;
-                    }
-                }
+                GuiLog.Warn("[heatmap] UpdateHeatmapThreshold failed", ex);
             }
-
-            if (!anyVisible)
-            {
-                ClearBatchHeatmap();
-                return;
-            }
-
-            var output = new WriteableBitmap(source.PixelWidth, source.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null);
-            output.WritePixels(new Int32Rect(0, 0, source.PixelWidth, source.PixelHeight), buffer, stride, 0);
-            output.Freeze();
-            BatchHeatmapSource = output;
         }
 
         private void ClearBatchHeatmap()

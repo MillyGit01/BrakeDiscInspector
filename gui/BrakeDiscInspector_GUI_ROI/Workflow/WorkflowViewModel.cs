@@ -3379,7 +3379,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
                 catch (Exception ex)
                 {
-                    GuiLog.Warn("[heatmap] failed to decode batch heatmap", ex);
+                    GuiLog.Error("[heatmap] failed to decode batch heatmap", ex);
                     ClearBatchHeatmap();
                 }
             });
@@ -3402,7 +3402,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             catch (Exception ex)
             {
-                GuiLog.Warn("[heatmap] UpdateHeatmapThreshold failed", ex);
+                GuiLog.Error("[heatmap] UpdateHeatmapThreshold failed", ex);
             }
         }
 

@@ -19,12 +19,96 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using BrakeDiscInspector_GUI_ROI;
 using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Models;
 using Forms = System.Windows.Forms;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
+    public enum BatchCellStatus
+    {
+        Unknown,
+        Ok,
+        Nok
+    }
+
+    public sealed class BatchRow : INotifyPropertyChanged
+    {
+        private BatchCellStatus _roi1 = BatchCellStatus.Unknown;
+        private BatchCellStatus _roi2 = BatchCellStatus.Unknown;
+        private BatchCellStatus _roi3 = BatchCellStatus.Unknown;
+        private BatchCellStatus _roi4 = BatchCellStatus.Unknown;
+
+        public BatchRow(string fullPath)
+        {
+            FullPath = fullPath;
+            FileName = Path.GetFileName(fullPath);
+        }
+
+        public string FileName { get; }
+        public string FullPath { get; }
+
+        public BatchCellStatus ROI1
+        {
+            get => _roi1;
+            set
+            {
+                if (_roi1 != value)
+                {
+                    _roi1 = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public BatchCellStatus ROI2
+        {
+            get => _roi2;
+            set
+            {
+                if (_roi2 != value)
+                {
+                    _roi2 = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public BatchCellStatus ROI3
+        {
+            get => _roi3;
+            set
+            {
+                if (_roi3 != value)
+                {
+                    _roi3 = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public BatchCellStatus ROI4
+        {
+            get => _roi4;
+            set
+            {
+                if (_roi4 != value)
+                {
+                    _roi4 = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+    }
+
     public sealed class WorkflowViewModel : INotifyPropertyChanged
     {
         private readonly BackendClient _client;
@@ -70,6 +154,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private RoiExportResult? _lastExport;
         private byte[]? _lastHeatmapBytes;
         private InferResult? _lastInferResult;
+        private readonly ObservableCollection<BatchRow> _batchRows = new();
+        private string? _batchFolder;
+        private bool _canStartBatch;
+        private string _batchSummary = string.Empty;
+        private string _batchStatus = string.Empty;
+        private ImageSource? _batchImageSource;
+        private ImageSource? _batchHeatmapSource;
+        private int _heatmapCutoffPercent = 50;
+        private string _heatmapInfo = "Cutoff: 50%";
+        private byte[]? _lastHeatmapPngBytes;
+        private WriteableBitmap? _lastHeatmapBitmap;
         private readonly Dictionary<InspectionRoiConfig, RoiDatasetAnalysis> _roiDatasetCache = new();
         private readonly Dictionary<InspectionRoiConfig, FitOkResult> _lastFitResultsByRoi = new();
         private readonly Dictionary<InspectionRoiConfig, CalibResult> _lastCalibResultsByRoi = new();
@@ -122,6 +217,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             RefreshDatasetCommand = CreateCommand(_ => RefreshDatasetAsync(), _ => !IsBusy);
             RefreshHealthCommand = CreateCommand(_ => RefreshHealthAsync(), _ => !IsBusy);
 
+            BrowseBatchFolderCommand = new AsyncCommand(_ =>
+            {
+                DoBrowseBatchFolder();
+                return Task.CompletedTask;
+            }, _ => !IsBusy);
+            StartBatchCommand = CreateCommand(_ => RunBatchAsync(), _ => CanStartBatch && !IsBusy);
+
             BrowseDatasetCommand = CreateCommand(_ => BrowseDatasetAsync(), _ => !IsBusy && SelectedInspectionRoi != null);
             TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
             CalibrateSelectedRoiCommand = CreateCommand(async _ => await CalibrateSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && CanCalibrateSelectedRoi());
@@ -129,6 +231,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var inferEnabledCommand = CreateCommand(_ => InferEnabledRoisAsync(), _ => !IsBusy && HasAnyEnabledInspectionRoi());
             EvaluateAllRoisCommand = inferEnabledCommand;
             InferEnabledRoisCommand = inferEnabledCommand;
+
+            UpdateCanStart();
+            UpdateHeatmapThreshold();
 
             AddRoiToDatasetOkCommand = new AsyncCommand(async param =>
             {
@@ -179,6 +284,116 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public ObservableCollection<DatasetSample> NgSamples { get; }
 
         public ObservableCollection<InspectionRoiConfig> InspectionRois { get; private set; } = new();
+
+        public ObservableCollection<BatchRow> BatchRows => _batchRows;
+
+        public string? BatchFolder
+        {
+            get => _batchFolder;
+            set
+            {
+                if (!string.Equals(_batchFolder, value, StringComparison.Ordinal))
+                {
+                    _batchFolder = value;
+                    OnPropertyChanged();
+                    UpdateCanStart();
+                }
+            }
+        }
+
+        public bool CanStartBatch
+        {
+            get => _canStartBatch;
+            private set
+            {
+                if (_canStartBatch != value)
+                {
+                    _canStartBatch = value;
+                    OnPropertyChanged();
+                    StartBatchCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public string BatchSummary
+        {
+            get => _batchSummary;
+            private set
+            {
+                if (!string.Equals(_batchSummary, value, StringComparison.Ordinal))
+                {
+                    _batchSummary = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string BatchStatus
+        {
+            get => _batchStatus;
+            private set
+            {
+                if (!string.Equals(_batchStatus, value, StringComparison.Ordinal))
+                {
+                    _batchStatus = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public ImageSource? BatchImageSource
+        {
+            get => _batchImageSource;
+            private set
+            {
+                if (!Equals(_batchImageSource, value))
+                {
+                    _batchImageSource = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public ImageSource? BatchHeatmapSource
+        {
+            get => _batchHeatmapSource;
+            private set
+            {
+                if (!Equals(_batchHeatmapSource, value))
+                {
+                    _batchHeatmapSource = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int HeatmapCutoffPercent
+        {
+            get => _heatmapCutoffPercent;
+            set
+            {
+                var clamped = Math.Clamp(value, 0, 100);
+                if (_heatmapCutoffPercent != clamped)
+                {
+                    _heatmapCutoffPercent = clamped;
+                    OnPropertyChanged();
+                    UpdateHeatmapThreshold();
+                }
+            }
+        }
+
+        public string HeatmapInfo
+        {
+            get => _heatmapInfo;
+            private set
+            {
+                if (!string.Equals(_heatmapInfo, value, StringComparison.Ordinal))
+                {
+                    _heatmapInfo = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public bool ShowMaster1Pattern
         {
@@ -650,6 +865,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand InferEnabledRoisCommand { get; }
         public AsyncCommand AddRoiToDatasetOkCommand { get; }
         public AsyncCommand AddRoiToDatasetNgCommand { get; }
+        public AsyncCommand BrowseBatchFolderCommand { get; }
+        public AsyncCommand StartBatchCommand { get; }
         public ICommand AddRoiToOkCommand { get; }
         public ICommand AddRoiToNgCommand { get; }
 
@@ -905,6 +1122,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 asyncAddNg.RaiseCanExecuteChanged();
             }
+            BrowseBatchFolderCommand?.RaiseCanExecuteChanged();
+            StartBatchCommand?.RaiseCanExecuteChanged();
         }
 
         private void UpdateSelectedRoiState()
@@ -2714,6 +2933,453 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return message;
+        }
+
+        private async Task RunBatchAsync()
+        {
+            EnsureRoleRoi();
+
+            var rows = GetBatchRowsSnapshot();
+            int total = rows.Count;
+
+            if (string.IsNullOrWhiteSpace(BatchFolder) || !Directory.Exists(BatchFolder) || total == 0)
+            {
+                UpdateBatchProgress(0, total);
+                SetBatchStatusSafe(total == 0 ? "No images to process." : "Folder not found.");
+                return;
+            }
+
+            var ensuredModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int processed = 0;
+            bool success = true;
+
+            UpdateBatchProgress(0, total);
+            SetBatchStatusSafe("Running...");
+
+            try
+            {
+                foreach (var row in rows)
+                {
+                    processed++;
+                    SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
+
+                    if (!File.Exists(row.FullPath))
+                    {
+                        _log($"[batch] file missing: '{row.FullPath}'");
+                        for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
+                        {
+                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                        }
+                        UpdateBatchProgress(processed, total);
+                        continue;
+                    }
+
+                    SetBatchBaseImage(row.FullPath);
+
+                    for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
+                    {
+                        var config = GetInspectionConfigByIndex(roiIndex);
+                        if (config == null)
+                        {
+                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            continue;
+                        }
+
+                        if (!config.Enabled)
+                        {
+                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            continue;
+                        }
+
+                        try
+                        {
+                            var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
+
+                            var resolvedRoiId = NormalizeInspectionKey(config.ModelKey, config.Index);
+                            if (!string.Equals(config.ModelKey, resolvedRoiId, StringComparison.Ordinal))
+                            {
+                                config.ModelKey = resolvedRoiId;
+                            }
+
+                            if (ensuredModels.Add(resolvedRoiId))
+                            {
+                                try
+                                {
+                                    await _client.EnsureFittedAsync(RoleId, resolvedRoiId, MmPerPx).ConfigureAwait(false);
+                                }
+                                catch (BackendMemoryNotFittedException ex)
+                                {
+                                    _log($"[batch] ensure_fitted missing roi='{resolvedRoiId}': {ex.Message}");
+                                    SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                                    continue;
+                                }
+                            }
+
+                            var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
+
+                            UpdateHeatmapFromResult(result);
+
+                            double decisionThreshold = result.threshold
+                                ?? config.CalibratedThreshold
+                                ?? config.ThresholdDefault;
+
+                            if (decisionThreshold <= 0 && LocalThreshold > 0)
+                            {
+                                decisionThreshold = LocalThreshold;
+                            }
+
+                            bool isNg = result.score > decisionThreshold;
+                            SetRowStatus(row, roiIndex, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
+                        }
+                        catch (Exception ex)
+                        {
+                            _log($"[batch] ROI{roiIndex} failed for '{row.FileName}': {ex.Message}");
+                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                        }
+                    }
+
+                    UpdateBatchProgress(processed, total);
+                }
+            }
+            catch (Exception ex)
+            {
+                success = false;
+                _log($"[batch] unexpected error: {ex.Message}");
+                SetBatchStatusSafe($"Error: {ex.Message}");
+            }
+
+            if (success)
+            {
+                _log($"[batch] completed processed={processed}/{total}");
+                SetBatchStatusSafe("Done.");
+            }
+        }
+
+        private void UpdateBatchProgress(int processed, int total)
+        {
+            string summary = total > 0
+                ? $"{total} images found · {processed}/{total} processed"
+                : "No images found";
+            SetBatchSummarySafe(summary);
+        }
+
+        private void SetBatchStatusSafe(string message)
+        {
+            InvokeOnUi(() => BatchStatus = message);
+        }
+
+        private void SetBatchSummarySafe(string summary)
+        {
+            InvokeOnUi(() => BatchSummary = summary);
+        }
+
+        private void UpdateCanStart()
+        {
+            var folder = _batchFolder;
+            bool canStart = !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder) && _batchRows.Count > 0;
+            CanStartBatch = canStart;
+        }
+
+        private void DoBrowseBatchFolder()
+        {
+            try
+            {
+                using var dlg = new Forms.FolderBrowserDialog
+                {
+                    Description = "Select image folder",
+                    UseDescriptionForTitle = true
+                };
+                var result = dlg.ShowDialog();
+                if (result == Forms.DialogResult.OK)
+                {
+                    BatchFolder = dlg.SelectedPath;
+                    LoadBatchListFromFolder(dlg.SelectedPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] browse failed: {ex.Message}");
+            }
+        }
+
+        private void LoadBatchListFromFolder(string dir)
+        {
+            try
+            {
+                var files = Directory.EnumerateFiles(dir)
+                    .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                             || p.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
+                             || p.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                InvokeOnUi(() =>
+                {
+                    _batchRows.Clear();
+                    foreach (var file in files)
+                    {
+                        _batchRows.Add(new BatchRow(file));
+                    }
+
+                    BatchSummary = files.Count == 0 ? "No images found" : $"{files.Count} images found";
+                    BatchStatus = string.Empty;
+                    BatchImageSource = null;
+                    ClearBatchHeatmap();
+                    UpdateCanStart();
+                });
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] load folder failed: {ex.Message}");
+            }
+        }
+
+        private List<BatchRow> GetBatchRowsSnapshot()
+        {
+            List<BatchRow>? snapshot = null;
+            InvokeOnUi(() => snapshot = _batchRows.ToList());
+            return snapshot ?? new List<BatchRow>();
+        }
+
+        private InspectionRoiConfig? GetInspectionConfigByIndex(int index)
+            => _inspectionRois?.FirstOrDefault(r => r.Index == index);
+
+        private RoiModel? GetInspectionModelByIndex(int index)
+            => index switch
+            {
+                1 => Inspection1,
+                2 => Inspection2,
+                3 => Inspection3,
+                4 => Inspection4,
+                _ => null
+            };
+
+        private void SetRowStatus(BatchRow row, int roiIndex, BatchCellStatus status)
+        {
+            if (row == null)
+            {
+                return;
+            }
+
+            InvokeOnUi(() =>
+            {
+                switch (roiIndex)
+                {
+                    case 1:
+                        row.ROI1 = status;
+                        break;
+                    case 2:
+                        row.ROI2 = status;
+                        break;
+                    case 3:
+                        row.ROI3 = status;
+                        break;
+                    case 4:
+                        row.ROI4 = status;
+                        break;
+                }
+            });
+        }
+
+        private void SetBatchBaseImage(string path)
+        {
+            InvokeOnUi(() =>
+            {
+                try
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.UriSource = new Uri(path, UriKind.Absolute);
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    BatchImageSource = bmp;
+                }
+                catch (Exception ex)
+                {
+                    _log($"[batch] image load failed: {ex.Message}");
+                    BatchImageSource = null;
+                }
+
+                ClearBatchHeatmap();
+            });
+        }
+
+        private void UpdateHeatmapFromResult(InferResult result)
+        {
+            if (result == null || string.IsNullOrWhiteSpace(result.heatmap_png_base64))
+            {
+                InvokeOnUi(ClearBatchHeatmap);
+                return;
+            }
+
+            try
+            {
+                _lastHeatmapPngBytes = Convert.FromBase64String(result.heatmap_png_base64);
+            }
+            catch (FormatException ex)
+            {
+                _log($"[batch] invalid heatmap payload: {ex.Message}");
+                InvokeOnUi(ClearBatchHeatmap);
+                return;
+            }
+
+            InvokeOnUi(() =>
+            {
+                using var ms = new MemoryStream(_lastHeatmapPngBytes);
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.StreamSource = ms;
+                bmp.EndInit();
+                bmp.Freeze();
+
+                BitmapSource source = bmp;
+                if (bmp.Format != PixelFormats.Bgra32)
+                {
+                    var converted = new FormatConvertedBitmap();
+                    converted.BeginInit();
+                    converted.Source = bmp;
+                    converted.DestinationFormat = PixelFormats.Bgra32;
+                    converted.EndInit();
+                    converted.Freeze();
+                    source = converted;
+                }
+
+                var writable = new WriteableBitmap(source);
+                writable.Freeze();
+                _lastHeatmapBitmap = writable;
+                ApplyHeatmapCutoffCore();
+            });
+        }
+
+        private void UpdateHeatmapThreshold()
+        {
+            HeatmapInfo = $"Cutoff: {HeatmapCutoffPercent}%";
+            ApplyHeatmapCutoff();
+        }
+
+        private void ApplyHeatmapCutoff()
+        {
+            InvokeOnUi(ApplyHeatmapCutoffCore);
+        }
+
+        private void ApplyHeatmapCutoffCore()
+        {
+            if (_lastHeatmapBitmap == null || HeatmapCutoffPercent <= 0)
+            {
+                ClearBatchHeatmap();
+                return;
+            }
+
+            var source = _lastHeatmapBitmap;
+            int bpp = (source.Format.BitsPerPixel + 7) / 8;
+            if (bpp <= 0)
+            {
+                ClearBatchHeatmap();
+                return;
+            }
+
+            int stride = source.PixelWidth * bpp;
+            var buffer = new byte[source.PixelHeight * stride];
+            source.CopyPixels(buffer, stride, 0);
+
+            byte threshold = (byte)Math.Clamp((int)Math.Round(255 * HeatmapCutoffPercent / 100.0), 0, 255);
+            bool anyVisible = false;
+
+            for (int y = 0; y < source.PixelHeight; y++)
+            {
+                int rowOffset = y * stride;
+                for (int x = 0; x < source.PixelWidth; x++)
+                {
+                    int idx = rowOffset + x * bpp;
+                    if (idx + 3 >= buffer.Length)
+                    {
+                        continue;
+                    }
+
+                    byte red = buffer[idx + 2];
+                    if (red < threshold)
+                    {
+                        buffer[idx + 3] = 0;
+                    }
+                    else
+                    {
+                        if (buffer[idx + 3] == 0)
+                        {
+                            buffer[idx + 3] = 255;
+                        }
+                        anyVisible = true;
+                    }
+                }
+            }
+
+            if (!anyVisible)
+            {
+                ClearBatchHeatmap();
+                return;
+            }
+
+            var output = new WriteableBitmap(source.PixelWidth, source.PixelHeight, source.DpiX, source.DpiY, PixelFormats.Bgra32, null);
+            output.WritePixels(new Int32Rect(0, 0, source.PixelWidth, source.PixelHeight), buffer, stride, 0);
+            output.Freeze();
+            BatchHeatmapSource = output;
+        }
+
+        private void ClearBatchHeatmap()
+        {
+            BatchHeatmapSource = null;
+            _lastHeatmapBitmap = null;
+            _lastHeatmapPngBytes = null;
+        }
+
+        private async Task<(byte[] Bytes, string FileName, string ShapeJson)> ExportRoiFromFileAsync(InspectionRoiConfig roiConfig, string fullPath)
+        {
+            if (roiConfig == null)
+            {
+                throw new ArgumentNullException(nameof(roiConfig));
+            }
+
+            var roiModel = GetInspectionModelByIndex(roiConfig.Index);
+            if (roiModel == null)
+            {
+                throw new InvalidOperationException($"ROI model missing for index {roiConfig.Index}.");
+            }
+
+            return await Task.Run(() =>
+            {
+                if (!BackendAPI.TryPrepareCanonicalRoi(fullPath, roiModel, out var payload, out var fileName, _log) || payload == null)
+                {
+                    throw new InvalidOperationException($"ROI export failed for '{fullPath}'.");
+                }
+
+                var shapeJson = payload.ShapeJson ?? string.Empty;
+                return (payload.PngBytes, fileName, shapeJson);
+            }).ConfigureAwait(false);
+        }
+
+        private static void InvokeOnUi(Action action)
+        {
+            if (action == null)
+            {
+                return;
+            }
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null)
+            {
+                action();
+                return;
+            }
+
+            if (dispatcher.CheckAccess())
+            {
+                action();
+            }
+            else
+            {
+                dispatcher.Invoke(action);
+            }
         }
 
         private void UpdateInferenceSummary()

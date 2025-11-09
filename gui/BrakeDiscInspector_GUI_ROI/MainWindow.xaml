@@ -513,22 +513,29 @@
             </Grid.ColumnDefinitions>
 
             <Grid x:Name="BatchGrid" Loaded="BatchGrid_Loaded">
-              <Image x:Name="BatchImage"
+              <!-- Imagen base -->
+              <Image x:Name="BaseImage"
                      Source="{Binding BatchImageSource}"
                      Stretch="Uniform"
                      HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      SnapsToDevicePixels="True"
-                     RenderOptions.BitmapScalingMode="HighQuality"/>
-              <Image x:Name="BatchHeatmap"
+                     RenderOptions.BitmapScalingMode="HighQuality"
+                     Panel.ZIndex="0"/>
+
+              <!-- Heatmap: ocupa exactamente el mismo rectángulo que BaseImage -->
+              <Image x:Name="HeatmapImage"
                      Source="{Binding BatchHeatmapSource}"
-                     Stretch="Uniform"
+                     Stretch="Fill"
+                     Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
+                     Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
                      HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      IsHitTestVisible="False"
                      Opacity="0.65"
                      SnapsToDevicePixels="True"
-                     RenderOptions.BitmapScalingMode="HighQuality"/>
+                     RenderOptions.BitmapScalingMode="HighQuality"
+                     Panel.ZIndex="1"/>
             </Grid>
 
             <StackPanel Grid.Column="1" Margin="8,0,0,0">

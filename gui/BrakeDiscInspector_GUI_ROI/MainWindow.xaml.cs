@@ -1659,7 +1659,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private bool _batchUiHandlersAttached;
         private DispatcherTimer? _batchDebounce;
-        private Action? _pendingBatchUiAction;
 
         // Cache of last gray heatmap to recolor on-the-fly
         private byte[]? _lastHeatmapGray;
@@ -6109,7 +6108,6 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BatchGrid_Loaded(object sender, RoutedEventArgs e)
         {
             AttachBatchUiHandlersOnce();
-            DebounceBatchUi(LogOverlayScale);
         }
 
         private void AttachBatchUiHandlersOnce()
@@ -6119,28 +6117,51 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            _batchUiHandlersAttached = true;
+
             if (BatchGrid != null)
             {
-                BatchGrid.SizeChanged -= OnBatchGridSizeChanged;
-                BatchGrid.SizeChanged += OnBatchGridSizeChanged;
+                BatchGrid.SizeChanged -= OnBatchAnySizeChanged;
+                BatchGrid.SizeChanged += OnBatchAnySizeChanged;
             }
 
-            if (BatchImage != null)
+            if (BaseImage != null)
             {
-                BatchImage.SizeChanged -= OnBatchImageSizeChanged;
-                BatchImage.SizeChanged += OnBatchImageSizeChanged;
+                BaseImage.SizeChanged -= OnBatchAnySizeChanged;
+                BaseImage.SizeChanged += OnBatchAnySizeChanged;
             }
 
-            if (BatchHeatmap != null)
+            if (HeatmapImage != null)
             {
-                BatchHeatmap.SizeChanged -= OnBatchHeatmapSizeChanged;
-                BatchHeatmap.SizeChanged += OnBatchHeatmapSizeChanged;
+                HeatmapImage.SizeChanged -= OnBatchAnySizeChanged;
+                HeatmapImage.SizeChanged += OnBatchAnySizeChanged;
             }
 
-            _batchUiHandlersAttached = true;
+            Dispatcher.InvokeAsync(() =>
+            {
+                if (!EnsureBatchLayoutReady())
+                {
+                    return;
+                }
+
+                UpdateHeatmapClip();
+                LogOverlayScale();
+            }, DispatcherPriority.Background);
+
             UILog("[heatmap:UI] handlers attached");
-            DebounceBatchUi(LogOverlayScale);
         }
+
+        private void OnBatchAnySizeChanged(object? s, SizeChangedEventArgs e)
+            => DebounceBatchUi(() =>
+            {
+                if (!EnsureBatchLayoutReady())
+                {
+                    return;
+                }
+
+                UpdateHeatmapClip();
+                LogOverlayScale();
+            });
 
         private void DebounceBatchUi(Action act)
         {
@@ -6149,81 +6170,60 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            _pendingBatchUiAction = act;
-
             _batchDebounce ??= new DispatcherTimer(DispatcherPriority.Background)
             {
                 Interval = TimeSpan.FromMilliseconds(33)
             };
 
-            _batchDebounce.Tick -= BatchDebounceOnTick;
-            _batchDebounce.Tick += BatchDebounceOnTick;
+            void OnDebounceTick(object? sender, EventArgs args)
+            {
+                if (_batchDebounce == null)
+                {
+                    return;
+                }
+
+                _batchDebounce.Stop();
+                _batchDebounce.Tick -= OnDebounceTick;
+                act();
+            }
+
+            _batchDebounce.Tick -= OnDebounceTick;
+            _batchDebounce.Tick += OnDebounceTick;
             _batchDebounce.Stop();
             _batchDebounce.Start();
         }
 
-        private void BatchDebounceOnTick(object? sender, EventArgs e)
-        {
-            if (_batchDebounce == null)
-            {
-                return;
-            }
-
-            _batchDebounce.Stop();
-            _batchDebounce.Tick -= BatchDebounceOnTick;
-
-            var action = _pendingBatchUiAction;
-            _pendingBatchUiAction = null;
-            action?.Invoke();
-        }
-
-        private void OnBatchGridSizeChanged(object? sender, SizeChangedEventArgs e)
-        {
-            DebounceBatchUi(LogOverlayScale);
-        }
-
-        private void OnBatchImageSizeChanged(object? sender, SizeChangedEventArgs e)
-        {
-            DebounceBatchUi(LogOverlayScale);
-        }
-
-        private void OnBatchHeatmapSizeChanged(object? sender, SizeChangedEventArgs e)
-        {
-            DebounceBatchUi(LogOverlayScale);
-        }
-
         private bool EnsureBatchLayoutReady()
         {
-            if (BatchGrid == null || BatchImage == null || BatchHeatmap == null)
+            if (BaseImage == null)
             {
-                UILog("[heatmap:UI] postponed: Batch controls not ready");
+                UILog("[heatmap:UI] postponed: BaseImage control not ready");
                 return false;
             }
 
-            if (BatchImage.ActualWidth <= 0 || BatchImage.ActualHeight <= 0 ||
-                BatchHeatmap.ActualWidth <= 0 || BatchHeatmap.ActualHeight <= 0 ||
-                BatchGrid.ActualWidth <= 0 || BatchGrid.ActualHeight <= 0)
+            if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0)
             {
-                UILog("[heatmap:UI] postponed: Actual size not ready (some Actual==0)");
+                UILog("[heatmap:UI] postponed: BaseImage Actual size not ready");
                 return false;
             }
 
             return true;
         }
 
-        private void LogDpiScale(string tag)
+        private void UpdateHeatmapClip()
         {
-            try
+            if (BaseImage == null || HeatmapImage == null)
             {
-                var src = PresentationSource.FromVisual(this);
-                if (src?.CompositionTarget != null)
-                {
-                    var m = src.CompositionTarget.TransformToDevice;
-                    UILog($"[heatmap:UI] DPI-scale({tag})=({m.M11:0.###},{m.M22:0.###})");
-                }
+                return;
             }
-            catch
+
+            if (BaseImage.ActualWidth > 0 && BaseImage.ActualHeight > 0)
             {
+                HeatmapImage.Clip = new RectangleGeometry(new Rect(0, 0, BaseImage.ActualWidth, BaseImage.ActualHeight));
+            }
+            else
+            {
+                HeatmapImage.Clip = null;
             }
         }
 
@@ -6231,21 +6231,26 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             try
             {
-                if (!EnsureBatchLayoutReady())
+                if (BaseImage == null || HeatmapImage == null)
                 {
+                    UILog("[heatmap:UI] controls not ready for logging");
                     return;
                 }
 
-                UILog($"[heatmap:UI] grid actual={BatchGrid.ActualWidth:0.##}x{BatchGrid.ActualHeight:0.##}");
-                LogDpiScale("grid");
+                var src = PresentationSource.FromVisual(this);
+                if (src?.CompositionTarget != null)
+                {
+                    var m = src.CompositionTarget.TransformToDevice;
+                    UILog($"[heatmap:UI] DPI-scale=({m.M11:0.###},{m.M22:0.###})");
+                }
 
-                double awImg = BatchImage.ActualWidth, ahImg = BatchImage.ActualHeight;
-                double awHm = BatchHeatmap.ActualWidth, ahHm = BatchHeatmap.ActualHeight;
+                double awImg = BaseImage.ActualWidth, ahImg = BaseImage.ActualHeight;
+                double awHm = HeatmapImage.ActualWidth, ahHm = HeatmapImage.ActualHeight;
 
                 int pwImg = 0, phImg = 0, pwHm = 0, phHm = 0;
                 double dpiXImg = 96, dpiYImg = 96, dpiXHm = 96, dpiYHm = 96;
 
-                if (BatchImage.Source is BitmapSource bi)
+                if (BaseImage.Source is BitmapSource bi)
                 {
                     pwImg = bi.PixelWidth;
                     phImg = bi.PixelHeight;
@@ -6253,7 +6258,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     dpiYImg = bi.DpiY;
                 }
 
-                if (BatchHeatmap.Source is BitmapSource bh)
+                if (HeatmapImage.Source is BitmapSource bh)
                 {
                     pwHm = bh.PixelWidth;
                     phHm = bh.PixelHeight;

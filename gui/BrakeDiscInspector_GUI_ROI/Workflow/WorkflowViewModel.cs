@@ -2115,15 +2115,61 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 ClearInferenceUi("[model] load manifest");
 
-                if (manifest.fit != null)
+                var manifestFit = manifest.fit;
+                var needsFit = manifestFit == null;
+
+                _lastFitResultsByRoi.Remove(roi);
+                FitSummary = string.Empty;
+
+                if (needsFit)
                 {
-                    _lastFitResultsByRoi[roi] = manifest.fit;
-                    FitSummary = $"Embeddings={manifest.fit.n_embeddings} Coreset={manifest.fit.coreset_size} TokenShape=[{string.Join(',', manifest.fit.token_shape ?? Array.Empty<int>())}]";
+                    if (await EnsureFitEndpointAsync().ConfigureAwait(false))
+                    {
+                        var okPaths = OkSamples?
+                            .Where(s => !s.IsNg
+                                        && s.Metadata != null
+                                        && !string.IsNullOrWhiteSpace(s.Metadata.roi_id)
+                                        && string.Equals(
+                                            NormalizeInspectionKeyFromMetadata(s.Metadata.roi_id) ?? string.Empty,
+                                            roi.ModelKey,
+                                            StringComparison.OrdinalIgnoreCase))
+                            .Select(s => s.ImagePath)
+                            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList()
+                            ?? new List<string>();
+
+                        if (okPaths.Count > 0)
+                        {
+                            try
+                            {
+                                _log($"[fit] auto-fit tras LoadModel → {okPaths.Count} OK samples, roi={roi.ModelKey}");
+                                var fit = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okPaths, roi.TrainMemoryFit)
+                                                       .ConfigureAwait(false);
+
+                                _lastFitResultsByRoi[roi] = fit;
+                                FitSummary = $"Embeddings={fit.n_embeddings} Coreset={fit.coreset_size} TokenShape=[{string.Join(',', fit.token_shape ?? Array.Empty<int>())}]";
+                                await Application.Current.Dispatcher.InvokeAsync(() => roi.HasFitOk = true);
+                            }
+                            catch (Exception ex)
+                            {
+                                _log($"[fit] auto-fit tras LoadModel falló: {ex.Message}");
+                            }
+                        }
+                        else
+                        {
+                            _log("[fit] auto-fit omitido: no hay OK samples para este ROI.");
+                        }
+                    }
+                    else
+                    {
+                        _log("[fit] auto-fit omitido: backend sin endpoint /fit_ok disponible.");
+                    }
                 }
                 else
                 {
-                    _lastFitResultsByRoi.Remove(roi);
-                    FitSummary = string.Empty;
+                    _lastFitResultsByRoi[roi] = manifestFit;
+                    FitSummary = $"Embeddings={manifestFit.n_embeddings} Coreset={manifestFit.coreset_size} TokenShape=[{string.Join(',', manifestFit.token_shape ?? Array.Empty<int>())}]";
                 }
 
                 if (manifest.calibration != null)
@@ -2637,6 +2683,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return $"inspection-{clamped}";
+        }
+
+        private static string? NormalizeInspectionKeyFromMetadata(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            var match = Regex.Match(key, @"inspection[\s_\-]?([1-4])", RegexOptions.IgnoreCase);
+            if (match.Success)
+            {
+                return $"inspection-{match.Groups[1].Value}";
+            }
+
+            return null;
         }
 
         private void EnsureRoleRoi()

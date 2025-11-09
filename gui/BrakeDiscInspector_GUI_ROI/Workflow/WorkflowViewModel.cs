@@ -2519,8 +2519,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             catch (BackendMemoryNotFittedException)
             {
                 var okPaths = OkSamples?
-                    .Where(s => !s.IsNg && s.Metadata?.roi_id != null
-                        && string.Equals(s.Metadata.roi_id.Trim(), RoiId, StringComparison.OrdinalIgnoreCase))
+                    .Where(s => !s.IsNg && s.Metadata?.roi_id != null)
+                    .Where(s =>
+                    {
+                        var normalized = NormalizeInspectionKeyFromMetadata(s.Metadata!.roi_id);
+                        if (!string.IsNullOrWhiteSpace(normalized))
+                        {
+                            return string.Equals(normalized, resolvedRoiId, StringComparison.OrdinalIgnoreCase);
+                        }
+
+                        return string.Equals(s.Metadata.roi_id.Trim(), resolvedRoiId, StringComparison.OrdinalIgnoreCase);
+                    })
                     .Select(s => s.ImagePath)
                     .Where(path => !string.IsNullOrWhiteSpace(path))
                     .Distinct()

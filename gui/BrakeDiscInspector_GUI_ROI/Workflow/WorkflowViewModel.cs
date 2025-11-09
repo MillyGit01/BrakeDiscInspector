@@ -2436,14 +2436,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 RoiId = resolvedRoiId;
             }
 
-            try
+            async Task ApplyInferResultAsync(InferResult result)
             {
-                if (string.Equals(RoleId, "Inspection", StringComparison.OrdinalIgnoreCase))
-                {
-                    await _client.EnsureFittedAsync(RoleId, RoiId, MmPerPx, ct: ct).ConfigureAwait(false);
-                }
-
-                var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
                 _lastExport = export;
                 _lastInferResult = result;
                 InferenceScore = result.score;
@@ -2486,9 +2480,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
                 UpdateGlobalBadge();
             }
-            catch (HttpRequestException ex)
+
+            async Task ResetAfterFailureAsync(string message, string caption, string? extraLog = null)
             {
-                var message = ExtractBackendError(ex);
                 _lastExport = export;
                 _lastInferResult = null;
                 _lastHeatmapBytes = null;
@@ -2503,9 +2497,78 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 roi.LastResultOk = null;
                 roi.LastEvaluatedAt = DateTime.UtcNow;
                 InferenceSummary = $"Inference failed: {message}";
+                if (!string.IsNullOrWhiteSpace(extraLog))
+                {
+                    _log(extraLog);
+                }
                 _log($"[eval] FAILED idx={roi.Index} key='{roi.ModelKey}' -> {message}");
-                await ShowMessageAsync(message, caption: "Inference error");
+                await ShowMessageAsync(message, caption);
                 UpdateGlobalBadge();
+            }
+
+            try
+            {
+                if (string.Equals(RoleId, "Inspection", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _client.EnsureFittedAsync(RoleId, RoiId, MmPerPx, ct: ct).ConfigureAwait(false);
+                }
+
+                var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
+                await ApplyInferResultAsync(result).ConfigureAwait(false);
+            }
+            catch (BackendMemoryNotFittedException)
+            {
+                var okPaths = OkSamples?
+                    .Where(s => !s.IsNg && s.Metadata?.roi_id != null
+                        && string.Equals(s.Metadata.roi_id.Trim(), RoiId, StringComparison.OrdinalIgnoreCase))
+                    .Select(s => s.ImagePath)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Distinct()
+                    .ToList() ?? new List<string>();
+
+                if (okPaths.Count == 0)
+                {
+                    await ResetAfterFailureAsync("Falta memoria OK para este ROI y no hay OK samples disponibles.", "Evaluate ROI").ConfigureAwait(false);
+                    return;
+                }
+
+                try
+                {
+                    await _client.FitOkAsync(RoleId, RoiId, MmPerPx, okPaths, memoryFit: false, ct).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    await ResetAfterFailureAsync("Error en fit_ok. Revisa los OK samples.", "Evaluate ROI", $"[fit_ok] error: {ex.Message}").ConfigureAwait(false);
+                    return;
+                }
+
+                try
+                {
+                    var retryResult = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
+                    await ApplyInferResultAsync(retryResult).ConfigureAwait(false);
+                }
+                catch (BackendBadRequestException brex)
+                {
+                    var detail = string.IsNullOrWhiteSpace(brex.Detail) ? brex.Message : brex.Detail!;
+                    await ResetAfterFailureAsync($"❌ Backend 400: {detail}", "Evaluate ROI", $"[/infer 400] {detail}").ConfigureAwait(false);
+                }
+                catch (HttpRequestException ex)
+                {
+                    var message = ExtractBackendError(ex);
+                    await ResetAfterFailureAsync(message, "Inference error").ConfigureAwait(false);
+                }
+
+                return;
+            }
+            catch (BackendBadRequestException brex)
+            {
+                var detail = string.IsNullOrWhiteSpace(brex.Detail) ? brex.Message : brex.Detail!;
+                await ResetAfterFailureAsync($"❌ Backend 400: {detail}", "Evaluate ROI", $"[/infer 400] {detail}").ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                var message = ExtractBackendError(ex);
+                await ResetAfterFailureAsync(message, "Inference error").ConfigureAwait(false);
             }
         }
 

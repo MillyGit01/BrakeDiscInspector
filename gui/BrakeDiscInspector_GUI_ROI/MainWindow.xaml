@@ -506,13 +506,13 @@
                        Text="{Binding BatchSummary}"/>
           </StackPanel>
 
-          <Grid x:Name="BatchGrid" Grid.Row="1" Margin="8">
+          <Grid Grid.Row="1" Margin="8">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="260"/>
             </Grid.ColumnDefinitions>
 
-            <Grid>
+            <Grid x:Name="BatchGrid" Loaded="BatchGrid_Loaded">
               <Image x:Name="BatchImage"
                      Source="{Binding BatchImageSource}"
                      Stretch="Uniform"

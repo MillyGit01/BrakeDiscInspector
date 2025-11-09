@@ -3316,17 +3316,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return output;
         }
 
+        private static void VmLog(string msg)
+        {
+            Debug.WriteLine(msg);
+            GuiLog.Info(msg);
+        }
+
         private static void LogImg(string tag, ImageSource? src)
         {
             try
             {
                 if (src is BitmapSource b)
                 {
-                    Debug.WriteLine($"[heatmap:{tag}] type={b.GetType().Name} px={b.PixelWidth}x{b.PixelHeight} dpi=({b.DpiX:0.##},{b.DpiY:0.##}) fmt={b.Format} frozen={b.IsFrozen}");
+                    VmLog($"[heatmap:{tag}] type={b.GetType().Name} px={b.PixelWidth}x{b.PixelHeight} dpi=({b.DpiX:0.##},{b.DpiY:0.##}) fmt={b.Format} frozen={b.IsFrozen}");
                 }
                 else
                 {
-                    Debug.WriteLine($"[heatmap:{tag}] src={(src == null ? "NULL" : src.GetType().Name)}");
+                    VmLog($"[heatmap:{tag}] src={(src == null ? "NULL" : src.GetType().Name)}");
                 }
             }
             catch
@@ -3339,10 +3345,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 var bytes = _lastHeatmapPngBytes?.Length ?? 0;
-                Debug.WriteLine($"[heatmap:{tag}] cutoff={HeatmapCutoffPercent}% bytes={bytes}");
+                VmLog($"[heatmap:{tag}] cutoff={HeatmapCutoffPercent}% bytes={bytes}");
                 if (_lastHeatmapBitmap != null)
                 {
-                    Debug.WriteLine($"[heatmap:{tag}] wb px={_lastHeatmapBitmap.PixelWidth}x{_lastHeatmapBitmap.PixelHeight} dpi=({_lastHeatmapBitmap.DpiX:0.##},{_lastHeatmapBitmap.DpiY:0.##})");
+                    VmLog($"[heatmap:{tag}] wb px={_lastHeatmapBitmap.PixelWidth}x{_lastHeatmapBitmap.PixelHeight} dpi=({_lastHeatmapBitmap.DpiX:0.##},{_lastHeatmapBitmap.DpiY:0.##})");
                 }
             }
             catch

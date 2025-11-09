@@ -506,7 +506,7 @@
                        Text="{Binding BatchSummary}"/>
           </StackPanel>
 
-          <Grid Grid.Row="1" Margin="8">
+          <Grid x:Name="BatchGrid" Grid.Row="1" Margin="8">
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="260"/>

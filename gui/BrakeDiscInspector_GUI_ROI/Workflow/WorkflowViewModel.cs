@@ -3316,6 +3316,40 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return output;
         }
 
+        private static void LogImg(string tag, ImageSource? src)
+        {
+            try
+            {
+                if (src is BitmapSource b)
+                {
+                    Debug.WriteLine($"[heatmap:{tag}] type={b.GetType().Name} px={b.PixelWidth}x{b.PixelHeight} dpi=({b.DpiX:0.##},{b.DpiY:0.##}) fmt={b.Format} frozen={b.IsFrozen}");
+                }
+                else
+                {
+                    Debug.WriteLine($"[heatmap:{tag}] src={(src == null ? "NULL" : src.GetType().Name)}");
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void LogHeatmapState(string tag)
+        {
+            try
+            {
+                var bytes = _lastHeatmapPngBytes?.Length ?? 0;
+                Debug.WriteLine($"[heatmap:{tag}] cutoff={HeatmapCutoffPercent}% bytes={bytes}");
+                if (_lastHeatmapBitmap != null)
+                {
+                    Debug.WriteLine($"[heatmap:{tag}] wb px={_lastHeatmapBitmap.PixelWidth}x{_lastHeatmapBitmap.PixelHeight} dpi=({_lastHeatmapBitmap.DpiX:0.##},{_lastHeatmapBitmap.DpiY:0.##})");
+                }
+            }
+            catch
+            {
+            }
+        }
+
         private void SetBatchBaseImage(string path)
         {
             InvokeOnUi(() =>
@@ -3328,7 +3362,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     bmp.UriSource = new Uri(path, UriKind.Absolute);
                     bmp.EndInit();
                     bmp.Freeze();
-                    BatchImageSource = NormalizeDpiTo96(bmp);
+                    var base96 = NormalizeDpiTo96(bmp);
+                    BatchImageSource = base96;
+                    LogImg("base:set", BatchImageSource);
                 }
                 catch (Exception ex)
                 {
@@ -3363,19 +3399,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 try
                 {
-                    var decoded = DecodeImageTo96Dpi(_lastHeatmapPngBytes);
-                    BitmapSource graySource = decoded;
-                    if (decoded.Format != PixelFormats.Gray8)
-                    {
-                        var converted = new FormatConvertedBitmap(decoded, PixelFormats.Gray8, null, 0);
-                        converted.Freeze();
-                        graySource = converted;
-                    }
-
-                    var writableGray = graySource as WriteableBitmap ?? new WriteableBitmap(graySource);
-                    writableGray.Freeze();
-                    _lastHeatmapBitmap = writableGray;
                     UpdateHeatmapThreshold();
+                    LogImg("hm:set-after-update", BatchHeatmapSource);
+                    LogHeatmapState("hm:after-update");
                 }
                 catch (Exception ex)
                 {
@@ -3389,7 +3415,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             HeatmapInfo = $"Cutoff: {HeatmapCutoffPercent}%";
 
-            if (_lastHeatmapBitmap == null)
+            if (_lastHeatmapPngBytes == null || _lastHeatmapPngBytes.Length == 0)
             {
                 BatchHeatmapSource = null;
                 return;
@@ -3397,8 +3423,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                var colored = ApplyRedGreenPalette(_lastHeatmapBitmap, HeatmapCutoffPercent);
-                BatchHeatmapSource = colored;
+                var decoded = DecodeImageTo96Dpi(_lastHeatmapPngBytes!);
+                _lastHeatmapBitmap = ApplyRedGreenPalette(decoded, HeatmapCutoffPercent);
+                BatchHeatmapSource = _lastHeatmapBitmap;
+                LogImg("hm:decoded96", decoded);
+                LogImg("hm:colored96", _lastHeatmapBitmap);
+                LogHeatmapState("hm:threshold");
             }
             catch (Exception ex)
             {

@@ -6055,6 +6055,24 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _loadedOnce = true;
 
+            if (BatchGrid != null)
+            {
+                BatchGrid.SizeChanged -= OnBatchGridSizeChanged;
+                BatchGrid.SizeChanged += OnBatchGridSizeChanged;
+            }
+
+            if (BatchImage != null)
+            {
+                BatchImage.SizeChanged -= OnBatchImageSizeChanged;
+                BatchImage.SizeChanged += OnBatchImageSizeChanged;
+            }
+
+            if (BatchHeatmap != null)
+            {
+                BatchHeatmap.SizeChanged -= OnBatchHeatmapSizeChanged;
+                BatchHeatmap.SizeChanged += OnBatchHeatmapSizeChanged;
+            }
+
             var tray = FindName("TopLeftTray") as ToolBarTray ?? FindVisualChildByName<ToolBarTray>(this, "TopLeftTray");
             if (tray != null)
             {
@@ -6092,6 +6110,80 @@ namespace BrakeDiscInspector_GUI_ROI
             _workflowViewModel?.RefreshDatasetCommand.Execute(null);
             _workflowViewModel?.RefreshHealthCommand.Execute(null);
             RefreshCreateButtonsEnabled();
+        }
+
+        private void OnBatchGridSizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            Debug.WriteLine($"[heatmap:UI] Grid Actual={BatchGrid.ActualWidth:0.##}x{BatchGrid.ActualHeight:0.##}");
+            LogDpiScale("grid");
+            LogOverlayScale();
+        }
+
+        private void OnBatchImageSizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            Debug.WriteLine($"[heatmap:UI] BaseImg Actual={BatchImage.ActualWidth:0.##}x{BatchImage.ActualHeight:0.##}");
+            LogOverlayScale();
+        }
+
+        private void OnBatchHeatmapSizeChanged(object? sender, SizeChangedEventArgs e)
+        {
+            Debug.WriteLine($"[heatmap:UI] Heatmap Actual={BatchHeatmap.ActualWidth:0.##}x{BatchHeatmap.ActualHeight:0.##}");
+            LogOverlayScale();
+        }
+
+        private void LogDpiScale(string tag)
+        {
+            try
+            {
+                var src = PresentationSource.FromVisual(this);
+                if (src?.CompositionTarget != null)
+                {
+                    var m = src.CompositionTarget.TransformToDevice;
+                    Debug.WriteLine($"[heatmap:UI] DPI-scale({tag})=({m.M11:0.###},{m.M22:0.###})");
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void LogOverlayScale()
+        {
+            try
+            {
+                double awImg = BatchImage.ActualWidth, ahImg = BatchImage.ActualHeight;
+                double awHm = BatchHeatmap.ActualWidth, ahHm = BatchHeatmap.ActualHeight;
+
+                int pwImg = 0, phImg = 0, pwHm = 0, phHm = 0;
+                double dpiXImg = 96, dpiYImg = 96, dpiXHm = 96, dpiYHm = 96;
+
+                if (BatchImage.Source is BitmapSource bi)
+                {
+                    pwImg = bi.PixelWidth; phImg = bi.PixelHeight; dpiXImg = bi.DpiX; dpiYImg = bi.DpiY;
+                }
+                if (BatchHeatmap.Source is BitmapSource bh)
+                {
+                    pwHm = bh.PixelWidth; phHm = bh.PixelHeight; dpiXHm = bh.DpiX; dpiYHm = bh.DpiY;
+                }
+
+                double sxImg = pwImg > 0 ? awImg / pwImg : 0;
+                double syImg = phImg > 0 ? ahImg / phImg : 0;
+                double sxHm = pwHm > 0 ? awHm / pwHm : 0;
+                double syHm = phHm > 0 ? ahHm / phHm : 0;
+
+                Debug.WriteLine($"[heatmap:UI] px base={pwImg}x{phImg} dpi=({dpiXImg:0.##},{dpiYImg:0.##}) scale≈({sxImg:0.###},{syImg:0.###})");
+                Debug.WriteLine($"[heatmap:UI] px heat={pwHm}x{phHm} dpi=({dpiXHm:0.##},{dpiYHm:0.##}) scale≈({sxHm:0.###},{syHm:0.###})");
+
+                double dx = Math.Abs(sxImg - sxHm);
+                double dy = Math.Abs(syImg - syHm);
+                if (dx > 0.01 || dy > 0.01)
+                {
+                    Debug.WriteLine($"[heatmap:UI][WARN] Escala distinta base vs heatmap: Δ≈({dx:0.###},{dy:0.###})");
+                }
+            }
+            catch
+            {
+            }
         }
 
         private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)

@@ -522,16 +522,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var root = doc.RootElement;
                 if (root.ValueKind == JsonValueKind.Object)
                 {
+                    if (root.TryGetProperty("error", out var errorEl))
+                    {
+                        var error = TryReadString(errorEl);
+                        if (!string.IsNullOrWhiteSpace(error))
+                        {
+                            return error;
+                        }
+                    }
+
                     if (root.TryGetProperty("detail", out var detailEl))
                     {
-                        if (detailEl.ValueKind == JsonValueKind.String)
+                        var detail = TryReadString(detailEl);
+                        if (!string.IsNullOrWhiteSpace(detail))
                         {
-                            return detailEl.GetString();
-                        }
-
-                        if (detailEl.ValueKind == JsonValueKind.Object && detailEl.TryGetProperty("message", out var messageEl) && messageEl.ValueKind == JsonValueKind.String)
-                        {
-                            return messageEl.GetString();
+                            return detail;
                         }
                     }
                 }
@@ -542,20 +547,42 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return raw;
+
+            static string? TryReadString(JsonElement element)
+            {
+                if (element.ValueKind == JsonValueKind.String)
+                {
+                    return element.GetString();
+                }
+
+                if (element.ValueKind == JsonValueKind.Object)
+                {
+                    if (element.TryGetProperty("message", out var messageEl) && messageEl.ValueKind == JsonValueKind.String)
+                    {
+                        return messageEl.GetString();
+                    }
+
+                    if (element.TryGetProperty("detail", out var detailEl) && detailEl.ValueKind == JsonValueKind.String)
+                    {
+                        return detailEl.GetString();
+                    }
+                }
+
+                return null;
+            }
         }
 
-        private static bool IsMemoryNotFitted(string? detail)
+        private static bool IsMemoryNotFitted(string? s)
         {
-            if (string.IsNullOrWhiteSpace(detail))
-            {
-                return false;
-            }
-
-            var lowered = detail.ToLowerInvariant();
-            return lowered.Contains("memory not fitted")
-                   || (lowered.Contains("memoria") && lowered.Contains("no") && lowered.Contains("prepar"))
-                   || (lowered.Contains("baseline") && lowered.Contains("missing"))
-                   || (lowered.Contains("memory") && lowered.Contains("not") && lowered.Contains("loaded"));
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var t = s.ToLowerInvariant();
+            if (t.Contains("memoria no encontrada")) return true;
+            if (t.Contains("ejecuta /fit_ok") || t.Contains("fit_ok primero")) return true;
+            if (t.Contains("memory not found")) return true;
+            if (t.Contains("run fit first") || t.Contains("run /fit_ok first")) return true;
+            if (t.Contains("no embeddings") || t.Contains("embeddings not found")) return true;
+            if (t.Contains("not fitted") || t.Contains("missing fit")) return true;
+            return false;
         }
 
         private static string GuessMediaType(string pathOrName)

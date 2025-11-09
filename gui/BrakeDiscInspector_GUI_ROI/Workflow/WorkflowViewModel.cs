@@ -172,6 +172,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             WriteIndented = true
         };
 
+        private static readonly HashSet<string> BatchImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".bmp",
+            ".tif",
+            ".tiff",
+            ".webp"
+        };
+
         public WorkflowViewModel(
             BackendClient client,
             DatasetManager datasetManager,
@@ -3097,34 +3108,49 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void LoadBatchListFromFolder(string dir)
         {
+            List<string> files;
             try
             {
-                var files = Directory.EnumerateFiles(dir)
-                    .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-                             || p.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)
-                             || p.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase))
+                _log($"[batch] dir={dir} exists={Directory.Exists(dir)}");
+                files = Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(p => BatchImageExtensions.Contains(Path.GetExtension(p)))
                     .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
+                for (int i = 0; i < Math.Min(12, files.Count); i++)
+                {
+                    _log($"[batch] file[{i}] {files[i]}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] load folder failed: {ex.Message}");
                 InvokeOnUi(() =>
                 {
                     _batchRows.Clear();
-                    foreach (var file in files)
-                    {
-                        _batchRows.Add(new BatchRow(file));
-                    }
-
-                    BatchSummary = files.Count == 0 ? "No images found" : $"{files.Count} images found";
+                    BatchSummary = $"error: {ex.Message}";
                     BatchStatus = string.Empty;
                     BatchImageSource = null;
                     ClearBatchHeatmap();
                     UpdateCanStart();
                 });
+                return;
             }
-            catch (Exception ex)
+
+            InvokeOnUi(() =>
             {
-                _log($"[batch] load folder failed: {ex.Message}");
-            }
+                _batchRows.Clear();
+                foreach (var file in files)
+                {
+                    _batchRows.Add(new BatchRow(file));
+                }
+
+                BatchSummary = files.Count == 0 ? $"no images in {dir}" : $"{files.Count} images found in {dir}";
+                BatchStatus = string.Empty;
+                BatchImageSource = null;
+                ClearBatchHeatmap();
+                UpdateCanStart();
+            });
         }
 
         private List<BatchRow> GetBatchRowsSnapshot()

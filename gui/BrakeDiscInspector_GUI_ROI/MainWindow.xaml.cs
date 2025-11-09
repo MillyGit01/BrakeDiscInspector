@@ -6219,7 +6219,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (BaseImage.ActualWidth > 0 && BaseImage.ActualHeight > 0)
             {
-                HeatmapImage.Clip = new RectangleGeometry(new Rect(0, 0, BaseImage.ActualWidth, BaseImage.ActualHeight));
+                HeatmapImage.Clip = new RectangleGeometry(new SWRect(0, 0, BaseImage.ActualWidth, BaseImage.ActualHeight));
             }
             else
             {

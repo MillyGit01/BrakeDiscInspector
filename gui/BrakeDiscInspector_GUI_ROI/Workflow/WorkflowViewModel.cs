@@ -3595,10 +3595,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 UpdateHeatmapThreshold();
+                GuiLog.Info($"[batch][hm:VM] set roiIdx={BatchHeatmapRoiIndex} bytes={_lastHeatmapPngBytes.Length}");
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[batch][hm] SetBatchHeatmapForRoi failed", ex);
+                GuiLog.Error("[batch][hm:VM] SetBatchHeatmapForRoi failed", ex);
             }
         }
 

@@ -5996,6 +5996,12 @@ namespace BrakeDiscInspector_GUI_ROI
                     SyncDrawToolFromViewModel();
                 });
             }
+            else if (string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchHeatmapSource), StringComparison.Ordinal)
+                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchImageSource), StringComparison.Ordinal)
+                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.ActiveInspectionRoiImageRectPx), StringComparison.Ordinal))
+            {
+                Dispatcher.InvokeAsync(RefreshBatchHeatmapPlacement, DispatcherPriority.Background);
+            }
         }
 
         private void WorkflowViewModelOnOverlayVisibilityChanged(object? sender, EventArgs e)
@@ -6131,6 +6137,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 BaseImage.SizeChanged += OnBatchAnySizeChanged;
             }
 
+            if (Overlay != null)
+            {
+                Overlay.SizeChanged -= OnBatchAnySizeChanged;
+                Overlay.SizeChanged += OnBatchAnySizeChanged;
+            }
+
             if (HeatmapImage != null)
             {
                 HeatmapImage.SizeChanged -= OnBatchAnySizeChanged;
@@ -6146,6 +6158,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 UpdateHeatmapClip();
                 LogOverlayScale();
+                RefreshBatchHeatmapPlacement();
             }, DispatcherPriority.Background);
 
             UILog("[heatmap:UI] handlers attached");
@@ -6161,6 +6174,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 UpdateHeatmapClip();
                 LogOverlayScale();
+                RefreshBatchHeatmapPlacement();
             });
 
         private void DebounceBatchUi(Action act)
@@ -6208,6 +6222,135 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             return true;
+        }
+
+        private bool EnsureBatchVisualReady()
+        {
+            if (BaseImage?.Source is not BitmapSource)
+            {
+                UILog("[batch][hm] postponed: BaseImage.Source no es BitmapSource");
+                return false;
+            }
+
+            if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0)
+            {
+                UILog("[batch][hm] postponed: BaseImage Actual==0");
+                return false;
+            }
+
+            if (Overlay == null || Overlay.ActualWidth <= 0 || Overlay.ActualHeight <= 0)
+            {
+                UILog("[batch][hm] postponed: Overlay size not ready");
+                return false;
+            }
+
+            return true;
+        }
+
+        private void PlaceHeatmapAtActiveRoi(BitmapSource hm, Int32Rect roiPx)
+        {
+            if (HeatmapImage == null)
+            {
+                return;
+            }
+
+            if (!EnsureBatchVisualReady())
+            {
+                return;
+            }
+
+            if (roiPx.Width <= 0 || roiPx.Height <= 0)
+            {
+                UILog($"[batch][hm] skip: ROI vacío roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height})");
+                HeatmapImage.Visibility = Visibility.Collapsed;
+                HeatmapImage.Source = null;
+                HeatmapImage.Width = 0;
+                HeatmapImage.Height = 0;
+                Canvas.SetLeft(HeatmapImage, 0);
+                Canvas.SetTop(HeatmapImage, 0);
+                return;
+            }
+
+            if (BaseImage?.Source is not BitmapSource baseBmp)
+            {
+                UILog("[batch][hm] postponed: BaseImage.Source no es BitmapSource");
+                HeatmapImage.Visibility = Visibility.Collapsed;
+                HeatmapImage.Source = null;
+                HeatmapImage.Width = 0;
+                HeatmapImage.Height = 0;
+                Canvas.SetLeft(HeatmapImage, 0);
+                Canvas.SetTop(HeatmapImage, 0);
+                return;
+            }
+
+            if (baseBmp.PixelWidth <= 0 || baseBmp.PixelHeight <= 0)
+            {
+                UILog("[batch][hm] skip: base bitmap sin dimensiones válidas");
+                HeatmapImage.Visibility = Visibility.Collapsed;
+                HeatmapImage.Source = null;
+                HeatmapImage.Width = 0;
+                HeatmapImage.Height = 0;
+                Canvas.SetLeft(HeatmapImage, 0);
+                Canvas.SetTop(HeatmapImage, 0);
+                return;
+            }
+
+            double sx = BaseImage.ActualWidth / baseBmp.PixelWidth;
+            double sy = BaseImage.ActualHeight / baseBmp.PixelHeight;
+
+            double roiW = roiPx.Width * sx;
+            double roiH = roiPx.Height * sy;
+            double roiL = roiPx.X * sx;
+            double roiT = roiPx.Y * sy;
+
+            HeatmapImage.Visibility = Visibility.Visible;
+            HeatmapImage.Source = hm;
+            HeatmapImage.Width = Math.Max(0, roiW);
+            HeatmapImage.Height = Math.Max(0, roiH);
+
+            Canvas.SetLeft(HeatmapImage, roiL);
+            Canvas.SetTop(HeatmapImage, roiT);
+
+            UILog($"[batch][hm] basePx={baseBmp.PixelWidth}x{baseBmp.PixelHeight} actual={BaseImage.ActualWidth:0}x{BaseImage.ActualHeight:0} " +
+                  $"scale≈({sx:0.###},{sy:0.###}) roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height}) " +
+                  $"roiScreen=({roiL:0.##},{roiT:0.##},{roiW:0.##},{roiH:0.##}) hmPx={hm.PixelWidth}x{hm.PixelHeight}");
+        }
+
+        private void RefreshBatchHeatmapPlacement()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.InvokeAsync(RefreshBatchHeatmapPlacement, DispatcherPriority.Background);
+                return;
+            }
+
+            if (HeatmapImage == null)
+            {
+                return;
+            }
+
+            var roiRect = ViewModel?.ActiveInspectionRoiImageRectPx;
+            if (ViewModel?.BatchHeatmapSource is BitmapSource hm && roiRect is Int32Rect roiPx)
+            {
+                PlaceHeatmapAtActiveRoi(hm, roiPx);
+                return;
+            }
+
+            if (ViewModel?.BatchHeatmapSource == null)
+            {
+                UILog("[batch][hm] cleared: no heatmap source");
+            }
+            else
+            {
+                UILog("[batch][hm] postponed: ROI no disponible para posicionar heatmap");
+            }
+
+            HeatmapImage.Visibility = Visibility.Collapsed;
+            HeatmapImage.Source = null;
+            HeatmapImage.Width = 0;
+            HeatmapImage.Height = 0;
+            Canvas.SetLeft(HeatmapImage, 0);
+            Canvas.SetTop(HeatmapImage, 0);
         }
 
         private void UpdateHeatmapClip()

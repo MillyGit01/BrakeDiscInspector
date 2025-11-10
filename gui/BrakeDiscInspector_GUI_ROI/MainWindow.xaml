@@ -523,19 +523,22 @@
                      RenderOptions.BitmapScalingMode="HighQuality"
                      Panel.ZIndex="0"/>
 
-              <!-- Heatmap: ocupa exactamente el mismo rectángulo que BaseImage -->
-              <Image x:Name="HeatmapImage"
-                     Source="{Binding BatchHeatmapSource}"
-                     Stretch="Fill"
-                     Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
-                     Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Center"
-                     IsHitTestVisible="False"
-                     Opacity="0.65"
-                     SnapsToDevicePixels="True"
-                     RenderOptions.BitmapScalingMode="HighQuality"
-                     Panel.ZIndex="1"/>
+              <!-- Canvas overlay exactamente encima del rectángulo visible de BaseImage -->
+              <Canvas x:Name="Overlay"
+                      Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
+                      Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsHitTestVisible="False"
+                      Panel.ZIndex="1">
+                <!-- Heatmap del ROI: lo posicionamos y escalamos desde código -->
+                <Image x:Name="HeatmapImage"
+                       Stretch="None"
+                       Opacity="0.65"
+                       Visibility="Collapsed"
+                       SnapsToDevicePixels="True"
+                       RenderOptions.BitmapScalingMode="HighQuality"/>
+              </Canvas>
             </Grid>
 
             <StackPanel Grid.Column="1" Margin="8,0,0,0">

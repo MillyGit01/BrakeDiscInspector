@@ -1658,6 +1658,7 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private bool _batchUiHandlersAttached;
+        private bool _batchVmHooked;
         private DispatcherTimer? _batchDebounce;
 
         // Cache of last gray heatmap to recolor on-the-fly
@@ -6113,6 +6114,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BatchGrid_Loaded(object sender, RoutedEventArgs e)
         {
+            HookBatchVmOnce();
             AttachBatchUiHandlersOnce();
         }
 
@@ -6162,6 +6164,44 @@ namespace BrakeDiscInspector_GUI_ROI
             }, DispatcherPriority.Background);
 
             UILog("[heatmap:UI] handlers attached");
+        }
+
+        private void HookBatchVmOnce()
+        {
+            if (_batchVmHooked)
+            {
+                return;
+            }
+
+            if (DataContext is not INotifyPropertyChanged inpc)
+            {
+                return;
+            }
+
+            _batchVmHooked = true;
+
+            inpc.PropertyChanged += (s, e) =>
+            {
+                try
+                {
+                    if (e.PropertyName == nameof(WorkflowViewModel.BatchHeatmapSource)
+                        || e.PropertyName == nameof(WorkflowViewModel.BatchHeatmapRoiIndex))
+                    {
+                        if (ViewModel?.BatchHeatmapSource is BitmapSource hm)
+                        {
+                            Dispatcher.InvokeAsync(() => PlaceHeatmapForRoi(hm), DispatcherPriority.Background);
+                        }
+                        else
+                        {
+                            Dispatcher.InvokeAsync(RefreshBatchHeatmapPlacement, DispatcherPriority.Background);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    GuiLog.Error("[batch][hm] property-changed", ex);
+                }
+            };
         }
 
         private void OnBatchAnySizeChanged(object? s, SizeChangedEventArgs e)
@@ -6242,7 +6282,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return true;
         }
 
-        private void PlaceHeatmapAtActiveRoi(BitmapSource hm, Int32Rect roiPx)
+        private void PlaceHeatmapForRoi(BitmapSource hm)
         {
             if (HeatmapImage == null)
             {
@@ -6254,39 +6294,54 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (roiPx.Width <= 0 || roiPx.Height <= 0)
+            if (DataContext is not WorkflowViewModel vm)
             {
-                UILog($"[batch][hm] skip: ROI vacío roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height})");
+                return;
+            }
+
+            void HideHeatmap()
+            {
                 HeatmapImage.Visibility = Visibility.Collapsed;
                 HeatmapImage.Source = null;
                 HeatmapImage.Width = 0;
                 HeatmapImage.Height = 0;
                 Canvas.SetLeft(HeatmapImage, 0);
                 Canvas.SetTop(HeatmapImage, 0);
+            }
+
+            int idx = vm.BatchHeatmapRoiIndex;
+            if (idx < 1 || idx > 4)
+            {
+                UILog($"[batch][hm] skip: índice ROI inválido ({idx}) para heatmap");
+                HideHeatmap();
+                return;
+            }
+
+            if (vm.GetInspectionRoiImageRectPx(idx) is not Int32Rect roiPx)
+            {
+                UILog($"[batch][hm] skip: ROI{idx} sin rectángulo en píxeles");
+                HideHeatmap();
+                return;
+            }
+
+            if (roiPx.Width <= 0 || roiPx.Height <= 0)
+            {
+                UILog($"[batch][hm] skip: ROI{idx} vacío roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height})");
+                HideHeatmap();
                 return;
             }
 
             if (BaseImage?.Source is not BitmapSource baseBmp)
             {
                 UILog("[batch][hm] postponed: BaseImage.Source no es BitmapSource");
-                HeatmapImage.Visibility = Visibility.Collapsed;
-                HeatmapImage.Source = null;
-                HeatmapImage.Width = 0;
-                HeatmapImage.Height = 0;
-                Canvas.SetLeft(HeatmapImage, 0);
-                Canvas.SetTop(HeatmapImage, 0);
+                HideHeatmap();
                 return;
             }
 
             if (baseBmp.PixelWidth <= 0 || baseBmp.PixelHeight <= 0)
             {
                 UILog("[batch][hm] skip: base bitmap sin dimensiones válidas");
-                HeatmapImage.Visibility = Visibility.Collapsed;
-                HeatmapImage.Source = null;
-                HeatmapImage.Width = 0;
-                HeatmapImage.Height = 0;
-                Canvas.SetLeft(HeatmapImage, 0);
-                Canvas.SetTop(HeatmapImage, 0);
+                HideHeatmap();
                 return;
             }
 
@@ -6306,6 +6361,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             Canvas.SetLeft(HeatmapImage, roiL);
             Canvas.SetTop(HeatmapImage, roiT);
+
+            GuiLog.Info($"[batch][hm] roiIdx={idx} roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height}) hmPx={hm.PixelWidth}x{hm.PixelHeight}");
 
             Dispatcher.InvokeAsync(() =>
             {
@@ -6329,10 +6386,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            var roiRect = ViewModel?.ActiveInspectionRoiImageRectPx;
-            if (ViewModel?.BatchHeatmapSource is BitmapSource hm && roiRect is Int32Rect roiPx)
+            if (ViewModel?.BatchHeatmapSource is BitmapSource hm)
             {
-                PlaceHeatmapAtActiveRoi(hm, roiPx);
+                PlaceHeatmapForRoi(hm);
                 return;
             }
 

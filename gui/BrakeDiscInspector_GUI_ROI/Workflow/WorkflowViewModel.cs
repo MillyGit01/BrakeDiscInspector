@@ -159,6 +159,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private double _batchPausePerRoiSeconds = 0.0;
         private byte[]? _lastHeatmapPngBytes;
         private WriteableBitmap? _lastHeatmapBitmap;
+        private int _batchHeatmapRoiIndex = 0;
         private readonly Dictionary<InspectionRoiConfig, RoiDatasetAnalysis> _roiDatasetCache = new();
         private readonly Dictionary<InspectionRoiConfig, FitOkResult> _lastFitResultsByRoi = new();
         private readonly Dictionary<InspectionRoiConfig, CalibResult> _lastCalibResultsByRoi = new();
@@ -367,6 +368,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (!Equals(_batchHeatmapSource, value))
                 {
                     _batchHeatmapSource = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int BatchHeatmapRoiIndex
+        {
+            get => _batchHeatmapRoiIndex;
+            private set
+            {
+                if (_batchHeatmapRoiIndex != value)
+                {
+                    _batchHeatmapRoiIndex = value;
                     OnPropertyChanged();
                 }
             }
@@ -795,6 +809,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             4 => Inspection4,
             _ => null
         };
+
+        public RoiModel? GetInspectionRoiByIndex(int idx)
+        {
+            return GetInspectionRoiModelByIndex(idx);
+        }
+
+        public Int32Rect? GetInspectionRoiImageRectPx(int idx)
+        {
+            var roi = GetInspectionRoiModelByIndex(idx);
+            return roi != null ? BuildImageRectPx(roi) : null;
+        }
 
         private RoiModel? GetActiveInspectionRoiModel()
         {
@@ -3201,7 +3226,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
-                            UpdateHeatmapFromResult(result);
+                            UpdateHeatmapFromResult(result, roiIndex);
 
                             double decisionThreshold = result.threshold
                                 ?? config.CalibratedThreshold
@@ -3562,7 +3587,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             });
         }
 
-        private void UpdateHeatmapFromResult(InferResult result)
+        public void SetBatchHeatmapForRoi(byte[]? heatmapPngBytes, int roiIndex)
+        {
+            BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex));
+            _lastHeatmapPngBytes = heatmapPngBytes ?? Array.Empty<byte>();
+
+            try
+            {
+                UpdateHeatmapThreshold();
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[batch][hm] SetBatchHeatmapForRoi failed", ex);
+            }
+        }
+
+        private void UpdateHeatmapFromResult(InferResult result, int roiIndex)
         {
             if (result == null || string.IsNullOrWhiteSpace(result.heatmap_png_base64))
             {
@@ -3572,29 +3612,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                _lastHeatmapPngBytes = Convert.FromBase64String(result.heatmap_png_base64);
+                var heatmapBytes = Convert.FromBase64String(result.heatmap_png_base64);
+
+                InvokeOnUi(() =>
+                {
+                    try
+                    {
+                        SetBatchHeatmapForRoi(heatmapBytes, roiIndex);
+                        LogImg("hm:set-after-update", BatchHeatmapSource);
+                        LogHeatmapState("hm:after-update");
+                    }
+                    catch (Exception ex)
+                    {
+                        GuiLog.Error("[heatmap] failed to decode batch heatmap", ex);
+                        ClearBatchHeatmap();
+                    }
+                });
             }
             catch (FormatException ex)
             {
                 _log($"[batch] invalid heatmap payload: {ex.Message}");
                 InvokeOnUi(ClearBatchHeatmap);
-                return;
             }
-
-            InvokeOnUi(() =>
-            {
-                try
-                {
-                    UpdateHeatmapThreshold();
-                    LogImg("hm:set-after-update", BatchHeatmapSource);
-                    LogHeatmapState("hm:after-update");
-                }
-                catch (Exception ex)
-                {
-                    GuiLog.Error("[heatmap] failed to decode batch heatmap", ex);
-                    ClearBatchHeatmap();
-                }
-            });
         }
 
         private void UpdateHeatmapThreshold()
@@ -3625,6 +3664,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void ClearBatchHeatmap()
         {
             BatchHeatmapSource = null;
+            BatchHeatmapRoiIndex = 0;
             _lastHeatmapBitmap = null;
             _lastHeatmapPngBytes = null;
         }

@@ -6111,6 +6111,21 @@ namespace BrakeDiscInspector_GUI_ROI
             RefreshCreateButtonsEnabled();
         }
 
+        private void BatchFile_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is TextBlock tb && tb.DataContext is BatchRow row && File.Exists(row.FullPath))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(row.FullPath) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    GuiLog.Warn($"[batch-ui] Failed to open '{row.FullPath}': {ex.Message}");
+                }
+            }
+        }
+
         // === BATCH HEATMAP OVERLAY (Batch Inspection tab) ===
         #region BatchHeatmapOverlay
         private void BatchGrid_Loaded(object sender, RoutedEventArgs e)

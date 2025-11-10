@@ -184,11 +184,14 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type w:DatasetPreviewItem}">
-                                                        <Border BorderBrush="#303030" BorderThickness="1" Margin="0,0,8,0">
+                                                        <Border BorderBrush="#303030" BorderThickness="1" Margin="0">
                                                             <Image Source="{Binding Thumbnail}"
-                                                                   Width="100"
-                                                                   Height="100"
-                                                                   Stretch="UniformToFill"/>
+                                                                   Width="120"
+                                                                   Height="90"
+                                                                   Margin="0,0,8,0"
+                                                                   Cursor="Hand"
+                                                                   Stretch="UniformToFill"
+                                                                   MouseLeftButtonUp="DatasetImage_Click"/>
                                                         </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
@@ -207,11 +210,14 @@
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate DataType="{x:Type w:DatasetPreviewItem}">
-                                                        <Border BorderBrush="#303030" BorderThickness="1" Margin="0,0,8,0">
+                                                        <Border BorderBrush="#303030" BorderThickness="1" Margin="0">
                                                             <Image Source="{Binding Thumbnail}"
-                                                                   Width="100"
-                                                                   Height="100"
-                                                                   Stretch="UniformToFill"/>
+                                                                   Width="120"
+                                                                   Height="90"
+                                                                   Margin="0,0,8,0"
+                                                                   Cursor="Hand"
+                                                                   Stretch="UniformToFill"
+                                                                   MouseLeftButtonUp="DatasetImage_Click"/>
                                                         </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>

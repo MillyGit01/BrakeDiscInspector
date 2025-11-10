@@ -6232,15 +6232,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 return false;
             }
 
-            if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0)
+            if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0
+                || Overlay == null || Overlay.ActualWidth <= 0 || Overlay.ActualHeight <= 0)
             {
-                UILog("[batch][hm] postponed: BaseImage Actual==0");
-                return false;
-            }
-
-            if (Overlay == null || Overlay.ActualWidth <= 0 || Overlay.ActualHeight <= 0)
-            {
-                UILog("[batch][hm] postponed: Overlay size not ready");
+                UILog("[batch][hm] postponed: visual not ready (Actual==0 o sin imagen)");
                 return false;
             }
 
@@ -6304,6 +6299,7 @@ namespace BrakeDiscInspector_GUI_ROI
             double roiT = roiPx.Y * sy;
 
             HeatmapImage.Visibility = Visibility.Visible;
+            HeatmapImage.Stretch = Stretch.Fill;
             HeatmapImage.Source = hm;
             HeatmapImage.Width = Math.Max(0, roiW);
             HeatmapImage.Height = Math.Max(0, roiH);
@@ -6311,9 +6307,13 @@ namespace BrakeDiscInspector_GUI_ROI
             Canvas.SetLeft(HeatmapImage, roiL);
             Canvas.SetTop(HeatmapImage, roiT);
 
-            UILog($"[batch][hm] basePx={baseBmp.PixelWidth}x{baseBmp.PixelHeight} actual={BaseImage.ActualWidth:0}x{BaseImage.ActualHeight:0} " +
-                  $"scale≈({sx:0.###},{sy:0.###}) roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height}) " +
-                  $"roiScreen=({roiL:0.##},{roiT:0.##},{roiW:0.##},{roiH:0.##}) hmPx={hm.PixelWidth}x{hm.PixelHeight}");
+            Dispatcher.InvokeAsync(() =>
+            {
+                UILog($"[batch][hm] basePx={baseBmp.PixelWidth}x{baseBmp.PixelHeight} actual={BaseImage.ActualWidth:0}x{BaseImage.ActualHeight:0} " +
+                      $"scale≈({sx:0.###},{sy:0.###}) roiPx=({roiPx.X},{roiPx.Y},{roiPx.Width},{roiPx.Height}) " +
+                      $"roiScreen=({roiL:0.##},{roiT:0.##},{roiW:0.##},{roiH:0.##}) hmPx={hm.PixelWidth}x{hm.PixelHeight} " +
+                      $"hmActual={HeatmapImage.ActualWidth:0}x{HeatmapImage.ActualHeight:0}");
+            }, DispatcherPriority.Render);
         }
 
         private void RefreshBatchHeatmapPlacement()
@@ -6419,7 +6419,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 double dx = Math.Abs(sxImg - sxHm);
                 double dy = Math.Abs(syImg - syHm);
-                if (dx > 0.01 || dy > 0.01)
+                bool isRoiOverlay = awHm > 0 && ahHm > 0 && (awHm + 0.5 < awImg || ahHm + 0.5 < ahImg);
+
+                if (!isRoiOverlay && (dx > 0.01 || dy > 0.01))
                 {
                     UILog($"[heatmap:UI][WARN] Escala distinta base vs heatmap: Δ≈({dx:0.###},{dy:0.###})");
                 }

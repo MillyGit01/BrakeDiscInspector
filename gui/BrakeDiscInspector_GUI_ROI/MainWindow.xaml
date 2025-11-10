@@ -523,7 +523,7 @@
                      RenderOptions.BitmapScalingMode="HighQuality"
                      Panel.ZIndex="0"/>
 
-              <!-- Canvas overlay exactamente encima del rectángulo visible de BaseImage -->
+              <!-- Overlay exactamente encima del rectángulo visible de BaseImage -->
               <Canvas x:Name="Overlay"
                       Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
                       Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
@@ -531,12 +531,13 @@
                       VerticalAlignment="Center"
                       IsHitTestVisible="False"
                       Panel.ZIndex="1">
-                <!-- Heatmap del ROI: lo posicionamos y escalamos desde código -->
+                <!-- Heatmap del ROI: se posiciona y escala desde código -->
                 <Image x:Name="HeatmapImage"
-                       Stretch="None"
+                       Stretch="Fill"
                        Opacity="0.65"
                        Visibility="Collapsed"
                        SnapsToDevicePixels="True"
+                       UseLayoutRounding="True"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
               </Canvas>
             </Grid>

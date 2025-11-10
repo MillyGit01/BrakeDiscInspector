@@ -486,6 +486,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal" Margin="8">
@@ -506,55 +507,57 @@
                        Text="{Binding BatchSummary}"/>
           </StackPanel>
 
-          <Grid Grid.Row="1" Margin="8">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="260"/>
-            </Grid.ColumnDefinitions>
+          <StackPanel Grid.Row="1" Margin="8" Orientation="Vertical">
+            <TextBlock Text="Heatmap cutoff (%)"/>
+            <Slider Minimum="0"
+                    Maximum="100"
+                    TickFrequency="5"
+                    IsSnapToTickEnabled="True"
+                    Value="{Binding HeatmapCutoffPercent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            <TextBlock Margin="0,8,0,8"
+                       Text="{Binding HeatmapInfo}"/>
 
-            <Grid x:Name="BatchGrid" Loaded="BatchGrid_Loaded">
-              <!-- Imagen base -->
-              <Image x:Name="BaseImage"
-                     Source="{Binding BatchImageSource}"
-                     Stretch="Uniform"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Center"
+            <TextBlock Text="Delay por ROI (segundos)"/>
+            <Slider Minimum="0"
+                    Maximum="10"
+                    TickFrequency="0.5"
+                    IsSnapToTickEnabled="True"
+                    Value="{Binding BatchPausePerRoiSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+            <TextBlock Margin="0,4,0,0"
+                       Text="{Binding BatchPausePerRoiSeconds, StringFormat='Delay: {0:0.0}s'}"/>
+          </StackPanel>
+
+          <Grid Grid.Row="2" Margin="8" x:Name="BatchGrid" Loaded="BatchGrid_Loaded">
+            <!-- Imagen base -->
+            <Image x:Name="BaseImage"
+                   Source="{Binding BatchImageSource}"
+                   Stretch="Uniform"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   SnapsToDevicePixels="True"
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   Panel.ZIndex="0"/>
+
+            <!-- Overlay exactamente encima del rectángulo visible de BaseImage -->
+            <Canvas x:Name="Overlay"
+                    Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
+                    Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsHitTestVisible="False"
+                    Panel.ZIndex="1">
+              <!-- Heatmap del ROI: se posiciona y escala desde código -->
+              <Image x:Name="HeatmapImage"
+                     Stretch="Fill"
+                     Opacity="0.65"
+                     Visibility="Collapsed"
                      SnapsToDevicePixels="True"
-                     RenderOptions.BitmapScalingMode="HighQuality"
-                     Panel.ZIndex="0"/>
-
-              <!-- Overlay exactamente encima del rectángulo visible de BaseImage -->
-              <Canvas x:Name="Overlay"
-                      Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
-                      Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center"
-                      IsHitTestVisible="False"
-                      Panel.ZIndex="1">
-                <!-- Heatmap del ROI: se posiciona y escala desde código -->
-                <Image x:Name="HeatmapImage"
-                       Stretch="Fill"
-                       Opacity="0.65"
-                       Visibility="Collapsed"
-                       SnapsToDevicePixels="True"
-                       UseLayoutRounding="True"
-                       RenderOptions.BitmapScalingMode="HighQuality"/>
-              </Canvas>
-            </Grid>
-
-            <StackPanel Grid.Column="1" Margin="8,0,0,0">
-              <TextBlock Text="Heatmap cutoff (%)"/>
-              <Slider Minimum="0"
-                      Maximum="100"
-                      TickFrequency="5"
-                      IsSnapToTickEnabled="True"
-                      Value="{Binding HeatmapCutoffPercent, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-              <TextBlock Margin="0,8,0,0"
-                         Text="{Binding HeatmapInfo}"/>
-            </StackPanel>
+                     UseLayoutRounding="True"
+                     RenderOptions.BitmapScalingMode="HighQuality"/>
+            </Canvas>
           </Grid>
 
-          <DataGrid Grid.Row="2"
+          <DataGrid Grid.Row="3"
                     Margin="8"
                     ItemsSource="{Binding BatchRows}"
                     AutoGenerateColumns="False"
@@ -663,7 +666,7 @@
             </DataGrid.Columns>
           </DataGrid>
 
-          <TextBlock Grid.Row="3"
+          <TextBlock Grid.Row="4"
                      Margin="8"
                      Text="{Binding BatchStatus}"/>
         </Grid>

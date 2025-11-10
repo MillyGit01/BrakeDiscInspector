@@ -156,6 +156,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private ImageSource? _batchHeatmapSource;
         private int _heatmapCutoffPercent = 50;
         private string _heatmapInfo = "Cutoff: 50%";
+        private double _batchPausePerRoiSeconds = 0.0;
         private byte[]? _lastHeatmapPngBytes;
         private WriteableBitmap? _lastHeatmapBitmap;
         private readonly Dictionary<InspectionRoiConfig, RoiDatasetAnalysis> _roiDatasetCache = new();
@@ -394,6 +395,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (!string.Equals(_heatmapInfo, value, StringComparison.Ordinal))
                 {
                     _heatmapInfo = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public double BatchPausePerRoiSeconds
+        {
+            get => _batchPausePerRoiSeconds;
+            set
+            {
+                var clamped = Math.Min(10.0, Math.Max(0.0, value));
+                if (Math.Abs(_batchPausePerRoiSeconds - clamped) > 1e-6)
+                {
+                    _batchPausePerRoiSeconds = clamped;
                     OnPropertyChanged();
                 }
             }
@@ -3156,6 +3171,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                         try
                         {
+                            var delayMs = (int)Math.Round(BatchPausePerRoiSeconds * 1000.0, MidpointRounding.AwayFromZero);
+                            if (delayMs > 0)
+                            {
+                                await Task.Delay(delayMs).ConfigureAwait(false);
+                            }
+
                             var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
 
                             var resolvedRoiId = NormalizeInspectionKey(config.ModelKey, config.Index);

@@ -3595,11 +3595,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 UpdateHeatmapThreshold();
-                GuiLog.Info($"[batch][hm:VM] set roiIdx={BatchHeatmapRoiIndex} bytes={_lastHeatmapPngBytes.Length}");
+                GuiLog.Info($"[batch-hm:VM] set roiIdx={BatchHeatmapRoiIndex} bytes={_lastHeatmapPngBytes.Length}");
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[batch][hm:VM] SetBatchHeatmapForRoi failed", ex);
+                GuiLog.Error("[batch-hm:VM] SetBatchHeatmapForRoi failed", ex);
             }
         }
 
@@ -3644,6 +3644,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (_lastHeatmapPngBytes == null || _lastHeatmapPngBytes.Length == 0)
             {
                 BatchHeatmapSource = null;
+                OnPropertyChanged(nameof(BatchHeatmapSource));
                 return;
             }
 
@@ -3652,6 +3653,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var decoded = DecodeImageTo96Dpi(_lastHeatmapPngBytes!);
                 _lastHeatmapBitmap = ApplyRedGreenPalette(decoded, HeatmapCutoffPercent);
                 BatchHeatmapSource = _lastHeatmapBitmap;
+                OnPropertyChanged(nameof(BatchHeatmapSource));
                 LogImg("hm:decoded96", decoded);
                 LogImg("hm:colored96", _lastHeatmapBitmap);
                 LogHeatmapState("hm:threshold");

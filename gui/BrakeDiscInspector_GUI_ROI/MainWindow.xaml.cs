@@ -2749,7 +2749,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     ExportCurrentRoiCanonicalAsync,
                     () => _currentImagePathWin,
                     AppendLog,
-                    ShowHeatmapOverlayAsync,
+                    ShowHeatmapAsync,
                     ClearHeatmapOverlay,
                     UpdateGlobalBadge,
                     SetActiveInspectionIndex,
@@ -4447,6 +4447,20 @@ namespace BrakeDiscInspector_GUI_ROI
             _lastIsNg = threshold.HasValue && score.Value > threshold.Value;
         }
 
+        private async Task ShowHeatmapAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)
+        {
+            try
+            {
+                await ShowHeatmapOverlayAsync(export, heatmapBytes, opacity).ConfigureAwait(false);
+
+                await Dispatcher.InvokeAsync(() => TryPlaceBatchHeatmap("[ui] ShowHeatmapAsync"), DispatcherPriority.Render);
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[ui] ShowHeatmapAsync failed", ex);
+            }
+        }
+
         private async Task ShowHeatmapOverlayAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)
         {
             await EnsureOverlayAlignedForHeatmapAsync().ConfigureAwait(false);
@@ -6000,7 +6014,7 @@ namespace BrakeDiscInspector_GUI_ROI
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchImageSource), StringComparison.Ordinal)
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.ActiveInspectionRoiImageRectPx), StringComparison.Ordinal))
             {
-                Dispatcher.InvokeAsync(() => TryUpdateBatchHeatmap($"vm-global:{e.PropertyName}"), DispatcherPriority.Background);
+                Dispatcher.InvokeAsync(() => TryPlaceBatchHeatmap($"vm-global:{e.PropertyName}"), DispatcherPriority.Background);
             }
         }
 
@@ -6131,14 +6145,14 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BatchGrid_Loaded(object sender, RoutedEventArgs e)
         {
             AttachBatchUiHandlersOnce();
-            TryUpdateBatchHeatmap("loaded");
+            TryPlaceBatchHeatmap("loaded");
         }
 
         private void BatchGrid_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             _batchUiHandlersAttached = false;
             AttachBatchUiHandlersOnce();
-            TryUpdateBatchHeatmap("dc-changed");
+            TryPlaceBatchHeatmap("dc-changed");
         }
 
         private void AttachBatchUiHandlersOnce()
@@ -6161,7 +6175,7 @@ namespace BrakeDiscInspector_GUI_ROI
                             e.PropertyName == nameof(WorkflowViewModel.HeatmapCutoffPercent))
                         {
                             Dispatcher.InvokeAsync(
-                                () => TryUpdateBatchHeatmap($"VM.{e.PropertyName}"),
+                                () => TryPlaceBatchHeatmap($"VM.{e.PropertyName}"),
                                 DispatcherPriority.Background);
                         }
                     }
@@ -6174,54 +6188,71 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (BaseImage != null)
             {
-                BaseImage.SizeChanged += (_, __) => TryUpdateBatchHeatmap("BaseImage.SizeChanged");
+                BaseImage.SizeChanged += (_, __) => TryPlaceBatchHeatmap("BaseImage.SizeChanged");
             }
 
             _batchUiHandlersAttached = true;
             GuiLog.Info("[batch-ui] AttachBatchUiHandlersOnce: handlers attached");
         }
 
-        private void TryUpdateBatchHeatmap(string reason)
+        private void TryPlaceBatchHeatmap(string reason)
         {
             try
             {
                 var vm = _batchVmCached ?? (BatchGrid?.DataContext as WorkflowViewModel);
                 if (vm == null)
                 {
-                    GuiLog.Warn($"[batch-ui] TryUpdateBatchHeatmap: VM not found (reason={reason})");
+                    GuiLog.Warn($"[batch-ui] TryPlaceBatchHeatmap: VM not found (reason={reason})");
                     return;
                 }
 
-                if (BaseImage == null || Overlay == null || HeatmapImage == null)
+                if (BaseImage == null || HeatmapImage == null)
                 {
-                    GuiLog.Warn("[batch-ui] Missing UI elements");
+                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: missing BaseImage/HeatmapImage");
                     return;
                 }
 
-                var baseSrc = BaseImage.Source as BitmapSource;
-                var hmSrc = vm.BatchHeatmapSource as BitmapSource;
-
-                if (baseSrc == null || hmSrc == null ||
-                    BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0 ||
-                    Overlay.ActualWidth <= 0 || Overlay.ActualHeight <= 0)
+                if (BaseImage.Source is not BitmapSource baseBmp)
                 {
-                    Dispatcher.BeginInvoke(
-                        new Action(() => TryUpdateBatchHeatmap("deferred")),
-                        DispatcherPriority.Background);
+                    HeatmapImage.Source = null;
+                    HeatmapImage.Visibility = Visibility.Collapsed;
+                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: base image source unavailable");
+                    return;
+                }
+
+                if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0)
+                {
+                    Dispatcher.InvokeAsync(() => TryPlaceBatchHeatmap("deferred"), DispatcherPriority.Background);
+                    return;
+                }
+
+                if (vm.BatchHeatmapSource is not BitmapSource hmSrc)
+                {
+                    HeatmapImage.Source = null;
+                    HeatmapImage.Visibility = Visibility.Collapsed;
                     return;
                 }
 
                 var rectPxOpt = vm.GetInspectionRoiImageRectPx(vm.BatchHeatmapRoiIndex);
                 if (rectPxOpt == null)
                 {
-                    HeatmapImage.Visibility = Visibility.Hidden;
-                    GuiLog.Warn("[batch-ui] ROI rect null -> hide heatmap");
+                    HeatmapImage.Source = null;
+                    HeatmapImage.Visibility = Visibility.Collapsed;
+                    GuiLog.Warn($"[batch-ui] TryPlaceBatchHeatmap: null rect for idx={vm.BatchHeatmapRoiIndex}");
                     return;
                 }
-                var rectPx = rectPxOpt.Value;
 
-                double scaleX = Overlay.ActualWidth / baseSrc.PixelWidth;
-                double scaleY = Overlay.ActualHeight / baseSrc.PixelHeight;
+                if (baseBmp.PixelWidth <= 0 || baseBmp.PixelHeight <= 0)
+                {
+                    HeatmapImage.Source = null;
+                    HeatmapImage.Visibility = Visibility.Collapsed;
+                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: invalid base bitmap size");
+                    return;
+                }
+
+                var rectPx = rectPxOpt.Value;
+                double scaleX = BaseImage.ActualWidth / baseBmp.PixelWidth;
+                double scaleY = BaseImage.ActualHeight / baseBmp.PixelHeight;
 
                 double left = rectPx.X * scaleX;
                 double top = rectPx.Y * scaleY;
@@ -6229,22 +6260,17 @@ namespace BrakeDiscInspector_GUI_ROI
                 double h = Math.Max(1.0, rectPx.Height * scaleY);
 
                 HeatmapImage.Source = hmSrc;
-                HeatmapImage.Stretch = System.Windows.Media.Stretch.Fill;
                 HeatmapImage.Width = w;
                 HeatmapImage.Height = h;
                 Canvas.SetLeft(HeatmapImage, left);
                 Canvas.SetTop(HeatmapImage, top);
                 HeatmapImage.Visibility = Visibility.Visible;
 
-                Dispatcher.InvokeAsync(() =>
-                {
-                    GuiLog.Info($"[batch-ui] placed (reason={reason}) L={left:0.##} T={top:0.##} W={w:0.##} H={h:0.##} roiIdx={vm.BatchHeatmapRoiIndex} " +
-                                $"hmPx={hmSrc.PixelWidth}x{hmSrc.PixelHeight} hmActual={HeatmapImage.ActualWidth:0}x{HeatmapImage.ActualHeight:0}");
-                }, DispatcherPriority.Render);
+                GuiLog.Info($"[batch-ui] TryPlaceBatchHeatmap: {reason} idx={vm.BatchHeatmapRoiIndex} base=({baseBmp.PixelWidth}x{baseBmp.PixelHeight}) overlay=({BaseImage.ActualWidth:0.##}x{BaseImage.ActualHeight:0.##}) rect=({rectPx.X},{rectPx.Y},{rectPx.Width},{rectPx.Height}) placed=({left:0.##},{top:0.##},{w:0.##},{h:0.##})");
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[batch-ui] TryUpdateBatchHeatmap failed", ex);
+                GuiLog.Error("[batch-ui] TryPlaceBatchHeatmap failed", ex);
             }
         }
         #endregion

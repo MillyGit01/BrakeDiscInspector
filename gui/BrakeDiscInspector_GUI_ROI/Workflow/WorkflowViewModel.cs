@@ -3268,7 +3268,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         _log($"[batch] file missing: '{row.FullPath}'");
                         for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                         {
-                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                         }
                         UpdateBatchProgress(processed, total);
                         continue;
@@ -3284,15 +3284,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         var config = GetInspectionConfigByIndex(roiIndex);
                         if (config == null)
                         {
-                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                             continue;
                         }
 
+                        _log($"[batch] processing file='{row.FileName}' roiIdx={config.Index} enabled={config.Enabled}");
+
                         if (!config.Enabled)
                         {
-                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
+                            InvokeOnUi(ClearBatchHeatmap);
+                            _clearHeatmap();
+                            _log($"[batch] skip disabled ROI idx={config.Index} '{config.DisplayName}'");
                             continue;
                         }
+
+                        InvokeOnUi(() => BatchHeatmapRoiIndex = config.Index);
 
                         try
                         {
@@ -3320,14 +3327,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 catch (BackendMemoryNotFittedException ex)
                                 {
                                     _log($"[batch] ensure_fitted missing roi='{resolvedRoiId}': {ex.Message}");
-                                    SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                                    UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                                     continue;
                                 }
                             }
 
                             var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
-                            UpdateHeatmapFromResult(result, roiIndex);
+                            UpdateHeatmapFromResult(result, config.Index);
+                            if (!string.IsNullOrWhiteSpace(result.heatmap_png_base64))
+                            {
+                                var roiRectPx = GetInspectionRoiImageRectPx(config.Index);
+                                if (roiRectPx == null)
+                                {
+                                    InvokeOnUi(ClearBatchHeatmap);
+                                    _clearHeatmap();
+                                    _log($"[batch] roiRectPx is null for idx={config.Index}");
+                                }
+                                else
+                                {
+                                    _log($"[batch] place heatmap idx={config.Index} rect=({roiRectPx.Value.X},{roiRectPx.Value.Y},{roiRectPx.Value.Width},{roiRectPx.Value.Height}) cutoff={LocalThreshold:0.###}");
+                                }
+                            }
 
                             double decisionThreshold = result.threshold
                                 ?? config.CalibratedThreshold
@@ -3339,7 +3360,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             }
 
                             bool isNg = result.score > decisionThreshold;
-                            SetRowStatus(row, roiIndex, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
+                            UpdateBatchRowStatus(row, config.Index, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
                         }
                         catch (OperationCanceledException)
                         {
@@ -3348,7 +3369,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         catch (Exception ex)
                         {
                             _log($"[batch] ROI{roiIndex} failed for '{row.FileName}': {ex.Message}");
-                            SetRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                         }
                     }
 
@@ -3512,7 +3533,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _ => null
             };
 
-        private void SetRowStatus(BatchRow row, int roiIndex, BatchCellStatus status)
+        private void UpdateBatchRowStatus(BatchRow row, int roiIndex, BatchCellStatus status)
         {
             if (row == null)
             {

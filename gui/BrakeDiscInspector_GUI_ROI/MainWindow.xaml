@@ -17,6 +17,14 @@
     <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
       <Setter Property="TextElement.Foreground" Value="White"/>
     </Style>
+    <Style x:Key="IconOnlyButton" TargetType="Button">
+      <Setter Property="Width" Value="36"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="Margin" Value="8,0,0,0"/>
+      <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+    </Style>
   </Window.Resources>
 
   <Grid x:Name="RootGrid">
@@ -497,11 +505,28 @@
                     Margin="8,0,0,0"
                     Padding="12,4"
                     Command="{Binding BrowseBatchFolderCommand}"/>
-            <Button Content="Start Inspection"
-                    Margin="8,0,0,0"
-                    Padding="12,4"
-                    Command="{Binding StartBatchCommand}"
-                    IsEnabled="{Binding CanStartBatch}"/>
+
+            <!-- ▶ Play = Start/Resume -->
+            <Button Style="{StaticResource IconOnlyButton}"
+                    ToolTip="Play / Start or Resume"
+                    Command="{Binding StartBatchCommand}">
+              <TextBlock Text="▶" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Button>
+
+            <!-- ⏸ Pause -->
+            <Button Style="{StaticResource IconOnlyButton}"
+                    ToolTip="Pause"
+                    Command="{Binding PauseBatchCommand}">
+              <TextBlock Text="⏸" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Button>
+
+            <!-- ■ Stop -->
+            <Button Style="{StaticResource IconOnlyButton}"
+                    ToolTip="Stop"
+                    Command="{Binding StopBatchCommand}">
+              <TextBlock Text="■" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Button>
+
             <TextBlock Margin="12,0,0,0"
                        VerticalAlignment="Center"
                        Text="{Binding BatchSummary}"/>
@@ -567,7 +592,16 @@
                     CanUserAddRows="False"
                     RowHeaderWidth="0">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*"/>
+              <DataGridTemplateColumn Header="File" Width="*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding FileName}"
+                               Cursor="Hand"
+                               TextDecorations="Underline"
+                               MouseLeftButtonUp="BatchFile_Click"/>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="ROI 1" Width="70">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
@@ -576,15 +610,30 @@
                         <Style TargetType="Ellipse">
                           <Setter Property="Fill" Value="Gray"/>
                           <Style.Triggers>
-                            <DataTrigger Binding="{Binding ROI1}" Value="{x:Static workflow:BatchCellStatus.Ok}">
-                              <Setter Property="Fill" Value="LimeGreen"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI1}" Value="{x:Static workflow:BatchCellStatus.Nok}">
-                              <Setter Property="Fill" Value="Red"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI1}" Value="{x:Static workflow:BatchCellStatus.Unknown}">
+                            <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="False">
                               <Setter Property="Fill" Value="Gray"/>
                             </DataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[0].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI1}" Value="{x:Static workflow:BatchCellStatus.Ok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="LimeGreen"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[0].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI1}" Value="{x:Static workflow:BatchCellStatus.Nok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Red"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[0].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI1}" Value="{x:Static workflow:BatchCellStatus.Unknown}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Gray"/>
+                            </MultiDataTrigger>
                           </Style.Triggers>
                         </Style>
                       </Ellipse.Style>
@@ -600,15 +649,30 @@
                         <Style TargetType="Ellipse">
                           <Setter Property="Fill" Value="Gray"/>
                           <Style.Triggers>
-                            <DataTrigger Binding="{Binding ROI2}" Value="{x:Static workflow:BatchCellStatus.Ok}">
-                              <Setter Property="Fill" Value="LimeGreen"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI2}" Value="{x:Static workflow:BatchCellStatus.Nok}">
-                              <Setter Property="Fill" Value="Red"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI2}" Value="{x:Static workflow:BatchCellStatus.Unknown}">
+                            <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="False">
                               <Setter Property="Fill" Value="Gray"/>
                             </DataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[1].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI2}" Value="{x:Static workflow:BatchCellStatus.Ok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="LimeGreen"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[1].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI2}" Value="{x:Static workflow:BatchCellStatus.Nok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Red"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[1].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI2}" Value="{x:Static workflow:BatchCellStatus.Unknown}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Gray"/>
+                            </MultiDataTrigger>
                           </Style.Triggers>
                         </Style>
                       </Ellipse.Style>
@@ -624,15 +688,30 @@
                         <Style TargetType="Ellipse">
                           <Setter Property="Fill" Value="Gray"/>
                           <Style.Triggers>
-                            <DataTrigger Binding="{Binding ROI3}" Value="{x:Static workflow:BatchCellStatus.Ok}">
-                              <Setter Property="Fill" Value="LimeGreen"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI3}" Value="{x:Static workflow:BatchCellStatus.Nok}">
-                              <Setter Property="Fill" Value="Red"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI3}" Value="{x:Static workflow:BatchCellStatus.Unknown}">
+                            <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="False">
                               <Setter Property="Fill" Value="Gray"/>
                             </DataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[2].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI3}" Value="{x:Static workflow:BatchCellStatus.Ok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="LimeGreen"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[2].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI3}" Value="{x:Static workflow:BatchCellStatus.Nok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Red"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[2].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI3}" Value="{x:Static workflow:BatchCellStatus.Unknown}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Gray"/>
+                            </MultiDataTrigger>
                           </Style.Triggers>
                         </Style>
                       </Ellipse.Style>
@@ -648,15 +727,30 @@
                         <Style TargetType="Ellipse">
                           <Setter Property="Fill" Value="Gray"/>
                           <Style.Triggers>
-                            <DataTrigger Binding="{Binding ROI4}" Value="{x:Static workflow:BatchCellStatus.Ok}">
-                              <Setter Property="Fill" Value="LimeGreen"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI4}" Value="{x:Static workflow:BatchCellStatus.Nok}">
-                              <Setter Property="Fill" Value="Red"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding ROI4}" Value="{x:Static workflow:BatchCellStatus.Unknown}">
+                            <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="False">
                               <Setter Property="Fill" Value="Gray"/>
                             </DataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[3].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI4}" Value="{x:Static workflow:BatchCellStatus.Ok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="LimeGreen"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[3].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI4}" Value="{x:Static workflow:BatchCellStatus.Nok}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Red"/>
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding DataContext.InspectionRois[3].Enabled, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="True"/>
+                                <Condition Binding="{Binding ROI4}" Value="{x:Static workflow:BatchCellStatus.Unknown}"/>
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Fill" Value="Gray"/>
+                            </MultiDataTrigger>
                           </Style.Triggers>
                         </Style>
                       </Ellipse.Style>

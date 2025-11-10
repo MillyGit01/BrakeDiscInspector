@@ -147,6 +147,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private RoiExportResult? _lastExport;
         private byte[]? _lastHeatmapBytes;
         private InferResult? _lastInferResult;
+        private CancellationTokenSource? _batchCts;
+        private readonly ManualResetEventSlim _pauseGate = new(initialState: true);
+        private bool _isBatchRunning;
         private readonly ObservableCollection<BatchRow> _batchRows = new();
         private string? _batchFolder;
         private bool _canStartBatch;
@@ -228,7 +231,75 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 DoBrowseBatchFolder();
                 return Task.CompletedTask;
             }, _ => !IsBusy);
-            StartBatchCommand = CreateCommand(_ => RunBatchAsync(), _ => CanStartBatch && !IsBusy);
+            StartBatchCommand = new AsyncCommand(_ =>
+            {
+                if (_isBatchRunning)
+                {
+                    _pauseGate.Set();
+                    SetBatchStatusSafe("Running");
+                    UpdateBatchCommandStates();
+                    return Task.CompletedTask;
+                }
+
+                if (!CanStartBatch || IsBusy)
+                {
+                    return Task.CompletedTask;
+                }
+
+                var snapshot = GetBatchRowsSnapshot();
+                InvokeOnUi(() =>
+                {
+                    _batchRows.Clear();
+                    foreach (var row in snapshot)
+                    {
+                        row.ROI1 = BatchCellStatus.Unknown;
+                        row.ROI2 = BatchCellStatus.Unknown;
+                        row.ROI3 = BatchCellStatus.Unknown;
+                        row.ROI4 = BatchCellStatus.Unknown;
+                        _batchRows.Add(row);
+                    }
+
+                    OnPropertyChanged(nameof(BatchRows));
+                });
+
+                _batchCts?.Cancel();
+                _batchCts?.Dispose();
+                _batchCts = new CancellationTokenSource();
+                _pauseGate.Set();
+                _isBatchRunning = true;
+                IsBusy = true;
+                UpdateBatchCommandStates();
+                SetBatchStatusSafe("Running");
+
+                var runTask = RunBatchAsync(_batchCts.Token);
+                runTask.ContinueWith(t =>
+                {
+                    if (t.Exception != null)
+                    {
+                        _log($"[batch] run failed: {t.Exception.InnerException?.Message ?? t.Exception.Message}");
+                    }
+                }, TaskScheduler.Default);
+
+                return Task.CompletedTask;
+            }, _ => CanExecuteStart());
+
+            PauseBatchCommand = new AsyncCommand(_ =>
+            {
+                if (_isBatchRunning && _pauseGate.IsSet)
+                {
+                    _pauseGate.Reset();
+                    SetBatchStatusSafe("Paused");
+                    UpdateBatchCommandStates();
+                }
+
+                return Task.CompletedTask;
+            }, _ => _isBatchRunning && _pauseGate.IsSet);
+
+            StopBatchCommand = new AsyncCommand(_ =>
+            {
+                StopBatch();
+                return Task.CompletedTask;
+            }, _ => _isBatchRunning);
 
             BrowseDatasetCommand = CreateCommand(_ => BrowseDatasetAsync(), _ => !IsBusy && SelectedInspectionRoi != null);
             TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
@@ -316,7 +387,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     _canStartBatch = value;
                     OnPropertyChanged();
-                    StartBatchCommand?.RaiseCanExecuteChanged();
+                    UpdateBatchCommandStates();
                 }
             }
         }
@@ -1070,6 +1141,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand AddRoiToDatasetNgCommand { get; }
         public AsyncCommand BrowseBatchFolderCommand { get; }
         public AsyncCommand StartBatchCommand { get; }
+        public AsyncCommand PauseBatchCommand { get; }
+        public AsyncCommand StopBatchCommand { get; }
         public ICommand AddRoiToOkCommand { get; }
         public ICommand AddRoiToNgCommand { get; }
 
@@ -1326,7 +1399,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 asyncAddNg.RaiseCanExecuteChanged();
             }
             BrowseBatchFolderCommand?.RaiseCanExecuteChanged();
-            StartBatchCommand?.RaiseCanExecuteChanged();
+            UpdateBatchCommandStates();
         }
 
         private void UpdateSelectedRoiState()
@@ -3138,7 +3211,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return message;
         }
 
-        private async Task RunBatchAsync()
+        private void StopBatch()
+        {
+            try
+            {
+                _batchCts?.Cancel();
+            }
+            catch
+            {
+            }
+
+            _pauseGate.Set();
+            _isBatchRunning = false;
+            SetBatchStatusSafe("Stopped");
+            UpdateBatchCommandStates();
+        }
+
+        private async Task RunBatchAsync(CancellationToken ct)
         {
             EnsureRoleRoi();
 
@@ -3149,12 +3238,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 UpdateBatchProgress(0, total);
                 SetBatchStatusSafe(total == 0 ? "No images to process." : "Folder not found.");
+                _isBatchRunning = false;
+                _pauseGate.Set();
+                _batchCts?.Dispose();
+                _batchCts = null;
+                IsBusy = false;
+                UpdateBatchCommandStates();
                 return;
             }
 
             var ensuredModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int processed = 0;
-            bool success = true;
 
             UpdateBatchProgress(0, total);
             SetBatchStatusSafe("Running...");
@@ -3163,6 +3257,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 foreach (var row in rows)
                 {
+                    ct.ThrowIfCancellationRequested();
+                    _pauseGate.Wait(ct);
+
                     processed++;
                     SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
 
@@ -3181,6 +3278,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                     {
+                        ct.ThrowIfCancellationRequested();
+                        _pauseGate.Wait(ct);
+
                         var config = GetInspectionConfigByIndex(roiIndex);
                         if (config == null)
                         {
@@ -3199,7 +3299,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             var delayMs = (int)Math.Round(BatchPausePerRoiSeconds * 1000.0, MidpointRounding.AwayFromZero);
                             if (delayMs > 0)
                             {
-                                await Task.Delay(delayMs).ConfigureAwait(false);
+                                await Task.Delay(delayMs, ct).ConfigureAwait(false);
+                                _pauseGate.Wait(ct);
                             }
 
                             var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
@@ -3240,6 +3341,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             bool isNg = result.score > decisionThreshold;
                             SetRowStatus(row, roiIndex, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
                         }
+                        catch (OperationCanceledException)
+                        {
+                            throw;
+                        }
                         catch (Exception ex)
                         {
                             _log($"[batch] ROI{roiIndex} failed for '{row.FileName}': {ex.Message}");
@@ -3249,19 +3354,48 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     UpdateBatchProgress(processed, total);
                 }
+
+                _log($"[batch] completed processed={processed}/{total}");
+                SetBatchStatusSafe("Completed");
+            }
+            catch (OperationCanceledException)
+            {
+                if (!string.Equals(BatchStatus, "Stopped", StringComparison.OrdinalIgnoreCase))
+                {
+                    SetBatchStatusSafe("Cancelled");
+                }
             }
             catch (Exception ex)
             {
-                success = false;
                 _log($"[batch] unexpected error: {ex.Message}");
                 SetBatchStatusSafe($"Error: {ex.Message}");
             }
-
-            if (success)
+            finally
             {
-                _log($"[batch] completed processed={processed}/{total}");
-                SetBatchStatusSafe("Done.");
+                _isBatchRunning = false;
+                _pauseGate.Set();
+                _batchCts?.Dispose();
+                _batchCts = null;
+                IsBusy = false;
+                UpdateBatchCommandStates();
             }
+        }
+
+        private bool CanExecuteStart()
+        {
+            if (_isBatchRunning)
+            {
+                return !_pauseGate.IsSet;
+            }
+
+            return CanStartBatch && !IsBusy;
+        }
+
+        private void UpdateBatchCommandStates()
+        {
+            StartBatchCommand?.RaiseCanExecuteChanged();
+            PauseBatchCommand?.RaiseCanExecuteChanged();
+            StopBatchCommand?.RaiseCanExecuteChanged();
         }
 
         private void UpdateBatchProgress(int processed, int total)

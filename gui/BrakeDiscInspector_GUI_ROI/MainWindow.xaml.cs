@@ -6145,14 +6145,14 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BatchGrid_Loaded(object sender, RoutedEventArgs e)
         {
             AttachBatchUiHandlersOnce();
-            TryPlaceBatchHeatmap("loaded");
+            UpdateBatchViewMetricsAndPlace();
         }
 
         private void BatchGrid_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             _batchUiHandlersAttached = false;
             AttachBatchUiHandlersOnce();
-            TryPlaceBatchHeatmap("dc-changed");
+            UpdateBatchViewMetricsAndPlace();
         }
 
         private void AttachBatchUiHandlersOnce()
@@ -6188,11 +6188,53 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (BaseImage != null)
             {
-                BaseImage.SizeChanged += (_, __) => TryPlaceBatchHeatmap("BaseImage.SizeChanged");
+                BaseImage.SizeChanged += (_, __) => UpdateBatchViewMetricsAndPlace();
+            }
+
+            if (Overlay != null)
+            {
+                Overlay.SizeChanged += (_, __) => UpdateBatchViewMetricsAndPlace();
             }
 
             _batchUiHandlersAttached = true;
             GuiLog.Info("[batch-ui] AttachBatchUiHandlersOnce: handlers attached");
+            UpdateBatchViewMetricsAndPlace();
+        }
+
+        private void UpdateBatchViewMetricsAndPlace()
+        {
+            var vm = _batchVmCached ?? (BatchGrid?.DataContext as WorkflowViewModel);
+            if (vm == null)
+            {
+                return;
+            }
+
+            UpdateBatchMetricsFromControls(vm);
+            TryPlaceBatchHeatmap("[ui] metrics-updated");
+        }
+
+        private void UpdateBatchMetricsFromControls(WorkflowViewModel vm)
+        {
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (BaseImage?.Source is BitmapSource baseBitmap)
+            {
+                vm.BaseImagePixelWidth = baseBitmap.PixelWidth;
+                vm.BaseImagePixelHeight = baseBitmap.PixelHeight;
+            }
+            else
+            {
+                vm.BaseImagePixelWidth = 0;
+                vm.BaseImagePixelHeight = 0;
+            }
+
+            vm.BaseImageActualWidth = BaseImage?.ActualWidth ?? 0.0;
+            vm.BaseImageActualHeight = BaseImage?.ActualHeight ?? 0.0;
+            vm.CanvasRoiActualWidth = Overlay?.ActualWidth ?? 0.0;
+            vm.CanvasRoiActualHeight = Overlay?.ActualHeight ?? 0.0;
         }
 
         private void TryPlaceBatchHeatmap(string reason)
@@ -6202,27 +6244,29 @@ namespace BrakeDiscInspector_GUI_ROI
                 var vm = _batchVmCached ?? (BatchGrid?.DataContext as WorkflowViewModel);
                 if (vm == null)
                 {
-                    GuiLog.Warn($"[batch-ui] TryPlaceBatchHeatmap: VM not found (reason={reason})");
+                    GuiLog.Warn(FormattableString.Invariant($"[batch-ui] TryPlaceBatchHeatmap: VM not found (reason={reason})"));
                     return;
                 }
 
-                if (BaseImage == null || HeatmapImage == null)
+                UpdateBatchMetricsFromControls(vm);
+
+                if (BaseImage == null || HeatmapImage == null || Overlay == null)
                 {
-                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: missing BaseImage/HeatmapImage");
+                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: missing BaseImage/HeatmapImage/Overlay");
                     return;
                 }
 
-                if (BaseImage.Source is not BitmapSource baseBmp)
+                if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0 || Overlay.ActualWidth <= 0 || Overlay.ActualHeight <= 0)
+                {
+                    Dispatcher.InvokeAsync(() => TryPlaceBatchHeatmap("deferred"), DispatcherPriority.Background);
+                    return;
+                }
+
+                if (vm.BatchHeatmapRoiIndex <= 0)
                 {
                     HeatmapImage.Source = null;
                     HeatmapImage.Visibility = Visibility.Collapsed;
-                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: base image source unavailable");
-                    return;
-                }
-
-                if (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0)
-                {
-                    Dispatcher.InvokeAsync(() => TryPlaceBatchHeatmap("deferred"), DispatcherPriority.Background);
+                    vm.TraceBatchHeatmapPlacement(reason, vm.BatchHeatmapRoiIndex, null);
                     return;
                 }
 
@@ -6230,43 +6274,45 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     HeatmapImage.Source = null;
                     HeatmapImage.Visibility = Visibility.Collapsed;
+                    vm.TraceBatchHeatmapPlacement(reason, vm.BatchHeatmapRoiIndex, null);
                     return;
                 }
 
-                var rectPxOpt = vm.GetInspectionRoiImageRectPx(vm.BatchHeatmapRoiIndex);
-                if (rectPxOpt == null)
+                var roiConfig = vm.GetInspectionRoiConfig(vm.BatchHeatmapRoiIndex);
+                if (roiConfig == null || !roiConfig.Enabled)
                 {
                     HeatmapImage.Source = null;
                     HeatmapImage.Visibility = Visibility.Collapsed;
-                    GuiLog.Warn($"[batch-ui] TryPlaceBatchHeatmap: null rect for idx={vm.BatchHeatmapRoiIndex}");
+                    vm.TraceBatchHeatmapPlacement(reason, vm.BatchHeatmapRoiIndex, null);
                     return;
                 }
 
-                if (baseBmp.PixelWidth <= 0 || baseBmp.PixelHeight <= 0)
+                var canvasRect = vm.GetInspectionRoiCanvasRect(vm.BatchHeatmapRoiIndex);
+                if (canvasRect == null)
                 {
                     HeatmapImage.Source = null;
                     HeatmapImage.Visibility = Visibility.Collapsed;
-                    GuiLog.Warn("[batch-ui] TryPlaceBatchHeatmap: invalid base bitmap size");
+                    GuiLog.Warn(FormattableString.Invariant($"[batch-ui] TryPlaceBatchHeatmap: null canvasRect for idx={vm.BatchHeatmapRoiIndex}"));
+                    vm.TraceBatchHeatmapPlacement(reason, vm.BatchHeatmapRoiIndex, null);
                     return;
                 }
-
-                var rectPx = rectPxOpt.Value;
-                double scaleX = BaseImage.ActualWidth / baseBmp.PixelWidth;
-                double scaleY = BaseImage.ActualHeight / baseBmp.PixelHeight;
-
-                double left = rectPx.X * scaleX;
-                double top = rectPx.Y * scaleY;
-                double w = Math.Max(1.0, rectPx.Width * scaleX);
-                double h = Math.Max(1.0, rectPx.Height * scaleY);
 
                 HeatmapImage.Source = hmSrc;
-                HeatmapImage.Width = w;
-                HeatmapImage.Height = h;
-                Canvas.SetLeft(HeatmapImage, left);
-                Canvas.SetTop(HeatmapImage, top);
+                HeatmapImage.Width = Math.Max(1.0, canvasRect.Value.Width);
+                HeatmapImage.Height = Math.Max(1.0, canvasRect.Value.Height);
+                Canvas.SetLeft(HeatmapImage, canvasRect.Value.Left);
+                Canvas.SetTop(HeatmapImage, canvasRect.Value.Top);
                 HeatmapImage.Visibility = Visibility.Visible;
 
-                GuiLog.Info($"[batch-ui] TryPlaceBatchHeatmap: {reason} idx={vm.BatchHeatmapRoiIndex} base=({baseBmp.PixelWidth}x{baseBmp.PixelHeight}) overlay=({BaseImage.ActualWidth:0.##}x{BaseImage.ActualHeight:0.##}) rect=({rectPx.X},{rectPx.Y},{rectPx.Width},{rectPx.Height}) placed=({left:0.##},{top:0.##},{w:0.##},{h:0.##})");
+                var rectPxOpt = vm.GetInspectionRoiImageRectPx(vm.BatchHeatmapRoiIndex);
+                string rectImgText = rectPxOpt.HasValue
+                    ? FormattableString.Invariant($"{rectPxOpt.Value.X},{rectPxOpt.Value.Y},{rectPxOpt.Value.Width},{rectPxOpt.Value.Height}")
+                    : "null";
+
+                GuiLog.Info(FormattableString.Invariant(
+                    $"[batch-ui] place idx={vm.BatchHeatmapRoiIndex} CANVAS=({Overlay.ActualWidth:0.##}x{Overlay.ActualHeight:0.##}) IMGvis=({BaseImage.ActualWidth:0.##}x{BaseImage.ActualHeight:0.##}) IMGpx=({vm.BaseImagePixelWidth}x{vm.BaseImagePixelHeight}) RECTimg=({rectImgText}) RECTcanvas=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) reason={reason}"));
+
+                vm.TraceBatchHeatmapPlacement(reason, vm.BatchHeatmapRoiIndex, canvasRect);
             }
             catch (Exception ex)
             {

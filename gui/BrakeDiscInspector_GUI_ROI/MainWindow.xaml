@@ -550,7 +550,6 @@
               <Image x:Name="HeatmapImage"
                      Stretch="Fill"
                      Opacity="0.65"
-                     Visibility="Collapsed"
                      SnapsToDevicePixels="True"
                      UseLayoutRounding="True"
                      RenderOptions.BitmapScalingMode="HighQuality"/>

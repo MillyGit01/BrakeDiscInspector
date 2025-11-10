@@ -523,6 +523,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _selectedInspectionRoi = value;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(SelectedInspectionShape));
+                    OnPropertyChanged(nameof(ActiveInspectionRoiModel));
+                    OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
                     UpdateSelectedRoiState();
                     OpenDatasetFolderCommand.RaiseCanExecuteChanged();
 
@@ -562,6 +564,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             SelectedInspectionRoi != null
                 ? SelectedInspectionRoi.Shape.ToString().ToLowerInvariant()
                 : "square";
+
+        public RoiModel? ActiveInspectionRoiModel => GetActiveInspectionRoiModel();
+
+        public Int32Rect? ActiveInspectionRoiImageRectPx
+        {
+            get
+            {
+                var roi = ActiveInspectionRoiModel;
+                return roi != null ? BuildImageRectPx(roi) : null;
+            }
+        }
 
         public void SetInspectionRoisCollection(ObservableCollection<InspectionRoiConfig>? rois)
         {
@@ -755,6 +768,150 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             field = value;
 
             OnPropertyChanged(propertyName);
+            OnPropertyChanged(nameof(ActiveInspectionRoiModel));
+            OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
+        }
+
+        private RoiModel? GetInspectionRoiModelByIndex(int index) => index switch
+        {
+            1 => Inspection1,
+            2 => Inspection2,
+            3 => Inspection3,
+            4 => Inspection4,
+            _ => null
+        };
+
+        private RoiModel? GetActiveInspectionRoiModel()
+        {
+            if (SelectedInspectionRoi != null)
+            {
+                var match = GetInspectionRoiModelByIndex(SelectedInspectionRoi.Index);
+                if (match != null)
+                {
+                    return match;
+                }
+            }
+
+            for (int i = 1; i <= 4; i++)
+            {
+                var candidate = GetInspectionRoiModelByIndex(i);
+                if (candidate != null)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static Int32Rect? BuildImageRectPx(RoiModel roi)
+        {
+            if (roi == null)
+            {
+                return null;
+            }
+
+            double left;
+            double top;
+            double width;
+            double height;
+
+            switch (roi.Shape)
+            {
+                case RoiShape.Circle:
+                case RoiShape.Annulus:
+                    if (roi.R <= 0)
+                    {
+                        return null;
+                    }
+
+                    width = roi.R * 2.0;
+                    height = width;
+                    left = roi.CX - roi.R;
+                    top = roi.CY - roi.R;
+                    break;
+
+                default:
+                    width = roi.Width;
+                    height = roi.Height;
+                    left = roi.Left;
+                    top = roi.Top;
+                    break;
+            }
+
+            if (double.IsNaN(left) || double.IsNaN(top) || double.IsNaN(width) || double.IsNaN(height)
+                || double.IsInfinity(left) || double.IsInfinity(top) || double.IsInfinity(width) || double.IsInfinity(height))
+            {
+                return null;
+            }
+
+            if (width <= 0 || height <= 0)
+            {
+                return null;
+            }
+
+            double right = left + width;
+            double bottom = top + height;
+
+            if (roi.BaseImgW is double baseW && baseW > 0)
+            {
+                left = Math.Clamp(left, 0.0, baseW);
+                right = Math.Clamp(right, 0.0, baseW);
+            }
+
+            if (roi.BaseImgH is double baseH && baseH > 0)
+            {
+                top = Math.Clamp(top, 0.0, baseH);
+                bottom = Math.Clamp(bottom, 0.0, baseH);
+            }
+
+            double finalWidth = right - left;
+            double finalHeight = bottom - top;
+
+            if (finalWidth <= 0 || finalHeight <= 0)
+            {
+                return null;
+            }
+
+            int x = Math.Max(0, (int)Math.Round(left));
+            int y = Math.Max(0, (int)Math.Round(top));
+            int w = Math.Max(0, (int)Math.Round(finalWidth));
+            int h = Math.Max(0, (int)Math.Round(finalHeight));
+
+            if (roi.BaseImgW is double baseWInt && baseWInt > 0)
+            {
+                int maxX = Math.Max(0, (int)Math.Round(baseWInt));
+                if (x > maxX)
+                {
+                    return null;
+                }
+
+                if (x + w > maxX)
+                {
+                    w = Math.Max(0, maxX - x);
+                }
+            }
+
+            if (roi.BaseImgH is double baseHInt && baseHInt > 0)
+            {
+                int maxY = Math.Max(0, (int)Math.Round(baseHInt));
+                if (y > maxY)
+                {
+                    return null;
+                }
+
+                if (y + h > maxY)
+                {
+                    h = Math.Max(0, maxY - y);
+                }
+            }
+
+            if (w <= 0 || h <= 0)
+            {
+                return null;
+            }
+
+            return new Int32Rect(x, y, w, h);
         }
 
         private void InspectionRoiPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -815,6 +972,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (ReferenceEquals(sender, SelectedInspectionRoi))
             {
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
+                OnPropertyChanged(nameof(ActiveInspectionRoiModel));
+                OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
                 if (e.PropertyName == nameof(InspectionRoiConfig.Shape))
                 {
                     OnPropertyChanged(nameof(SelectedInspectionShape));

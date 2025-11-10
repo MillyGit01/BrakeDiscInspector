@@ -163,6 +163,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private byte[]? _lastHeatmapPngBytes;
         private WriteableBitmap? _lastHeatmapBitmap;
         private int _batchHeatmapRoiIndex = 0;
+        private double _baseImageActualWidth;
+        private double _baseImageActualHeight;
+        private double _canvasRoiActualWidth;
+        private double _canvasRoiActualHeight;
+        private int _baseImagePixelWidth;
+        private int _baseImagePixelHeight;
+        private bool _useCanvasPlacementForBatchHeatmap = true;
         private readonly Dictionary<InspectionRoiConfig, RoiDatasetAnalysis> _roiDatasetCache = new();
         private readonly Dictionary<InspectionRoiConfig, FitOkResult> _lastFitResultsByRoi = new();
         private readonly Dictionary<InspectionRoiConfig, CalibResult> _lastCalibResultsByRoi = new();
@@ -454,6 +461,119 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _batchHeatmapRoiIndex = value;
                     OnPropertyChanged();
                 }
+                else
+                {
+                    OnPropertyChanged(nameof(BatchHeatmapRoiIndex));
+                }
+            }
+        }
+
+        public double BaseImageActualWidth
+        {
+            get => _baseImageActualWidth;
+            set
+            {
+                if (Math.Abs(_baseImageActualWidth - value) <= 0.01)
+                {
+                    return;
+                }
+
+                _baseImageActualWidth = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public double BaseImageActualHeight
+        {
+            get => _baseImageActualHeight;
+            set
+            {
+                if (Math.Abs(_baseImageActualHeight - value) <= 0.01)
+                {
+                    return;
+                }
+
+                _baseImageActualHeight = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public double CanvasRoiActualWidth
+        {
+            get => _canvasRoiActualWidth;
+            set
+            {
+                if (Math.Abs(_canvasRoiActualWidth - value) <= 0.01)
+                {
+                    return;
+                }
+
+                _canvasRoiActualWidth = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public double CanvasRoiActualHeight
+        {
+            get => _canvasRoiActualHeight;
+            set
+            {
+                if (Math.Abs(_canvasRoiActualHeight - value) <= 0.01)
+                {
+                    return;
+                }
+
+                _canvasRoiActualHeight = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int BaseImagePixelWidth
+        {
+            get => _baseImagePixelWidth;
+            set
+            {
+                if (_baseImagePixelWidth == value)
+                {
+                    return;
+                }
+
+                _baseImagePixelWidth = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public int BaseImagePixelHeight
+        {
+            get => _baseImagePixelHeight;
+            set
+            {
+                if (_baseImagePixelHeight == value)
+                {
+                    return;
+                }
+
+                _baseImagePixelHeight = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Toggle to revert to the legacy placement logic when investigating regressions.
+        /// Bind this from XAML (e.g. a CheckBox) for quick rollback tests.
+        /// </summary>
+        public bool UseCanvasPlacementForBatchHeatmap
+        {
+            get => _useCanvasPlacementForBatchHeatmap;
+            set
+            {
+                if (_useCanvasPlacementForBatchHeatmap == value)
+                {
+                    return;
+                }
+
+                _useCanvasPlacementForBatchHeatmap = value;
+                OnPropertyChanged();
             }
         }
 
@@ -890,6 +1010,152 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             var roi = GetInspectionRoiModelByIndex(idx);
             return roi != null ? BuildImageRectPx(roi) : null;
+        }
+
+        public Rect? GetInspectionRoiCanvasRect(int roiIndex)
+        {
+            if (!TryGetBatchPlacementTransform(out var uniformScale, out var offsetX, out var offsetY, out var legacyScaleX, out var legacyScaleY))
+            {
+                return null;
+            }
+
+            Rect? rectFromModel = null;
+
+            if (UseCanvasPlacementForBatchHeatmap)
+            {
+                var roiModel = GetInspectionRoiModelByIndex(roiIndex);
+                if (roiModel != null)
+                {
+                    switch (roiModel.Shape)
+                    {
+                        case RoiShape.Circle:
+                        case RoiShape.Annulus:
+                            {
+                                double radius = Math.Max(1.0, roiModel.R * uniformScale);
+                                double cx = offsetX + roiModel.CX * uniformScale;
+                                double cy = offsetY + roiModel.CY * uniformScale;
+                                rectFromModel = new Rect(cx - radius, cy - radius, radius * 2.0, radius * 2.0);
+                                break;
+                            }
+                        default:
+                            {
+                                rectFromModel = new Rect(
+                                    offsetX + roiModel.Left * uniformScale,
+                                    offsetY + roiModel.Top * uniformScale,
+                                    Math.Max(1.0, roiModel.Width * uniformScale),
+                                    Math.Max(1.0, roiModel.Height * uniformScale));
+                                break;
+                            }
+                    }
+                }
+            }
+
+            if (rectFromModel != null)
+            {
+                return rectFromModel;
+            }
+
+            var rectPx = GetInspectionRoiImageRectPx(roiIndex);
+            if (rectPx == null)
+            {
+                return null;
+            }
+
+            bool useLegacyScale = !UseCanvasPlacementForBatchHeatmap;
+            double scaleX = useLegacyScale ? legacyScaleX : uniformScale;
+            double scaleY = useLegacyScale ? legacyScaleY : uniformScale;
+
+            if (scaleX <= 0 || scaleY <= 0)
+            {
+                return null;
+            }
+
+            var rect = rectPx.Value;
+            double left = offsetX + rect.X * scaleX;
+            double top = offsetY + rect.Y * scaleY;
+            double width = Math.Max(1.0, rect.Width * scaleX);
+            double height = Math.Max(1.0, rect.Height * scaleY);
+            return new Rect(left, top, width, height);
+        }
+
+        public InspectionRoiConfig? GetInspectionRoiConfig(int idx)
+        {
+            return GetInspectionConfigByIndex(idx);
+        }
+
+        public void TraceBatchHeatmapPlacement(string reason, int roiIndex, Rect? canvasRect)
+        {
+            try
+            {
+                if (roiIndex <= 0)
+                {
+                    return;
+                }
+
+                var rectImg = GetInspectionRoiImageRectPx(roiIndex);
+                var roiConfig = GetInspectionConfigByIndex(roiIndex);
+                bool enabled = roiConfig?.Enabled ?? false;
+
+                _log(FormattableString.Invariant(
+                    $"[batch] img px=({BaseImagePixelWidth}x{BaseImagePixelHeight}) vis=({BaseImageActualWidth:0.##}x{BaseImageActualHeight:0.##}) canvas=({CanvasRoiActualWidth:0.##}x{CanvasRoiActualHeight:0.##})"));
+
+                string rectImgText = rectImg.HasValue
+                    ? FormattableString.Invariant($"{rectImg.Value.X:0.##},{rectImg.Value.Y:0.##},{rectImg.Value.Width:0.##},{rectImg.Value.Height:0.##}")
+                    : "null";
+
+                string rectCanvasText = canvasRect.HasValue
+                    ? FormattableString.Invariant($"{canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}")
+                    : "null";
+
+                _log(FormattableString.Invariant($"[batch] roi idx={roiIndex} rectImg=({rectImgText}) rectCanvas=({rectCanvasText})"));
+                _log(FormattableString.Invariant($"[batch] place reason={reason} enabled={enabled}"));
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Warn(FormattableString.Invariant($"[batch] trace placement failed: {ex.Message}"));
+            }
+        }
+
+        private bool TryGetBatchPlacementTransform(out double uniformScale, out double offsetX, out double offsetY, out double legacyScaleX, out double legacyScaleY)
+        {
+            uniformScale = 0;
+            offsetX = 0;
+            offsetY = 0;
+            legacyScaleX = 0;
+            legacyScaleY = 0;
+
+            if (BaseImagePixelWidth <= 0 || BaseImagePixelHeight <= 0
+                || BaseImageActualWidth <= 0 || BaseImageActualHeight <= 0
+                || CanvasRoiActualWidth <= 0 || CanvasRoiActualHeight <= 0)
+            {
+                return false;
+            }
+
+            legacyScaleX = BaseImageActualWidth / BaseImagePixelWidth;
+            legacyScaleY = BaseImageActualHeight / BaseImagePixelHeight;
+
+            if (legacyScaleX <= 0 || legacyScaleY <= 0)
+            {
+                return false;
+            }
+
+            uniformScale = Math.Min(legacyScaleX, legacyScaleY);
+            if (uniformScale <= 0)
+            {
+                return false;
+            }
+
+            double drawnW = BaseImagePixelWidth * uniformScale;
+            double drawnH = BaseImagePixelHeight * uniformScale;
+
+            double offInsideX = Math.Max(0.0, (BaseImageActualWidth - drawnW) * 0.5);
+            double offInsideY = Math.Max(0.0, (BaseImageActualHeight - drawnH) * 0.5);
+            double offOuterX = Math.Max(0.0, (CanvasRoiActualWidth - BaseImageActualWidth) * 0.5);
+            double offOuterY = Math.Max(0.0, (CanvasRoiActualHeight - BaseImageActualHeight) * 0.5);
+
+            offsetX = offOuterX + offInsideX;
+            offsetY = offOuterY + offInsideY;
+            return true;
         }
 
         private RoiModel? GetActiveInspectionRoiModel()

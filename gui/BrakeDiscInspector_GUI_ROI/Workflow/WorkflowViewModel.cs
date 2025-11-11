@@ -3534,7 +3534,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (!File.Exists(row.FullPath))
                     {
-                        _log(FormattableString.Invariant($"[batch] file missing: '{row.FullPath}'"));
+                        _log($"[batch] file missing: '{row.FullPath}'");
                         for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                         {
                             UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
@@ -3546,7 +3546,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     SetBatchBaseImage(row.FullPath);
 
                     await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
-                    LogBatchImageMetrics(row.FileName);
 
                     for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                     {
@@ -3557,19 +3556,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         if (config == null)
                         {
                             UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
-                            await PauseAfterRoiAsync(ct).ConfigureAwait(false);
                             continue;
                         }
 
-                        LogBatchRoiGeometry(config);
+                        _log($"[batch] processing file='{row.FileName}' roiIdx={config.Index} enabled={config.Enabled}");
 
                         if (!config.Enabled)
                         {
                             UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
                             InvokeOnUi(ClearBatchHeatmap);
                             _clearHeatmap();
-                            _log(FormattableString.Invariant($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'"));
-                            await PauseAfterRoiAsync(ct).ConfigureAwait(false);
+                            _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
                             continue;
                         }
 
@@ -3591,9 +3588,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 }
                                 catch (BackendMemoryNotFittedException ex)
                                 {
-                                    _log(FormattableString.Invariant($"[batch] ensure_fitted missing roi='{resolvedRoiId}': {ex.Message}"));
+                                    _log($"[batch] ensure_fitted missing roi='{resolvedRoiId}': {ex.Message}");
                                     UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
-                                    await PauseAfterRoiAsync(ct).ConfigureAwait(false);
                                     continue;
                                 }
                             }
@@ -3621,6 +3617,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             bool isNg = result.score > decisionThreshold;
                             UpdateBatchRowStatus(row, config.Index, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
+
+                            if (BatchPausePerRoiSeconds > 0)
+                            {
+                                var pause = TimeSpan.FromSeconds(BatchPausePerRoiSeconds);
+                                if (pause > TimeSpan.Zero)
+                                {
+                                    await Task.Delay(pause, ct).ConfigureAwait(false);
+                                }
+                            }
                         }
                         catch (OperationCanceledException)
                         {
@@ -3628,11 +3633,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                         catch (Exception ex)
                         {
-                            _log(FormattableString.Invariant($"[batch] ROI{roiIndex} failed for '{row.FileName}': {ex.Message}"));
+                            _log($"[batch] ROI{roiIndex} failed for '{row.FileName}': {ex.Message}");
                             UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                         }
-
-                        await PauseAfterRoiAsync(ct).ConfigureAwait(false);
                     }
 
                     UpdateBatchProgress(processed, total);
@@ -3666,14 +3669,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void UpdateBatchHeatmapIndex(int roiIndex)
         {
-            InvokeOnUi(() =>
-            {
-                BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex));
-                if (BatchHeatmapRoiIndex > 0)
-                {
-                    _log(FormattableString.Invariant($"[batch] hm-set idx={BatchHeatmapRoiIndex}"));
-                }
-            });
+            InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
         }
 
         private async Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
@@ -3693,58 +3689,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             catch (Exception ex)
             {
-                _log(FormattableString.Invariant($"[batch] reposition failed for '{imagePath}': {ex.Message}"));
-            }
-        }
-
-        private async Task PauseAfterRoiAsync(CancellationToken ct)
-        {
-            if (BatchPausePerRoiSeconds <= 0)
-            {
-                return;
-            }
-
-            var pause = TimeSpan.FromSeconds(BatchPausePerRoiSeconds);
-            if (pause <= TimeSpan.Zero)
-            {
-                return;
-            }
-
-            await Task.Delay(pause, ct).ConfigureAwait(false);
-        }
-
-        private void LogBatchImageMetrics(string fileName)
-        {
-            try
-            {
-                _log(FormattableString.Invariant(
-                    $"[batch] file='{fileName}' imgPx=({BaseImagePixelWidth}x{BaseImagePixelHeight}) vis=({BaseImageActualWidth:0.##}x{BaseImageActualHeight:0.##}) canvas=({CanvasRoiActualWidth:0.##}x{CanvasRoiActualHeight:0.##})"));
-            }
-            catch (Exception ex)
-            {
-                GuiLog.Warn(FormattableString.Invariant($"[batch] LogBatchImageMetrics failed: {ex.Message}"));
-            }
-        }
-
-        private void LogBatchRoiGeometry(InspectionRoiConfig config)
-        {
-            if (config == null)
-            {
-                return;
-            }
-
-            try
-            {
-                var rect = GetInspectionRoiImageRectPx(config.Index);
-                string rectText = rect.HasValue
-                    ? FormattableString.Invariant($"{rect.Value.X:0.##},{rect.Value.Y:0.##},{rect.Value.Width:0.##},{rect.Value.Height:0.##}")
-                    : "null";
-
-                _log(FormattableString.Invariant($"[batch] roiIdx={config.Index} enabled={config.Enabled} rectImg=({rectText})"));
-            }
-            catch (Exception ex)
-            {
-                GuiLog.Warn(FormattableString.Invariant($"[batch] LogBatchRoiGeometry failed idx={config?.Index}: {ex.Message}"));
+                _log($"[batch] reposition failed for '{imagePath}': {ex.Message}");
             }
         }
 

@@ -19,6 +19,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -2753,7 +2754,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     ClearHeatmapOverlay,
                     UpdateGlobalBadge,
                     SetActiveInspectionIndex,
-                    ResolveInspectionModelDirectory);
+                    ResolveInspectionModelDirectory,
+                    RepositionInspectionRoisForBatchAsync);
 
                 _workflowViewModel.PropertyChanged += WorkflowViewModelOnPropertyChanged;
                 _workflowViewModel.OverlayVisibilityChanged += WorkflowViewModelOnOverlayVisibilityChanged;
@@ -4459,6 +4461,67 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 GuiLog.Error("[ui] ShowHeatmapAsync failed", ex);
             }
+        }
+
+        private async Task RepositionInspectionRoisForBatchAsync(string imagePath, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(imagePath) || _layout == null)
+            {
+                return;
+            }
+
+            string imageKey;
+            try
+            {
+                var bytes = await File.ReadAllBytesAsync(imagePath, ct).ConfigureAwait(false);
+                imageKey = HashSHA256(bytes);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                AppendLog("[batch] reposition hash failed: " + ex.Message);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(imageKey) || ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                try
+                {
+                    if (_layout?.InspectionBaselinesByImage != null &&
+                        _layout.InspectionBaselinesByImage.TryGetValue(imageKey, out var snapshot) &&
+                        snapshot != null && snapshot.Count > 0)
+                    {
+                        var clones = snapshot
+                            .Where(r => r != null)
+                            .Select(r => r!.Clone())
+                            .ToList();
+
+                        if (clones.Count > 0)
+                        {
+                            _layout.Inspection = clones[0].Clone();
+                            RefreshInspectionRoiSlots(clones);
+                            AppendLog(FormattableString.Invariant($"[batch] restored {clones.Count} inspection ROIs from baseline"));
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog("[batch] reposition apply failed: " + ex.Message);
+                }
+            }, DispatcherPriority.Background);
         }
 
         private async Task ShowHeatmapOverlayAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)

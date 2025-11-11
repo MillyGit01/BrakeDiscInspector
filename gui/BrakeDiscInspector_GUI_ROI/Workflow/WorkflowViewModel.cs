@@ -113,6 +113,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Action _clearHeatmap;
         private readonly Action<bool?> _updateGlobalBadge;
         private readonly Action<int>? _activateInspectionIndex;
+        private readonly Func<string, CancellationToken, Task>? _repositionInspectionRoisAsync;
 
         private ObservableCollection<InspectionRoiConfig>? _inspectionRois;
         private RoiModel? _inspection1;
@@ -205,7 +206,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Action clearHeatmap,
             Action<bool?> updateGlobalBadge,
             Action<int>? activateInspectionIndex = null,
-            Func<InspectionRoiConfig, string?>? resolveModelDirectory = null)
+            Func<InspectionRoiConfig, string?>? resolveModelDirectory = null,
+            Func<string, CancellationToken, Task>? repositionInspectionRoisAsync = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -217,6 +219,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
             _activateInspectionIndex = activateInspectionIndex;
             _resolveModelDirectory = resolveModelDirectory;
+            _repositionInspectionRoisAsync = repositionInspectionRoisAsync;
 
             _backendBaseUrl = _client.BaseUrl;
 
@@ -3542,6 +3545,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     SetBatchBaseImage(row.FullPath);
 
+                    await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
+
                     for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                     {
                         ct.ThrowIfCancellationRequested();
@@ -3561,21 +3566,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
                             InvokeOnUi(ClearBatchHeatmap);
                             _clearHeatmap();
-                            _log($"[batch] skip disabled ROI idx={config.Index} '{config.DisplayName}'");
+                            _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
                             continue;
                         }
 
-                        InvokeOnUi(() => BatchHeatmapRoiIndex = config.Index);
-
                         try
                         {
-                            var delayMs = (int)Math.Round(BatchPausePerRoiSeconds * 1000.0, MidpointRounding.AwayFromZero);
-                            if (delayMs > 0)
-                            {
-                                await Task.Delay(delayMs, ct).ConfigureAwait(false);
-                                _pauseGate.Wait(ct);
-                            }
-
                             var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
 
                             var resolvedRoiId = NormalizeInspectionKey(config.ModelKey, config.Index);
@@ -3598,23 +3594,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 }
                             }
 
+                            UpdateBatchHeatmapIndex(config.Index);
+
                             var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
                             UpdateHeatmapFromResult(result, config.Index);
-                            if (!string.IsNullOrWhiteSpace(result.heatmap_png_base64))
+
+                            InvokeOnUi(() =>
                             {
-                                var roiRectPx = GetInspectionRoiImageRectPx(config.Index);
-                                if (roiRectPx == null)
-                                {
-                                    InvokeOnUi(ClearBatchHeatmap);
-                                    _clearHeatmap();
-                                    _log($"[batch] roiRectPx is null for idx={config.Index}");
-                                }
-                                else
-                                {
-                                    _log($"[batch] place heatmap idx={config.Index} rect=({roiRectPx.Value.X},{roiRectPx.Value.Y},{roiRectPx.Value.Width},{roiRectPx.Value.Height}) cutoff={LocalThreshold:0.###}");
-                                }
-                            }
+                                var canvasRect = GetInspectionRoiCanvasRect(config.Index);
+                                TraceBatchHeatmapPlacement("per-roi", config.Index, canvasRect);
+                            });
 
                             double decisionThreshold = result.threshold
                                 ?? config.CalibratedThreshold
@@ -3627,6 +3617,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             bool isNg = result.score > decisionThreshold;
                             UpdateBatchRowStatus(row, config.Index, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
+
+                            if (BatchPausePerRoiSeconds > 0)
+                            {
+                                var pause = TimeSpan.FromSeconds(BatchPausePerRoiSeconds);
+                                if (pause > TimeSpan.Zero)
+                                {
+                                    await Task.Delay(pause, ct).ConfigureAwait(false);
+                                }
+                            }
                         }
                         catch (OperationCanceledException)
                         {
@@ -3665,6 +3664,32 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _batchCts = null;
                 IsBusy = false;
                 UpdateBatchCommandStates();
+            }
+        }
+
+        private void UpdateBatchHeatmapIndex(int roiIndex)
+        {
+            InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
+        }
+
+        private async Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(imagePath) || _repositionInspectionRoisAsync == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] reposition failed for '{imagePath}': {ex.Message}");
             }
         }
 

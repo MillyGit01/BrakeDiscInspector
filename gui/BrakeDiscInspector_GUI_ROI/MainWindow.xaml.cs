@@ -849,6 +849,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private static bool MastersReady(MasterLayout? layout)
             => layout?.Master1Pattern != null && layout.Master1Search != null;
 
+        private IDisposable SuppressAutoSaves()
+            => new ActionOnDispose(
+                () => System.Threading.Interlocked.Increment(ref _suppressSaves),
+                () => System.Threading.Interlocked.Decrement(ref _suppressSaves));
+
         private bool TrySaveLayoutGuarded(string prefix, string context, bool requireMasters, out string? errorMessage)
         {
             errorMessage = null;
@@ -857,6 +862,16 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 AppendLog($"{prefix} skipped ({context}) layout/preset null");
                 errorMessage = "Layout o preset no inicializados.";
+                return false;
+            }
+
+            string layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
+            AppendLog(FormattableString.Invariant(
+                $"[save] requested reason={context} path={layoutPath} suppress={_suppressSaves}"));
+
+            if (_suppressSaves > 0)
+            {
+                AppendLog("[save] suppressed programmatic change");
                 return false;
             }
 
@@ -2498,8 +2513,11 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private bool _syncScheduled;
-        private int _syncRetryCount;
-        private const int MaxSyncRetries = 3;
+        private bool _isSyncRunning;
+        private int _syncSeq;
+        private System.Windows.Rect _lastDisplayRect = System.Windows.Rect.Empty;
+        private const double DisplayEps = 0.5;
+        private int _suppressSaves;
         // overlay diferido
         private bool _overlayNeedsRedraw;
         private bool _adornerHadDelta;
@@ -3380,7 +3398,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             RedrawOverlay();
 
-            ScheduleSyncOverlay(force: true);
+            ScheduleSyncOverlay(force: true, reason: "ImageLoaded");
 
             AppendLog($"Imagen cargada: {_imgW}x{_imgH}  (Canvas: {CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0})");
             RedrawOverlaySafe();
@@ -3401,7 +3419,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     {
                         LogDebug("[auto-analyze] ImageLoaded → AnalyzeMaster()");
                         await AnalyzeMastersAsync();
-                        ScheduleSyncOverlay(force: true);
+                        ScheduleSyncOverlay(force: true, reason: "AutoAnalyzeAfterImageLoad");
                     }
                     catch (Exception ex)
                     {
@@ -3529,7 +3547,7 @@ namespace BrakeDiscInspector_GUI_ROI
             else
             {
                 _overlayNeedsRedraw = true;
-                ScheduleSyncOverlay(force: true);
+                ScheduleSyncOverlay(force: true, reason: "RedrawOverlaySafe");
                 AppendLog("[guard] Redraw pospuesto (overlay aún no alineado)");
                 ApplyInspectionInteractionPolicy("redraw-deferred");
             }
@@ -4403,7 +4421,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 await Dispatcher.Yield(DispatcherPriority.Loaded);
                 SyncOverlayToImage(scheduleResync: false);
-                ScheduleSyncOverlay(force: true);
+                ScheduleSyncOverlay(force: true, reason: "EnsureOverlayAlignedForHeatmap");
                 await Dispatcher.Yield(DispatcherPriority.Render);
             }
             else
@@ -4411,7 +4429,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 await Dispatcher.InvokeAsync(() =>
                 {
                     SyncOverlayToImage(scheduleResync: false);
-                    ScheduleSyncOverlay(force: true);
+                    ScheduleSyncOverlay(force: true, reason: "EnsureOverlayAlignedForHeatmap");
                 }, DispatcherPriority.Loaded);
 
                 await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
@@ -6162,7 +6180,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            ScheduleSyncOverlay(force: true);
+            ScheduleSyncOverlay(force: true, reason: "Loaded");
             UpdateHeatmapOverlayLayoutAndClip();
             RedrawAnalysisCrosses();
 
@@ -6387,7 +6405,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             AppendResizeLog($"[window] SizeChanged: window={ActualWidth:0}x{ActualHeight:0} ImgMain={ImgMain.ActualWidth:0}x{ImgMain.ActualHeight:0}");
-            SyncOverlayToImage(scheduleResync: true);
+            ScheduleSyncOverlay(force: false, reason: "Window.SizeChanged");
             RoiOverlay?.InvalidateVisual();
             UpdateHeatmapOverlayLayoutAndClip();
             RedrawAnalysisCrosses();
@@ -6396,7 +6414,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void ImgMain_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             AppendResizeLog($"[image] SizeChanged: ImgMain={ImgMain.ActualWidth:0}x{ImgMain.ActualHeight:0}");
-            ScheduleSyncOverlay(force: true);
+            ScheduleSyncOverlay(force: true, reason: "ImgMain.SizeChanged");
             UpdateHeatmapOverlayLayoutAndClip();
             RedrawAnalysisCrosses();
         }
@@ -6831,7 +6849,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (!IsOverlayAligned())
             {
                 AppendLog("[guard] overlay no alineado todavía → reprogramo sync y cancelo este click");
-                ScheduleSyncOverlay(force: true);
+                ScheduleSyncOverlay(force: true, reason: "CanvasGuard");
                 e.Handled = true;
                 return;
             }
@@ -7414,7 +7432,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     KeepOnlyMaster2InCanvas();
 
                     // Ensure overlay fully refreshed so Master2 doesn't appear missing
-                    try { ScheduleSyncOverlay(true); }
+                    try { ScheduleSyncOverlay(true, reason: "Wizard.Master2Search"); }
                     catch
                     {
                         SyncOverlayToImage();
@@ -7859,8 +7877,13 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             else
             {
-                MoveInspectionTo(inspectionRoi, c1.Value, c2.Value);
-                ClipInspectionROI(inspectionRoi, _imgW, _imgH);
+                using (SuppressAutoSaves())
+                {
+                    MoveInspectionTo(inspectionRoi, c1.Value, c2.Value);
+                    ClipInspectionROI(inspectionRoi, _imgW, _imgH);
+                    RedrawOverlay();
+                }
+
                 AppendLog("[FLOW] Inspection movida y recortada");
             }
 
@@ -7917,14 +7940,14 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 try
                 {
-                    // Lanza el pipeline: SyncOverlayToImage → RedrawOverlay → UpdateHeatmapOverlayLayoutAndClip → RedrawAnalysisCrosses
-                    ScheduleSyncOverlay(true);
-                    AppendLog("[UI] Post-Analyze refresh scheduled (ScheduleSyncOverlay(true)).");
-                    try { RedrawOverlaySafe(); } catch { }
+                    RedrawOverlay();
+                    UpdateHeatmapOverlayLayoutAndClip();
+                    RedrawAnalysisCrosses();
+                    AppendLog("[UI] Post-Analyze refresh applied (no scheduler).");
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[UI] ScheduleSyncOverlay failed: " + ex.Message);
+                    AppendLog("[UI] Post-Analyze refresh failed: " + ex.Message);
                 }
             });
 
@@ -8238,6 +8261,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            double oldLeft = insp?.Left ?? 0;
+            double oldTop = insp?.Top ?? 0;
+            double oldWidth = insp?.Width ?? 0;
+            double oldHeight = insp?.Height ?? 0;
+
             // === Analyze: BEFORE state & current image key ===
             var __seedKeyNow = ComputeImageSeedKey();
             _currentImageHash = __seedKeyNow;
@@ -8411,14 +8439,15 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (_lastHeatmapRoi != null && __baseHeat != null)
                         ApplyRoiTransform(_lastHeatmapRoi, __baseHeat, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDelta);
 
-                    try { ScheduleSyncOverlay(true); }
-                    catch
+                    try
                     {
-                        SyncOverlayToImage();
-                        try { RedrawOverlaySafe(); }
-                        catch { RedrawOverlay(); }
+                        RedrawOverlay();
                         UpdateHeatmapOverlayLayoutAndClip();
-                        try { RedrawAnalysisCrosses(); } catch { }
+                        RedrawAnalysisCrosses();
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog("[UI] Unified transform redraw failed: " + ex.Message);
                     }
 
                     AppendLog("[UI] Unified transform applied to search/heatmap ROIs.");
@@ -8430,6 +8459,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             SyncCurrentRoiFromInspection(insp);
+
+            AppendLog(FormattableString.Invariant(
+                $"[analyze] move inspection from=({oldLeft:0.##},{oldTop:0.##},{oldWidth:0.##},{oldHeight:0.##}) to=({insp.Left:0.##},{insp.Top:0.##},{insp.Width:0.##},{insp.Height:0.##})"));
 
             // === AnalyzeMaster: AFTER state + delta (vs FIXED baseline) ===
             InspLog($"[Analyze] AFTER  insp: {FInsp(insp)}");
@@ -9395,6 +9427,24 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnSaveLayout_Click(object sender, RoutedEventArgs e)
         {
+            var preset = _preset;
+            if (preset == null || _layout == null)
+            {
+                AppendLog("[layout-save] blocked (layout/preset null)");
+                Snack("Layout no inicializado.");
+                return;
+            }
+
+            var targetPath = MasterLayoutManager.GetDefaultPath(preset);
+            AppendLog(FormattableString.Invariant(
+                $"[save] requested reason=btn-save path={targetPath} suppress={_suppressSaves}"));
+
+            if (_suppressSaves > 0)
+            {
+                AppendLog("[save] suppressed programmatic change");
+                return;
+            }
+
             if (!MastersReady(_layout))
             {
                 AppendLog("[layout-save] blocked (Master1 incompleto)");
@@ -9415,8 +9465,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 SyncActiveInspectionToLayout();
 
                 var snapshot = BuildLayoutSnapshotForSave();
-                var targetPath = MasterLayoutManager.GetDefaultPath(_preset);
-                MasterLayoutManager.Save(_preset, snapshot);
+                MasterLayoutManager.Save(preset, snapshot);
                 AppendLog($"[layout-save] ok -> {targetPath}");
                 Snack("Layout guardado ✅");
             }
@@ -10473,7 +10522,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (scheduleResync)
             {
-                ScheduleSyncOverlay(force: true);
+                ScheduleSyncOverlay(force: true, reason: "SyncOverlayToImage(resync)");
             }
 
             var disp = GetImageDisplayRect();
@@ -10483,67 +10532,140 @@ namespace BrakeDiscInspector_GUI_ROI
             UpdateHeatmapOverlayLayoutAndClip();
         }
 
-        private void ScheduleSyncOverlay(bool force = false)
+        private void ScheduleSyncOverlay(bool force = false, string reason = "")
         {
-            if (force)
+            reason ??= string.Empty;
+
+            if (_syncScheduled && !force)
             {
-                _syncScheduled = false;
-                _syncRetryCount = 0;
+                AppendLog(FormattableString.Invariant($"[sync] coalesced reason={reason}"));
+                return;
             }
-            if (_syncScheduled) return;
 
             _syncScheduled = true;
-            _syncRetryCount = 0;
-            Dispatcher.BeginInvoke(new Action(SyncOverlayAfterLayout),
-                System.Windows.Threading.DispatcherPriority.Render);
+            var mySeq = System.Threading.Interlocked.Increment(ref _syncSeq);
+            AppendLog(FormattableString.Invariant($"[sync] scheduled={_syncScheduled} reason={reason} seq={mySeq}"));
+
+            bool delayCompleted = false;
+
+            async void Runner()
+            {
+                if (!delayCompleted)
+                {
+                    try
+                    {
+                        await System.Threading.Tasks.Task.Delay(60).ConfigureAwait(true);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        return;
+                    }
+
+                    delayCompleted = true;
+                }
+
+                if (mySeq != _syncSeq)
+                {
+                    return;
+                }
+
+                if (_isSyncRunning)
+                {
+                    Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
+                    return;
+                }
+
+                _isSyncRunning = true;
+                try
+                {
+                    _syncScheduled = false;
+                    RunSyncOverlayCore(mySeq, reason);
+                }
+                finally
+                {
+                    _isSyncRunning = false;
+                }
+            }
+
+            Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
         }
 
-
-
-        private void SyncOverlayAfterLayout()
+        private void RunSyncOverlayCore(int seq, string reason)
         {
-            var disp0 = GetImageDisplayRect();
-            if (disp0.Width <= 0 || disp0.Height <= 0)
-            {
-                if (_syncRetryCount++ < MaxSyncRetries)
-                {
-                    AppendLog($"[sync-mismatch] disp=(0x0) canvasActual=({CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0}) try={_syncRetryCount}");
-                    _syncScheduled = true;
-                    Dispatcher.BeginInvoke(new Action(SyncOverlayAfterLayout),
-                        System.Windows.Threading.DispatcherPriority.Render);
-                }
-                else
-                {
-                    _syncScheduled = false; // no quedar “enganchado”
-                }
-                return;
-            }
-
-            _syncScheduled = false;
-            SyncOverlayToImage(scheduleResync: false); // ← coloca CanvasROI exactamente sobre el letterbox
-
             var disp = GetImageDisplayRect();
-            double dw = Math.Abs(CanvasROI.ActualWidth - disp.Width);
-            double dh = Math.Abs(CanvasROI.ActualHeight - disp.Height);
-
-            if ((dw > 0.5 || dh > 0.5) && _syncRetryCount++ < MaxSyncRetries)
+            if (disp.Width <= 0 || disp.Height <= 0)
             {
-                AppendLog($"[sync-mismatch] disp=({disp.Width:0}x{disp.Height:0}) canvasActual=({CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0}) try={_syncRetryCount}");
-                _syncScheduled = true;
-                Dispatcher.BeginInvoke(new Action(SyncOverlayAfterLayout),
-                    System.Windows.Threading.DispatcherPriority.Render);
+                AppendLog(FormattableString.Invariant($"[sync] skip empty display seq={seq} reason={reason}"));
                 return;
             }
 
-            AppendLog("[sync] post-layout redraw");
-            AppendResizeLog($"[after_sync] CanvasROI={CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0} displayRect={GetImageDisplayRect().Width:0}x{GetImageDisplayRect().Height:0}");
+            bool changed =
+                _lastDisplayRect.IsEmpty ||
+                System.Math.Abs(_lastDisplayRect.X - disp.X) > DisplayEps ||
+                System.Math.Abs(_lastDisplayRect.Y - disp.Y) > DisplayEps ||
+                System.Math.Abs(_lastDisplayRect.Width - disp.Width) > DisplayEps ||
+                System.Math.Abs(_lastDisplayRect.Height - disp.Height) > DisplayEps;
 
-            RedrawOverlay();            // saved ROIs
-            RecomputePreviewShapeAfterSync(); // PREVIEW ROI (unsaved)
-            UpdateHeatmapOverlayLayoutAndClip();
-            RedrawAnalysisCrosses();
-            _overlayNeedsRedraw = false;
-            return;
+            bool needsWork = changed || _overlayNeedsRedraw;
+
+            AppendLog(FormattableString.Invariant(
+                $"[sync] run seq={seq} changed={changed} redraw={_overlayNeedsRedraw} disp=({disp.X:0.##},{disp.Y:0.##},{disp.Width:0.##},{disp.Height:0.##}) reason={reason}"));
+
+            if (!needsWork)
+            {
+                return;
+            }
+
+            _lastDisplayRect = disp;
+
+            try
+            {
+                SyncOverlayToImage(scheduleResync: false);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[sync] SyncOverlayToImage failed: {ex.Message}");
+            }
+
+            try
+            {
+                RedrawOverlay();
+                _overlayNeedsRedraw = false;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[sync] RedrawOverlay failed: {ex.Message}");
+            }
+
+            try
+            {
+                RecomputePreviewShapeAfterSync();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[sync] preview recompute failed: {ex.Message}");
+            }
+
+            try
+            {
+                UpdateHeatmapOverlayLayoutAndClip();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[sync] heatmap layout failed: {ex.Message}");
+            }
+
+            try
+            {
+                RedrawAnalysisCrosses();
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[sync] crosses redraw failed: {ex.Message}");
+            }
+
+            AppendResizeLog(FormattableString.Invariant(
+                $"[after_sync] CanvasROI={CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0} displayRect={disp.Width:0}x{disp.Height:0}"));
         }
 
         // Helper moved to class scope so it is visible at call sites (fixes CS0103)
@@ -10953,7 +11075,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 ApplyDrawToolSelection(RoiShape.Rectangle, updateViewModel: true);
                 SetActiveInspectionIndex(1);
 
-                ScheduleSyncOverlay(force: true);
+                ScheduleSyncOverlay(force: true, reason: "ClearCanvas");
                 RequestRoiVisibilityRefresh();
                 RedrawOverlaySafe();
                 UpdateRoiHud();

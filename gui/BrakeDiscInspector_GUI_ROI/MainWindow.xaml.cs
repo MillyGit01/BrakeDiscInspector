@@ -57,7 +57,10 @@ using SWPoint = System.Windows.Point;
 using SWRect = System.Windows.Rect;
 using SWVector = System.Windows.Vector;
 using CvPoint = OpenCvSharp.Point;
-using CvRect = OpenCvSharp.Rect;
+using CvRect = OpenCvSharp.Rect; // CODEX: alias for OpenCV rectangles.
+using WRect = System.Windows.Rect; // CODEX: alias for WPF rectangles.
+using WPoint = System.Windows.Point; // CODEX: alias for WPF points.
+using WInt32Rect = System.Windows.Int32Rect; // CODEX: alias for WPF Int32Rect.
 // --- END: UI/OCV type aliases ---
 
 namespace BrakeDiscInspector_GUI_ROI
@@ -6406,7 +6409,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                var canvasRect = vm.GetInspectionRoiCanvasRect(roiIndex);
+                WRect? canvasRect = vm.GetInspectionRoiCanvasRect(roiIndex); // CODEX: capture explicit WPF rect type to avoid ambiguity.
                 if (canvasRect == null)
                 {
                     heatmap.Source = null;
@@ -6423,17 +6426,22 @@ namespace BrakeDiscInspector_GUI_ROI
                 Canvas.SetTop(heatmap, canvasRect.Value.Top);
                 heatmap.Visibility = Visibility.Visible;
 
-                var rectImgOpt = vm.GetInspectionRoiImageRectPx(roiIndex);
+                WInt32Rect? rectImgOpt = vm.GetInspectionRoiImageRectPx(roiIndex); // CODEX: explicit Int32Rect for conversion helpers.
                 string rectImgText = rectImgOpt.HasValue
                     ? FormattableString.Invariant($"{rectImgOpt.Value.X},{rectImgOpt.Value.Y},{rectImgOpt.Value.Width},{rectImgOpt.Value.Height}")
                     : "null";
+                CvRect cvCanvasRect = ToCvRect(canvasRect.Value); // CODEX: convert canvas rect to OpenCV coordinates.
+                CvRect? cvImageRect = rectImgOpt.HasValue ? ToCvRect(rectImgOpt.Value) : (CvRect?)null; // CODEX: convert ROI image rect for OpenCV consumers.
+                string rectImgCvText = cvImageRect.HasValue // CODEX: track printable OpenCV rect description.
+                    ? FormattableString.Invariant($"{cvImageRect.Value.X},{cvImageRect.Value.Y},{cvImageRect.Value.Width},{cvImageRect.Value.Height}") // CODEX: describe converted ROI rect.
+                    : "null"; // CODEX: flag missing ROI rects during logging.
 
                 GuiLog.Info(FormattableString.Invariant(
-                    $"[batch-ui] place idx={roiIndex} RECTimg=({rectImgText}) RECTcanvas=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) reason={reason}"));
+                    $"[batch-ui] place idx={roiIndex} RECTimg=({rectImgText}) RECTcanvas=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) CVimg=({rectImgCvText}) CVcanvas=({cvCanvasRect.X},{cvCanvasRect.Y},{cvCanvasRect.Width},{cvCanvasRect.Height}) reason={reason}")); // CODEX: log both WPF and OpenCV-friendly rectangles for diagnostics.
 
                 if (roiIndex == 2)
                 {
-                    var roi1Rect = vm.GetInspectionRoiImageRectPx(1);
+                    WInt32Rect? roi1Rect = vm.GetInspectionRoiImageRectPx(1); // CODEX: ensure consistent Int32Rect typing for ROI1.
                     if (roi1Rect.HasValue && rectImgOpt.HasValue)
                     {
                         if (roi1Rect.Value.Equals(rectImgOpt.Value))
@@ -6442,7 +6450,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         }
                         else if (Math.Abs(roi1Rect.Value.Width - rectImgOpt.Value.Width) > 0.5)
                         {
-                            var roi1Canvas = vm.GetInspectionRoiCanvasRect(1);
+                            WRect? roi1Canvas = vm.GetInspectionRoiCanvasRect(1); // CODEX: explicit WPF rect typing for ROI1 canvas rect.
                             if (roi1Canvas.HasValue && RectsClose(canvasRect.Value, roi1Canvas.Value))
                             {
                                 GuiLog.Warn(FormattableString.Invariant(
@@ -6460,13 +6468,28 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private static bool RectsClose(Rect a, Rect b, double tolerance = 0.5)
+        private static bool RectsClose(WRect a, WRect b, double tolerance = 0.5) // CODEX: disambiguate Rect usage by forcing WPF alias.
         {
             // CODEX: helper to spot ROI mixing by comparing canvas rectangles with a tight tolerance.
             return Math.Abs(a.Left - b.Left) <= tolerance
                 && Math.Abs(a.Top - b.Top) <= tolerance
                 && Math.Abs(a.Width - b.Width) <= tolerance
                 && Math.Abs(a.Height - b.Height) <= tolerance;
+        }
+
+        private static CvRect ToCvRect(WRect rect) // CODEX: convert double-based WPF rects into integer OpenCV rects.
+            => new CvRect((int)Math.Round(rect.X), (int)Math.Round(rect.Y), Math.Max(0, (int)Math.Round(rect.Width)), Math.Max(0, (int)Math.Round(rect.Height))); // CODEX: round and clamp WPF coordinates to pixels.
+
+        private static CvRect ToCvRect(WInt32Rect rect) // CODEX: map Int32Rect structures directly into OpenCV rects.
+            => new CvRect(rect.X, rect.Y, Math.Max(0, rect.Width), Math.Max(0, rect.Height)); // CODEX: guard width/height from going negative.
+
+        private static CvRect ClampToMat(CvRect rect, Mat mat) // CODEX: ensure OpenCV rectangles stay inside Mat dimensions.
+        {
+            int x = Math.Clamp(rect.X, 0, Math.Max(0, mat.Width - 1)); // CODEX: clamp left coordinate within texture bounds.
+            int y = Math.Clamp(rect.Y, 0, Math.Max(0, mat.Height - 1)); // CODEX: clamp top coordinate within texture bounds.
+            int w = Math.Clamp(rect.Width, 0, Math.Max(0, mat.Width - x)); // CODEX: adjust width so rectangle fits inside the Mat.
+            int h = Math.Clamp(rect.Height, 0, Math.Max(0, mat.Height - y)); // CODEX: adjust height so rectangle fits inside the Mat.
+            return new CvRect(x, y, w, h); // CODEX: return the bounded rectangle.
         }
 
         private void RequestBatchHeatmapPlacement(string reason, WorkflowViewModel? vmOverride = null)

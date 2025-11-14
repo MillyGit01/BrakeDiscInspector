@@ -8280,6 +8280,17 @@ namespace BrakeDiscInspector_GUI_ROI
             LogToFileAndUI(line);
         }
 
+        // Compatibilidad con llamadas que usan interpolated strings con FormattableString.Invariant
+        private void AppendLog(FormattableString line)
+        {
+            if (line == null)
+            {
+                return;
+            }
+
+            AppendLog(FormattableString.Invariant(line));
+        }
+
         private void AppendLogBulk(IEnumerable<string> lines)
         {
             foreach (var entry in lines)

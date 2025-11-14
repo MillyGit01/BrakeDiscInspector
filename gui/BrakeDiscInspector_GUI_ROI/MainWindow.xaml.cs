@@ -2547,63 +2547,94 @@ namespace BrakeDiscInspector_GUI_ROI
         }
         public MainWindow()
         {
-            InitializeComponent();
-            if (this.DataContext == null) this.DataContext = this;
-            ApplyDrawToolSelection(_currentDrawTool, updateViewModel: false);
-            this.SizeChanged += (s,e) =>
-            {
-                try
-                {
-                    RoiDiagDumpTransform("sizechanged");
-                    if (_layout != null)
-                    {
-                        RoiDiagDumpRoi("sizechanged", "Master1Pattern", _layout.Master1Pattern);
-                        RoiDiagDumpRoi("sizechanged", "Master1Search ", _layout.Master1Search);
-                        RoiDiagDumpRoi("sizechanged", "Master2Pattern", _layout.Master2Pattern);
-                        RoiDiagDumpRoi("sizechanged", "Master2Search ", _layout.Master2Search);
-                        RoiDiagDumpRoi("sizechanged", "Inspection   ", _layout.Inspection);
-                    }
-                    if (_lastHeatmapRoi != null)
-                        RoiDiagDumpRoi("sizechanged", "HeatmapROI   ", _lastHeatmapRoi);
-                    Dispatcher.InvokeAsync(() => RoiDiagDumpCanvasChildren("sizechanged:UI-snapshot"),
-                                           System.Windows.Threading.DispatcherPriority.Render);
-                }
-                catch {}
-            };
+            // CODEX: logs de arranque de ventana
+            GuiLog.Info("[BOOT] MainWindow ctor ENTER");
+
             try
             {
-                var ps = System.Windows.PresentationSource.FromVisual(this);
-                if (ps?.CompositionTarget != null)
+                GuiLog.Info("[BOOT] MainWindow ctor → InitializeComponent()");
+                InitializeComponent();
+                GuiLog.Info("[BOOT] MainWindow ctor → InitializeComponent() OK");
+
+                if (this.DataContext == null)
                 {
-                    Matrix m = ps.CompositionTarget.TransformToDevice;
-                    LogHeatmap($"DPI Scale = ({m.M11:F3}, {m.M22:F3})");
+                    this.DataContext = this;
+                    GuiLog.Info("[BOOT] MainWindow ctor → DataContext asignado a self");
                 }
+                else
+                {
+                    GuiLog.Info("[BOOT] MainWindow ctor → DataContext ya estaba asignado");
+                }
+
+                GuiLog.Info("[BOOT] MainWindow ctor → ApplyDrawToolSelection()");
+                ApplyDrawToolSelection(_currentDrawTool, updateViewModel: false);
+                GuiLog.Info("[BOOT] MainWindow ctor → ApplyDrawToolSelection OK");
+
+                this.SizeChanged += (s,e) =>
+                {
+                    try
+                    {
+                        RoiDiagDumpTransform("sizechanged");
+                        if (_layout != null)
+                        {
+                            RoiDiagDumpRoi("sizechanged", "Master1Pattern", _layout.Master1Pattern);
+                            RoiDiagDumpRoi("sizechanged", "Master1Search ", _layout.Master1Search);
+                            RoiDiagDumpRoi("sizechanged", "Master2Pattern", _layout.Master2Pattern);
+                            RoiDiagDumpRoi("sizechanged", "Master2Search ", _layout.Master2Search);
+                            RoiDiagDumpRoi("sizechanged", "Inspection   ", _layout.Inspection);
+                        }
+                        if (_lastHeatmapRoi != null)
+                        {
+                            RoiDiagDumpRoi("sizechanged", "HeatmapROI   ", _lastHeatmapRoi);
+                        }
+                        Dispatcher.InvokeAsync(() => RoiDiagDumpCanvasChildren("sizechanged:UI-snapshot"),
+                                               System.Windows.Threading.DispatcherPriority.Render);
+                    }
+                    catch {}
+                };
+
+                try
+                {
+                    var ps = System.Windows.PresentationSource.FromVisual(this);
+                    if (ps?.CompositionTarget != null)
+                    {
+                        Matrix m = ps.CompositionTarget.TransformToDevice;
+                        LogHeatmap($"DPI Scale = ({m.M11:F3}, {m.M22:F3})");
+                    }
+                }
+                catch {}
+
+                // RoiOverlay disabled: labels are now drawn on Canvas only
+                // RoiOverlay.BindToImage(ImgMain);
+
+                // RoiOverlay disabled: labels are now drawn on Canvas only
+                // ImgMain.SizeChanged += (_, __) => RoiOverlay.InvalidateOverlay();
+                // SizeChanged += (_, __) => RoiOverlay.InvalidateOverlay();
+                _preset = PresetManager.LoadOrDefault(_preset);
+
+                var (layout, _) = MasterLayoutManager.LoadOrNew(_preset);
+                _layout = layout;
+                ApplyInspectionPresetToUI(_preset);
+                InitializeOptionsFromConfig();
+
+                InitUI();
+                InitTrainPollingTimer();
+                HookCanvasInput();
+                InitWorkflow();
+
+                ImgMain.SizeChanged += ImgMain_SizeChanged;
+                this.SizeChanged += MainWindow_SizeChanged;
+                this.Loaded += MainWindow_Loaded;
+
+                RemoveAllRoiAdorners();
+
+                GuiLog.Info("[BOOT] MainWindow ctor EXIT OK");
             }
-            catch {}
-
-            // RoiOverlay disabled: labels are now drawn on Canvas only
-            // RoiOverlay.BindToImage(ImgMain);
-
-            // RoiOverlay disabled: labels are now drawn on Canvas only
-            // ImgMain.SizeChanged += (_, __) => RoiOverlay.InvalidateOverlay();
-            // SizeChanged += (_, __) => RoiOverlay.InvalidateOverlay();
-            _preset = PresetManager.LoadOrDefault(_preset);
-
-            var (layout, _) = MasterLayoutManager.LoadOrNew(_preset);
-            _layout = layout;
-            ApplyInspectionPresetToUI(_preset);
-            InitializeOptionsFromConfig();
-
-            InitUI();
-            InitTrainPollingTimer();
-            HookCanvasInput();
-            InitWorkflow();
-
-            ImgMain.SizeChanged += ImgMain_SizeChanged;
-            this.SizeChanged += MainWindow_SizeChanged;
-            this.Loaded += MainWindow_Loaded;
-
-            RemoveAllRoiAdorners();
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] MainWindow ctor FAILED", ex);
+                throw; // importante: re-lanzar para que VS lo muestre
+            }
         }
 
         private void InitializeOptionsFromConfig()
@@ -3549,7 +3580,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void RedrawOverlaySafe()
         {
-            if (IsOverlayAligned())
+            bool aligned = IsOverlayAligned();
+            AppendLog(FormattableString.Invariant(
+                $"[guard] RedrawOverlaySafe aligned={aligned} canvasActual=({CanvasROI?.ActualWidth:0.##}x{CanvasROI?.ActualHeight:0.##}) " +
+                $"imgActual=({ImgMain?.ActualWidth:0.##}x{ImgMain?.ActualHeight:0.##})"));
+
+            if (aligned)
             {
                 RedrawOverlay();
                 _overlayNeedsRedraw = false;
@@ -6173,18 +6209,32 @@ namespace BrakeDiscInspector_GUI_ROI
         }
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            GuiLog.Info("[BOOT] MainWindow_Loaded ENTER");
+
             if (_loadedOnce)
             {
+                GuiLog.Info("[BOOT] MainWindow_Loaded: ya estaba cargada (_loadedOnce == true) → RETURN");
                 return;
             }
 
             _loadedOnce = true;
+            GuiLog.Info("[BOOT] MainWindow_Loaded: _loadedOnce = true");
 
-            AttachBatchUiHandlersOnce();
+            try
+            {
+                GuiLog.Info("[BOOT] MainWindow_Loaded → AttachBatchUiHandlersOnce()");
+                AttachBatchUiHandlersOnce();
+                GuiLog.Info("[BOOT] MainWindow_Loaded → AttachBatchUiHandlersOnce() OK");
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] MainWindow_Loaded: AttachBatchUiHandlersOnce FAILED", ex);
+            }
 
             var tray = FindName("TopLeftTray") as ToolBarTray ?? FindVisualChildByName<ToolBarTray>(this, "TopLeftTray");
             if (tray != null)
             {
+                GuiLog.Info("[BOOT] MainWindow_Loaded → TopLeftTray encontrado, ajustando ZIndex y posición");
                 Panel.SetZIndex(tray, 1000);
                 tray.Visibility = Visibility.Visible;
 
@@ -6194,10 +6244,20 @@ namespace BrakeDiscInspector_GUI_ROI
                     Canvas.SetTop(tray, 8);
                 }
             }
+            else
+            {
+                GuiLog.Info("[BOOT] MainWindow_Loaded → TopLeftTray NO encontrado");
+            }
 
+            GuiLog.Info("[BOOT] MainWindow_Loaded → ScheduleSyncOverlay(Loaded)");
             ScheduleSyncOverlay(force: true, reason: "Loaded");
+            GuiLog.Info("[BOOT] MainWindow_Loaded → ScheduleSyncOverlay(Loaded) DONE");
+
             UpdateHeatmapOverlayLayoutAndClip();
+            GuiLog.Info("[BOOT] MainWindow_Loaded → UpdateHeatmapOverlayLayoutAndClip() DONE");
+
             RedrawAnalysisCrosses();
+            GuiLog.Info("[BOOT] MainWindow_Loaded → RedrawAnalysisCrosses() DONE");
 
             WireExistingHeatmapControls();
             SyncDrawToolFromViewModel();
@@ -6206,19 +6266,44 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (_workflowViewModel != null)
                 {
-                    GuiLog.Info("[BOOT] Workflow initialization begin");
+                    GuiLog.Info("[BOOT] MainWindow_Loaded → Workflow.InitializeAsync BEGIN");
                     await _workflowViewModel.InitializeAsync();
-                    GuiLog.Info("[BOOT] Workflow initialization end");
+                    GuiLog.Info("[BOOT] MainWindow_Loaded → Workflow.InitializeAsync END");
+                }
+                else
+                {
+                    GuiLog.Info("[BOOT] MainWindow_Loaded → _workflowViewModel es null (no se inicializa workflow)");
                 }
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[BOOT] Workflow initialization failed", ex);
+                GuiLog.Error("[BOOT] MainWindow_Loaded: Workflow.InitializeAsync FAILED", ex);
             }
 
-            _workflowViewModel?.RefreshDatasetCommand.Execute(null);
-            _workflowViewModel?.RefreshHealthCommand.Execute(null);
+            try
+            {
+                GuiLog.Info("[BOOT] MainWindow_Loaded → RefreshDatasetCommand");
+                _workflowViewModel?.RefreshDatasetCommand.Execute(null);
+                GuiLog.Info("[BOOT] MainWindow_Loaded → RefreshDatasetCommand DONE");
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] MainWindow_Loaded: RefreshDatasetCommand FAILED", ex);
+            }
+
+            try
+            {
+                GuiLog.Info("[BOOT] MainWindow_Loaded → RefreshHealthCommand");
+                _workflowViewModel?.RefreshHealthCommand.Execute(null);
+                GuiLog.Info("[BOOT] MainWindow_Loaded → RefreshHealthCommand DONE");
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] MainWindow_Loaded: RefreshHealthCommand FAILED", ex);
+            }
+
             RefreshCreateButtonsEnabled();
+            GuiLog.Info("[BOOT] MainWindow_Loaded EXIT");
         }
 
         private void BatchFile_Click(object sender, MouseButtonEventArgs e)
@@ -10664,7 +10749,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (_syncScheduled && !force)
             {
-                AppendLog(FormattableString.Invariant($"[sync] coalesced reason={reason}"));
+                AppendLog(FormattableString.Invariant(
+                    $"[sync] coalesced reason={reason} seq={_syncSeq}"));
                 return;
             }
 
@@ -10676,6 +10762,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             async void Runner()
             {
+                AppendLog(FormattableString.Invariant(
+                    $"[sync] Runner ENTER seq={mySeq} delayCompleted={delayCompleted}"));
                 if (!delayCompleted)
                 {
                     try
@@ -10684,6 +10772,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     catch (TaskCanceledException)
                     {
+                        AppendLog(FormattableString.Invariant(
+                            $"[sync] Runner CANCELLED seq={mySeq}"));
                         return;
                     }
 
@@ -10692,11 +10782,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (mySeq != _syncSeq)
                 {
+                    AppendLog(FormattableString.Invariant(
+                        $"[sync] Runner ABORT seq={mySeq} (latest={_syncSeq})"));
                     return;
                 }
 
                 if (_isSyncRunning)
                 {
+                    AppendLog(FormattableString.Invariant(
+                        $"[sync] Runner defers (already running) seq={mySeq}"));
                     Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
                     return;
                 }
@@ -10705,11 +10799,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 try
                 {
                     _syncScheduled = false;
+                    AppendLog(FormattableString.Invariant(
+                        $"[sync] Runner → RunSyncOverlayCore seq={mySeq} reason={reason}"));
                     RunSyncOverlayCore(mySeq, reason);
                 }
                 finally
                 {
                     _isSyncRunning = false;
+                    AppendLog(FormattableString.Invariant(
+                        $"[sync] Runner EXIT seq={mySeq}"));
                 }
             }
 
@@ -10721,7 +10819,9 @@ namespace BrakeDiscInspector_GUI_ROI
             var disp = GetImageDisplayRect();
             if (disp.Width <= 0 || disp.Height <= 0)
             {
-                AppendLog(FormattableString.Invariant($"[sync] skip empty display seq={seq} reason={reason}"));
+                AppendLog(FormattableString.Invariant(
+                    $"[sync] skip empty display seq={seq} reason={reason} disp=({disp.X:0.##},{disp.Y:0.##},{disp.Width:0.##},{disp.Height:0.##}) " +
+                    $"canvasActual=({CanvasROI?.ActualWidth:0.##}x{CanvasROI?.ActualHeight:0.##}) imgActual=({ImgMain?.ActualWidth:0.##}x{ImgMain?.ActualHeight:0.##})"));
                 return;
             }
 
@@ -10735,10 +10835,13 @@ namespace BrakeDiscInspector_GUI_ROI
             bool needsWork = changed || _overlayNeedsRedraw;
 
             AppendLog(FormattableString.Invariant(
-                $"[sync] run seq={seq} changed={changed} redraw={_overlayNeedsRedraw} disp=({disp.X:0.##},{disp.Y:0.##},{disp.Width:0.##},{disp.Height:0.##}) reason={reason}"));
+                $"[sync] run seq={seq} reason={reason} changed={changed} redraw={_overlayNeedsRedraw} " +
+                $"disp=({disp.X:0.##},{disp.Y:0.##},{disp.Width:0.##},{disp.Height:0.##})"));
 
             if (!needsWork)
             {
+                AppendLog(FormattableString.Invariant(
+                    $"[sync] no work needed seq={seq} reason={reason}"));
                 return;
             }
 

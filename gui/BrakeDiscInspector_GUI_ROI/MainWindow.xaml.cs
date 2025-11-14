@@ -3536,7 +3536,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool IsOverlayAligned()
         {
             var disp = GetImageDisplayRect();
-            if (disp.Width <= 0 || disp.Height <= 0) return false;
+            // CODEX: si no hay imagen (0x0), consideramos alineado para no bloquear interacción.
+            if (disp.Width <= 0 || disp.Height <= 0)
+            {
+                return true; // CODEX: no existe display que sincronizar todavía
+            }
 
             double dw = Math.Abs(CanvasROI.ActualWidth - disp.Width);
             double dh = Math.Abs(CanvasROI.ActualHeight - disp.Height);
@@ -10784,6 +10788,19 @@ namespace BrakeDiscInspector_GUI_ROI
             catch (Exception ex)
             {
                 AppendLog($"[sync] crosses redraw failed: {ex.Message}");
+            }
+
+            // CODEX: tras un sync exitoso liberamos la política de interacción si el overlay ya está alineado.
+            try
+            {
+                if (IsOverlayAligned())
+                {
+                    ApplyInspectionInteractionPolicy("redraw"); // CODEX: reset policy tras sync
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[sync] ApplyInspectionInteractionPolicy(redraw) failed: {ex.Message}");
             }
 
             AppendResizeLog(FormattableString.Invariant(

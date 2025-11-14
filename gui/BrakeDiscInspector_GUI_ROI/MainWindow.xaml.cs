@@ -1675,7 +1675,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private static void UILog(string msg)
         {
             Debug.WriteLine(msg);
-            GuiLog.Info(msg);
+            GuiLog.Info($"{msg}"); // CODEX: ensure FormattableString overload receives interpolated string.
         }
 
         private bool _batchUiHandlersAttached = false;

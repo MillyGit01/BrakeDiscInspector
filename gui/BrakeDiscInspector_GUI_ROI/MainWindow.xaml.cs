@@ -874,7 +874,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (_suppressSaves > 0)
             {
-                AppendLog("[save] suppressed programmatic change");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[save] suppressed programmatic change");
                 return false;
             }
 
@@ -2834,7 +2835,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog("[workflow] init error: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[workflow] init error: {ex.Message}");
             }
         }
 
@@ -3595,7 +3597,8 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _overlayNeedsRedraw = true;
                 ScheduleSyncOverlay(force: true, reason: "RedrawOverlaySafe");
-                AppendLog("[guard] Redraw pospuesto (overlay aún no alineado)");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[guard] Redraw pospuesto (overlay aún no alineado)");
                 ApplyInspectionInteractionPolicy("redraw-deferred");
             }
         }
@@ -3760,7 +3763,8 @@ namespace BrakeDiscInspector_GUI_ROI
             double oy = transform.offY;
             if (sx <= 0.0 || sy <= 0.0)
             {
-                AppendLog("[overlay] skipped redraw (transform invalid)");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[overlay] skipped redraw (transform invalid)");
                 return;
             }
 
@@ -4547,7 +4551,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog("[batch] reposition hash failed: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[batch] reposition hash failed: {ex.Message}");
                 return;
             }
 
@@ -4588,7 +4593,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[batch] reposition apply failed: " + ex.Message);
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[batch] reposition apply failed: {ex.Message}");
                 }
             }, DispatcherPriority.Background);
         }
@@ -4652,7 +4658,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog("[heatmap] error: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[heatmap] error: {ex.Message}");
             }
         }
 
@@ -7058,7 +7065,8 @@ namespace BrakeDiscInspector_GUI_ROI
             // ⛑️ No permitir interacción si el overlay no está alineado aún
             if (!IsOverlayAligned())
             {
-                AppendLog("[guard] overlay no alineado todavía → reprogramo sync y cancelo este click");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[guard] overlay no alineado todavía → reprogramo sync y cancelo este click");
                 ScheduleSyncOverlay(force: true, reason: "CanvasGuard");
                 e.Handled = true;
                 return;
@@ -7067,7 +7075,8 @@ namespace BrakeDiscInspector_GUI_ROI
             // 1) Thumb → lo gestiona el adorner
             if (over is System.Windows.Controls.Primitives.Thumb)
             {
-                AppendLog("[canvas+] Down ignorado (Thumb debajo) -> Adorner manejará");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[canvas+] Down ignorado (Thumb debajo) -> Adorner manejará");
                 return;
             }
 
@@ -7092,7 +7101,8 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (_globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
                 {
-                    AppendLog("[canvas+] Down ignorado (modo edición activo)");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[canvas+] Down ignorado (modo edición activo)");
                     e.Handled = true;
                     return;
                 }
@@ -7152,7 +7162,8 @@ namespace BrakeDiscInspector_GUI_ROI
             // FIN ARRASTRE
             if (_dragShape != null)
             {
-                AppendLog("[drag] end");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[drag] end");
                 CanvasROI.ReleaseMouseCapture();
                 _dragShape = null;
                 TryAutosaveLayout("drag end");
@@ -7288,7 +7299,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (RoiOverlay == null)
                 {
-                    AppendLog("[adorner] overlay no disponible para preview");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[adorner] overlay no disponible para preview");
                     return;
                 }
 
@@ -7310,11 +7322,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 }, AppendLog); // ⬅️ pasa logger
 
                 al.Add(adorner);
-                AppendLog("[adorner] preview OK layer attach");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[adorner] preview OK layer attach");
             }
             else
             {
-                AppendLog("[adorner] preview layer NOT FOUND (falta AdornerDecorator)");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[adorner] preview layer NOT FOUND (falta AdornerDecorator)");
             }
         }
 
@@ -7656,7 +7670,8 @@ namespace BrakeDiscInspector_GUI_ROI
                         UpdateHeatmapOverlayLayoutAndClip();
                         try { RedrawAnalysisCrosses(); } catch {}
                     }
-                    AppendLog("[UI] Redraw forced after saving Master2-Search.");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Redraw forced after saving Master2-Search.");
 
                     _tmpBuffer = null;
 
@@ -7894,7 +7909,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 catch (BackendMemoryNotFittedException ex)
                 {
-                    AppendLog("[ANALYZE] backend memory not fitted: " + (ex.Detail ?? ex.Message));
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[ANALYZE] backend memory not fitted: {ex.Detail ?? ex.Message}");
 
                     if (attempt >= 1)
                     {
@@ -7933,7 +7949,8 @@ namespace BrakeDiscInspector_GUI_ROI
                         return;
                     }
 
-                    AppendLog("[ANALYZE] Baseline ajustada, reintentando Analyze Masters...");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[ANALYZE] Baseline ajustada, reintentando Analyze Masters...");
                 }
                 catch (BackendBadRequestException ex)
                 {
@@ -7943,7 +7960,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[ANALYZE] error inesperado: " + ex);
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[ANALYZE] error inesperado: {ex}");
                     MessageBox.Show($"Analyze Masters error: {ex.Message}", "Analyze", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
@@ -7952,8 +7970,10 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private async Task AnalyzeMastersCoreAsync()
         {
-            AppendLog("[ANALYZE] Begin AnalyzeMastersAsync");
-            AppendLog("[FLOW] Entrando en AnalyzeMastersAsync");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"[ANALYZE] Begin AnalyzeMastersAsync");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"[FLOW] Entrando en AnalyzeMastersAsync");
 
             SWPoint? c1 = null, c2 = null;
             double s1 = 0, s2 = 0;
@@ -7961,10 +7981,12 @@ namespace BrakeDiscInspector_GUI_ROI
             // 1) Intento local primero (opcional)
             if (ChkUseLocalMatcher.IsChecked == true)
             {
-                    AppendLog("[ANALYZE] Using local matcher first...");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[ANALYZE] Using local matcher first...");
                     try
                     {
-                        AppendLog("[FLOW] Usando matcher local");
+                        // CODEX: FormattableString compatibility.
+                        AppendLog($"[FLOW] Usando matcher local");
                         using var img = Cv.Cv2.ImRead(_currentImagePathWin);
                         Mat? m1Override = null;
                         Mat? m2Override = null;
@@ -7979,13 +8001,21 @@ namespace BrakeDiscInspector_GUI_ROI
                                 _preset.Feature, _preset.MatchThr, _preset.RotRange, _preset.ScaleMin, _preset.ScaleMax, m1Override,
                                 LogToFileAndUI);
                             if (res1.center.HasValue) { c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y); s1 = res1.score; }
-                            else AppendLog("[LOCAL] M1 no encontrado");
+                            else
+                            {
+                                // CODEX: FormattableString compatibility.
+                                AppendLog($"[LOCAL] M1 no encontrado");
+                            }
 
                             var res2 = LocalMatcher.MatchInSearchROI(img, _layout.Master2Pattern, _layout.Master2Search,
                                 _preset.Feature, _preset.MatchThr, _preset.RotRange, _preset.ScaleMin, _preset.ScaleMax, m2Override,
                                 LogToFileAndUI);
                             if (res2.center.HasValue) { c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y); s2 = res2.score; }
-                            else AppendLog("[LOCAL] M2 no encontrado");
+                            else
+                            {
+                                // CODEX: FormattableString compatibility.
+                                AppendLog($"[LOCAL] M2 no encontrado");
+                            }
                         }
                         finally
                         {
@@ -7995,20 +8025,23 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     catch (DllNotFoundException ex)
                     {
-                        AppendLog("[OpenCV] DllNotFound: " + ex.Message);
+                        // CODEX: FormattableString compatibility.
+                        AppendLog($"[OpenCV] DllNotFound: {ex.Message}");
                         Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: FormattableString compatibility.
                     ChkUseLocalMatcher.IsChecked = false;
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[local matcher] ERROR: " + ex.Message);
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[local matcher] ERROR: {ex.Message}");
                 }
             }
 
             // 2) Backend si falta alguno
             if (c1 is null || c2 is null)
             {
-                AppendLog("[FLOW] Usando backend /infer para los masters");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] Usando backend /infer para los masters");
 
                 if (c1 is null)
                 {
@@ -8025,7 +8058,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     else
                     {
-                        AppendLog("[BACKEND] M1 FAIL :: " + (inferM1.error ?? "unknown"));
+                        // CODEX: FormattableString compatibility.
+                        AppendLog($"[BACKEND] M1 FAIL :: {inferM1.error ?? "unknown"}");
                     }
                 }
 
@@ -8044,7 +8078,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     else
                     {
-                        AppendLog("[BACKEND] M2 FAIL :: " + (inferM2.error ?? "unknown"));
+                        // CODEX: FormattableString compatibility.
+                        AppendLog($"[BACKEND] M2 FAIL :: {inferM2.error ?? "unknown"}");
                     }
                 }
             }
@@ -8054,13 +8089,15 @@ namespace BrakeDiscInspector_GUI_ROI
             if (c1 is null)
             {
                 Snack($"No se ha encontrado Master 1 en su zona de búsqueda"); // CODEX: FormattableString compatibility.
-                AppendLog("[FLOW] c1 null");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] c1 null");
                 return;
             }
             if (c2 is null)
             {
                 Snack($"No se ha encontrado Master 2 en su zona de búsqueda"); // CODEX: FormattableString compatibility.
-                AppendLog("[FLOW] c2 null");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] c2 null");
                 return;
             }
 
@@ -8097,7 +8134,8 @@ namespace BrakeDiscInspector_GUI_ROI
             if (inspectionRoi == null)
             {
                 Snack($"Masters OK. Falta ROI de Inspección: dibújalo y guarda. Las cruces ya están dibujadas."); // CODEX: FormattableString compatibility.
-                AppendLog("[FLOW] Inspection null");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] Inspection null");
                 _state = MasterState.DrawInspection;
                 UpdateWizardState();
                 return;
@@ -8105,7 +8143,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (inspectionRoi.IsFrozen)
             {
-                AppendLog("[FLOW] Inspection ROI frozen; skipping auto reposition.");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] Inspection ROI frozen; skipping auto reposition.");
             }
             else
             {
@@ -8116,7 +8155,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     RedrawOverlay();
                 }
 
-                AppendLog("[FLOW] Inspection movida y recortada");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] Inspection movida y recortada");
             }
 
             try
@@ -8145,19 +8185,22 @@ namespace BrakeDiscInspector_GUI_ROI
                             // Si no encaja en roles conocidos, no sobrescribir nada
                             break;
                     }
-                    AppendLog("[UI] Persisted detected ROI into layout: " + _lastHeatmapRoi.Role.ToString());
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Persisted detected ROI into layout: {_lastHeatmapRoi.Role}");
                     UpdateRoiVisibilityControls();
                 }
             }
             catch (Exception ex)
             {
-                AppendLog("[UI] Persist layout with detected ROI failed: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[UI] Persist layout with detected ROI failed: {ex.Message}");
             }
 
             SaveInspectionBaselineForCurrentImage();
             if (TryAutosaveLayout("analyze masters"))
             {
-                AppendLog("[FLOW] Layout guardado");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[FLOW] Layout guardado");
             }
 
             _hasInspectionAnalysisTransform = true;
@@ -8175,31 +8218,36 @@ namespace BrakeDiscInspector_GUI_ROI
                     RedrawOverlay();
                     UpdateHeatmapOverlayLayoutAndClip();
                     RedrawAnalysisCrosses();
-                    AppendLog("[UI] Post-Analyze refresh applied (no scheduler).");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Post-Analyze refresh applied (no scheduler).");
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[UI] Post-Analyze refresh failed: " + ex.Message);
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Post-Analyze refresh failed: {ex.Message}");
                 }
             });
 
             Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección reubicado.");
             _state = MasterState.Ready;
             UpdateWizardState();
-            AppendLog("[FLOW] AnalyzeMastersAsync terminado");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"[FLOW] AnalyzeMastersAsync terminado");
         }
 
         private async Task<bool> EnsureMasterBaselinesAsync()
         {
             if (_backendClient == null)
             {
-                AppendLog("[ANALYZE] Backend client no disponible para auto-fit.");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[ANALYZE] Backend client no disponible para auto-fit.");
                 return false;
             }
 
             if (string.IsNullOrWhiteSpace(_currentImagePathWin) || !File.Exists(_currentImagePathWin))
             {
-                AppendLog("[ANALYZE] Ruta de imagen inválida para auto-fit.");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[ANALYZE] Ruta de imagen inválida para auto-fit.");
                 return false;
             }
 
@@ -8500,7 +8548,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (insp?.IsFrozen == true)
             {
-                AppendLog("[Analyze] Inspection ROI frozen; skipping MoveInspectionTo.");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[Analyze] Inspection ROI frozen; skipping MoveInspectionTo.");
                 return;
             }
 
@@ -8648,16 +8697,19 @@ namespace BrakeDiscInspector_GUI_ROI
                 try
                 {
                     SetInspectionBaseline(insp.Clone());
-                    AppendLog("[UI] Inspection baseline refreshed (rolling mode).");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Inspection baseline refreshed (rolling mode).");
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[UI] Failed to refresh inspection baseline: " + ex.Message);
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Failed to refresh inspection baseline: {ex.Message}");
                 }
             }
             else
             {
-                AppendLog("[UI] Fixed Inspection baseline in use (no refresh after Analyze).");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[UI] Fixed Inspection baseline in use (no refresh after Analyze).");
             }
 
             try
@@ -8690,15 +8742,18 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     catch (Exception ex)
                     {
-                        AppendLog("[UI] Unified transform redraw failed: " + ex.Message);
+                        // CODEX: FormattableString compatibility.
+                        AppendLog($"[UI] Unified transform redraw failed: {ex.Message}");
                     }
 
-                    AppendLog("[UI] Unified transform applied to search/heatmap ROIs.");
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[UI] Unified transform applied to search/heatmap ROIs.");
                 }
             }
             catch (Exception ex)
             {
-                AppendLog("[UI] Unified transform failed: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[UI] Unified transform failed: {ex.Message}");
             }
 
             SyncCurrentRoiFromInspection(insp);
@@ -9307,7 +9362,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private async Task<bool> VerifyPathsAndConnectivityAsync()
         {
-            AppendLog("== VERIFY: comenzando verificación de paths/IP ==");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"== VERIFY: comenzando verificación de paths/IP ==");
             bool ok = true;
 
             if (string.IsNullOrWhiteSpace(_currentImagePathWin) || !File.Exists(_currentImagePathWin))
@@ -9367,12 +9423,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 ok = false;
             }
 
-            AppendLog("== VERIFY: fin verificación ==");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"== VERIFY: fin verificación ==");
             return ok;
         }
         private void LogPathSnapshot()
         {
-            AppendLog("========== PATH SNAPSHOT ==========");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"========== PATH SNAPSHOT ==========");
             try
             {
                 AppendLog($"[CFG] BaseUrl={BackendAPI.BaseUrl}");
@@ -9396,20 +9454,24 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog("[SNAPSHOT] ERROR: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[SNAPSHOT] ERROR: {ex.Message}");
             }
-            AppendLog("===================================");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"===================================");
         }
 
         private async void BtnAnalyzeMaster_Click(object sender, RoutedEventArgs e)
         {
-            AppendLog("[UI] BtnAnalyzeMaster_Click");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"[UI] BtnAnalyzeMaster_Click");
 
             // 1) (opcional) snapshot/verificación que ya tienes
             LogPathSnapshot();
             if (!await VerifyPathsAndConnectivityAsync())
             {
-                AppendLog("[VERIFY] Falló verificación. Abortando Analyze.");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[VERIFY] Falló verificación. Abortando Analyze.");
                 return;
             }
 
@@ -9675,7 +9737,8 @@ namespace BrakeDiscInspector_GUI_ROI
             var preset = _preset;
             if (preset == null || _layout == null)
             {
-                AppendLog("[layout-save] blocked (layout/preset null)");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[layout-save] blocked (layout/preset null)");
                 Snack($"Layout no inicializado."); // CODEX: FormattableString compatibility.
                 return;
             }
@@ -9686,13 +9749,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (_suppressSaves > 0)
             {
-                AppendLog("[save] suppressed programmatic change");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[save] suppressed programmatic change");
                 return;
             }
 
             if (!MastersReady(_layout))
             {
-                AppendLog("[layout-save] blocked (Master1 incompleto)");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[layout-save] blocked (Master1 incompleto)");
                 MessageBox.Show(
                     "Dibuja/guarda Master 1 (Pattern y Search) antes de 'Save Layout'.",
                     "Save Layout",
@@ -9710,7 +9775,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 SyncActiveInspectionToLayout();
 
                 var snapshot = BuildLayoutSnapshotForSave();
-                AppendLog("[layout] Saving from ROI model snapshot (manual button)"); // CODEX: confirm manual saves never use batch heatmap geometry.
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[layout] Saving from ROI model snapshot (manual button)"); // CODEX: confirm manual saves never use batch heatmap geometry.
                 MasterLayoutManager.Save(preset, snapshot);
                 AppendLog($"[layout-save] ok -> {targetPath}");
                 Snack($"Layout guardado ✅"); // CODEX: FormattableString compatibility.
@@ -9881,11 +9947,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     using var hc = new System.Net.Http.HttpClient();
                     var resp = await hc.GetAsync(url);
                     var text = await resp.Content.ReadAsStringAsync();
-                    AppendLog("[train_status] " + text.Trim());
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[train_status] {text.Trim()}");
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("[train_status] ERROR " + ex.Message);
+                    // CODEX: FormattableString compatibility.
+                    AppendLog($"[train_status] ERROR {ex.Message}");
                 }
             };
             // _trainTimer.Start(); // opcional
@@ -9893,7 +9961,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void Snack(string msg)
         {
-            AppendLog("[INFO] " + msg);
+            // CODEX: FormattableString compatibility.
+            AppendLog($"[INFO] {msg}");
             System.Diagnostics.Debug.WriteLine(msg);
         }
 
@@ -10431,7 +10500,8 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (CanvasROI == null)
             {
-                AppendLog("[inspect] CanvasROI missing when searching inspection shape");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[inspect] CanvasROI missing when searching inspection shape");
                 return null;
             }
 
@@ -11255,7 +11325,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog("[model] Error al cargar modelo: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[model] Error al cargar modelo: {ex.Message}");
                 await Dispatcher.InvokeAsync(() =>
                 {
                     MessageBox.Show(
@@ -11295,7 +11366,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            AppendLog("[align] Reset solicitado por el usuario (Borrar Canvas).");
+            // CODEX: FormattableString compatibility.
+            AppendLog($"[align] Reset solicitado por el usuario (Borrar Canvas).");
 
             try
             {
@@ -11360,12 +11432,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 TryPersistLayout();
 
-                AppendLog("[align] Reset completado. Estado listo para crear Masters nuevamente.");
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[align] Reset completado. Estado listo para crear Masters nuevamente.");
                 Snack($"Canvas borrado."); // CODEX: FormattableString compatibility.
             }
             catch (Exception ex)
             {
-                AppendLog("[align] Error al limpiar canvas: " + ex.Message);
+                // CODEX: FormattableString compatibility.
+                AppendLog($"[align] Error al limpiar canvas: {ex.Message}");
                 MessageBox.Show(
                     "Error al limpiar canvas.",
                     "Error",

@@ -9959,12 +9959,43 @@ namespace BrakeDiscInspector_GUI_ROI
             // _trainTimer.Start(); // opcional
         }
 
+        private void Snack(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            var payload = "[SNACK] " + message;
+
+            try
+            {
+                AppendLog(payload);
+            }
+            catch
+            {
+                // Never allow snack logging to throw.
+            }
+
+            try
+            {
+                GuiLog.Info(payload);
+            }
+            catch
+            {
+                // Ignore logging failures (e.g., during early boot).
+            }
+        }
+
         private void Snack(FormattableString msg)
         {
-            // CODEX: render FormattableString snacks once using invariant culture.
-            var rendered = FormattableString.Invariant(msg);
-            AppendLog(FormattableString.Invariant($"[INFO] {rendered}")); // CODEX: keep snack messages consistent in logs.
-            System.Diagnostics.Debug.WriteLine(rendered);
+            if (msg == null)
+            {
+                return;
+            }
+
+            var rendered = msg.ToString(CultureInfo.InvariantCulture);
+            Snack(rendered);
         }
 
         private void SyncModelFromShape(Shape shape)

@@ -12,21 +12,21 @@ namespace BrakeDiscInspector_GUI_ROI
         public async Task AnalyzeMastersViaBackend()
         {
             if (_layout?.Master1Pattern == null || _layout?.Master2Pattern == null)
-            { Snack("Faltan ROIs de patrón para Master 1/2"); return; }
+            { Snack($"Faltan ROIs de patrón para Master 1/2"); return; } // CODEX: FormattableString compatibility.
             if (string.IsNullOrWhiteSpace(_currentImagePathWin) || !File.Exists(_currentImagePathWin))
-            { Snack("No hay imagen cargada"); return; }
+            { Snack($"No hay imagen cargada"); return; } // CODEX: FormattableString compatibility.
 
             var inferM1 = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Master1Pattern, _preset, AppendLog);
             if (!inferM1.ok || inferM1.result == null)
             {
-                Snack("Backend Master 1: " + (inferM1.error ?? "error desconocido"));
+                Snack($"Backend Master 1: {inferM1.error ?? "error desconocido"}"); // CODEX: FormattableString compatibility.
                 return;
             }
 
             var inferM2 = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Master2Pattern, _preset, AppendLog);
             if (!inferM2.ok || inferM2.result == null)
             {
-                Snack("Backend Master 2: " + (inferM2.error ?? "error desconocido"));
+                Snack($"Backend Master 2: {inferM2.error ?? "error desconocido"}"); // CODEX: FormattableString compatibility.
                 return;
             }
 
@@ -51,10 +51,10 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 string msg = $"Master1 {(pass1 ? "OK" : "NG")} (score={res1.score:0.###}, thr={thr1}) | " +
                              $"Master2 {(pass2 ? "OK" : "NG")} (score={res2.score:0.###}, thr={thr2})";
-                Snack(msg);
+                Snack($"{msg}"); // CODEX: FormattableString compatibility.
             }
 
-            if (_layout.Inspection == null) { Snack("Falta ROI de Inspección"); return; }
+            if (_layout.Inspection == null) { Snack($"Falta ROI de Inspección"); return; } // CODEX: FormattableString compatibility.
             MoveInspectionTo(_layout.Inspection, c1, c2);
             ClipInspectionROI(_layout.Inspection, _imgW, _imgH);
 
@@ -80,14 +80,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
         public async Task AnalyzeInspectionViaBackend()
         {
-            if (_layout?.Inspection == null) { Snack("Falta ROI de Inspección"); return; }
+            if (_layout?.Inspection == null) { Snack($"Falta ROI de Inspección"); return; } // CODEX: FormattableString compatibility.
             if (string.IsNullOrWhiteSpace(_currentImagePathWin) || !File.Exists(_currentImagePathWin))
-            { Snack("No hay imagen cargada"); return; }
+            { Snack($"No hay imagen cargada"); return; } // CODEX: FormattableString compatibility.
 
             var resp = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Inspection, _preset, AppendLog);
             if (!resp.ok || resp.result == null)
             {
-                Snack("Analyze backend: " + (resp.error ?? "error desconocido"));
+                Snack($"Analyze backend: {resp.error ?? "error desconocido"}"); // CODEX: FormattableString compatibility.
                 return;
             }
 
@@ -98,7 +98,7 @@ namespace BrakeDiscInspector_GUI_ROI
             string msg = pass
                 ? $"Resultado OK (score={result.score:0.###} / thr={thrText})"
                 : $"Resultado NG (score={result.score:0.###} / thr={thrText})";
-            Snack(msg);
+            Snack($"{msg}"); // CODEX: FormattableString compatibility.
         }
     }
 }

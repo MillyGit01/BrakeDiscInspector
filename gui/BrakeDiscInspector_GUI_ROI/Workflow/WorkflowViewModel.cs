@@ -892,7 +892,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             _isInitializing = true;
-            GuiLog.Info("[workflow] InitializeAsync START");
+            GuiLog.Info($"[workflow] InitializeAsync START"); // CODEX: FormattableString compatibility.
 
             try
             {
@@ -918,16 +918,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
 
                 _initialized = true;
-                GuiLog.Info("[workflow] InitializeAsync END");
+                GuiLog.Info($"[workflow] InitializeAsync END"); // CODEX: FormattableString compatibility.
             }
             catch (OperationCanceledException)
             {
-                GuiLog.Warn("[workflow] InitializeAsync cancelled");
+                GuiLog.Warn($"[workflow] InitializeAsync cancelled"); // CODEX: FormattableString compatibility.
                 throw;
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[workflow] InitializeAsync failed", ex);
+                GuiLog.Error($"[workflow] InitializeAsync failed", ex); // CODEX: FormattableString compatibility.
                 throw;
             }
             finally
@@ -1805,7 +1805,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (export == null)
             {
                 await ShowMessageAsync("No image loaded.", "Dataset");
-                GuiLog.Warn("AddToDataset aborted: no export for legacy roi");
+                GuiLog.Warn($"AddToDataset aborted: no export for legacy roi"); // CODEX: FormattableString compatibility.
                 return;
             }
 
@@ -4045,7 +4045,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[batch-hm:VM] SetBatchHeatmapForRoi failed", ex);
+                GuiLog.Error($"[batch-hm:VM] SetBatchHeatmapForRoi failed", ex); // CODEX: FormattableString compatibility.
             }
         }
 
@@ -4071,7 +4071,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     }
                     catch (Exception ex)
                     {
-                        GuiLog.Error("[heatmap] failed to decode batch heatmap", ex);
+                        GuiLog.Error($"[heatmap] failed to decode batch heatmap", ex); // CODEX: FormattableString compatibility.
                         ClearBatchHeatmap();
                     }
                 });
@@ -4106,7 +4106,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             catch (Exception ex)
             {
-                GuiLog.Error("[heatmap] UpdateHeatmapThreshold failed", ex);
+                GuiLog.Error($"[heatmap] UpdateHeatmapThreshold failed", ex); // CODEX: FormattableString compatibility.
             }
         }
 

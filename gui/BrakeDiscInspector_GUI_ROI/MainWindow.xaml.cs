@@ -9959,11 +9959,12 @@ namespace BrakeDiscInspector_GUI_ROI
             // _trainTimer.Start(); // opcional
         }
 
-        private void Snack(string msg)
+        private void Snack(FormattableString msg)
         {
-            // CODEX: FormattableString compatibility.
-            AppendLog($"[INFO] {msg}");
-            System.Diagnostics.Debug.WriteLine(msg);
+            // CODEX: render FormattableString snacks once using invariant culture.
+            var rendered = FormattableString.Invariant(msg);
+            AppendLog(FormattableString.Invariant($"[INFO] {rendered}")); // CODEX: keep snack messages consistent in logs.
+            System.Diagnostics.Debug.WriteLine(rendered);
         }
 
         private void SyncModelFromShape(Shape shape)

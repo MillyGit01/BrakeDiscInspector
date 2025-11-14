@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 
 namespace BrakeDiscInspector_GUI_ROI.Util
@@ -13,23 +14,69 @@ namespace BrakeDiscInspector_GUI_ROI.Util
 
         private static readonly string LogFilePath = Path.Combine(LogDirectory, "gui.log");
 
+        public static void Info(string message)
+            => Write("INFO", message);
+
         // CODEX: accept FormattableString to keep structured logging with invariant culture.
         public static void Info(FormattableString message)
-            => Write("INFO", FormattableString.Invariant(message));
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            Info(message.ToString(CultureInfo.InvariantCulture));
+        }
+
+        public static void Warn(string message)
+            => Write("WARN", message);
 
         // CODEX: FormattableString overload maintains parity with Info logging behavior.
         public static void Warn(FormattableString message)
-            => Write("WARN", FormattableString.Invariant(message));
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            Warn(message.ToString(CultureInfo.InvariantCulture));
+        }
+
+        public static void Error(string message)
+            => Write("ERROR", message);
 
         // CODEX: unify error logging across severities using FormattableString inputs.
         public static void Error(FormattableString message)
-            => Write("ERROR", FormattableString.Invariant(message));
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            Error(message.ToString(CultureInfo.InvariantCulture));
+        }
+
+        public static void Error(string message, Exception exception)
+        {
+            var baseMessage = message ?? string.Empty;
+            var rendered = exception == null
+                ? baseMessage
+                : string.IsNullOrEmpty(baseMessage)
+                    ? exception.ToString()
+                    : $"{baseMessage} :: {exception}";
+
+            Write("ERROR", rendered);
+        }
 
         public static void Error(FormattableString message, Exception exception)
         {
-            // CODEX: render interpolated error once and append exception safely.
-            var rendered = FormattableString.Invariant(message);
-            Write("ERROR", $"{rendered} :: {exception}");
+            if (message == null)
+            {
+                Error((string?)null, exception);
+                return;
+            }
+
+            Error(message.ToString(CultureInfo.InvariantCulture), exception);
         }
 
         private static void Write(string level, string message)

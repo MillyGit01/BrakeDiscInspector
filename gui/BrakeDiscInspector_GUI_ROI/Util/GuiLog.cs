@@ -13,14 +13,24 @@ namespace BrakeDiscInspector_GUI_ROI.Util
 
         private static readonly string LogFilePath = Path.Combine(LogDirectory, "gui.log");
 
-        public static void Info(string message) => Write("INFO", message);
+        // CODEX: accept FormattableString to keep structured logging with invariant culture.
+        public static void Info(FormattableString message)
+            => Write("INFO", FormattableString.Invariant(message));
 
-        public static void Warn(string message) => Write("WARN", message);
+        // CODEX: FormattableString overload maintains parity with Info logging behavior.
+        public static void Warn(FormattableString message)
+            => Write("WARN", FormattableString.Invariant(message));
 
-        public static void Error(string message) => Write("ERROR", message);
+        // CODEX: unify error logging across severities using FormattableString inputs.
+        public static void Error(FormattableString message)
+            => Write("ERROR", FormattableString.Invariant(message));
 
-        public static void Error(string message, Exception exception)
-            => Write("ERROR", $"{message} :: {exception}");
+        public static void Error(FormattableString message, Exception exception)
+        {
+            // CODEX: render interpolated error once and append exception safely.
+            var rendered = FormattableString.Invariant(message);
+            Write("ERROR", $"{rendered} :: {exception}");
+        }
 
         private static void Write(string level, string message)
         {

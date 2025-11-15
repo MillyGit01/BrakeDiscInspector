@@ -4531,6 +4531,224 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private static Task<BitmapSource?> LoadBitmapSourceFromBytesAsync(byte[] imageBytes, CancellationToken ct)
+        {
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                return Task.FromResult<BitmapSource?>(null);
+            }
+
+            return Task.Run(() =>
+            {
+                ct.ThrowIfCancellationRequested();
+
+                using var ms = new MemoryStream(imageBytes, writable: false);
+                var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                var frame = decoder.Frames[0];
+                if (frame.CanFreeze && !frame.IsFrozen)
+                {
+                    frame.Freeze();
+                }
+
+                return (BitmapSource)frame;
+            }, ct);
+        }
+
+        private async Task<(SWPoint? c1, SWPoint? c2)> DetectMastersForImageAsync(byte[] imageBytes, string imagePath, CancellationToken ct)
+        {
+            if (_layout == null || _preset == null)
+            {
+                return (null, null);
+            }
+
+            if (_layout.Master1Pattern == null || _layout.Master1Search == null ||
+                _layout.Master2Pattern == null || _layout.Master2Search == null)
+            {
+                AppendLog("[batch] master detection skipped: layout incomplete");
+                return (null, null);
+            }
+
+            BitmapSource? probe = null;
+            try
+            {
+                probe = await LoadBitmapSourceFromBytesAsync(imageBytes, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[batch] image decode failed: {ex.Message}");
+                return (null, null);
+            }
+
+            if (probe == null)
+            {
+                AppendLog("[batch] image decode returned null");
+                return (null, null);
+            }
+
+            AppendLog($"[batch] master detection input size: {probe.PixelWidth}x{probe.PixelHeight}");
+
+            bool useLocalMatcher;
+            if (Dispatcher.CheckAccess())
+            {
+                useLocalMatcher = ChkUseLocalMatcher?.IsChecked == true;
+            }
+            else
+            {
+                useLocalMatcher = await Dispatcher
+                    .InvokeAsync(() => ChkUseLocalMatcher?.IsChecked == true)
+                    .ConfigureAwait(false);
+            }
+
+            SWPoint? c1 = null;
+            SWPoint? c2 = null;
+
+            if (useLocalMatcher)
+            {
+                try
+                {
+                    AppendLog("[batch] master detection: local matcher");
+                    using var img = Cv2.ImDecode(imageBytes, ImreadModes.Unchanged);
+                    if (img.Empty())
+                    {
+                        AppendLog("[batch] local matcher decode produced empty image");
+                    }
+                    else
+                    {
+                        Mat? m1Override = null;
+                        Mat? m2Override = null;
+                        try
+                        {
+                            if (_layout.Master1Pattern != null)
+                            {
+                                m1Override = TryLoadMasterPatternOverride(_layout.Master1PatternImagePath, "M1");
+                            }
+
+                            if (_layout.Master2Pattern != null)
+                            {
+                                m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
+                            }
+
+                            var res1 = LocalMatcher.MatchInSearchROI(
+                                img,
+                                _layout.Master1Pattern,
+                                _layout.Master1Search,
+                                _preset.Feature,
+                                _preset.MatchThr,
+                                _preset.RotRange,
+                                _preset.ScaleMin,
+                                _preset.ScaleMax,
+                                m1Override,
+                                LogToFileAndUI);
+
+                            if (res1.center.HasValue)
+                            {
+                                c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y);
+                            }
+                            else
+                            {
+                                AppendLog("[batch] local matcher: Master1 not found");
+                            }
+
+                            var res2 = LocalMatcher.MatchInSearchROI(
+                                img,
+                                _layout.Master2Pattern,
+                                _layout.Master2Search,
+                                _preset.Feature,
+                                _preset.MatchThr,
+                                _preset.RotRange,
+                                _preset.ScaleMin,
+                                _preset.ScaleMax,
+                                m2Override,
+                                LogToFileAndUI);
+
+                            if (res2.center.HasValue)
+                            {
+                                c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y);
+                            }
+                            else
+                            {
+                                AppendLog("[batch] local matcher: Master2 not found");
+                            }
+                        }
+                        finally
+                        {
+                            m1Override?.Dispose();
+                            m2Override?.Dispose();
+                        }
+                    }
+                }
+                catch (DllNotFoundException ex)
+                {
+                    AppendLog($"[batch] local matcher missing dependency: {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[batch] local matcher error: {ex.Message}");
+                }
+            }
+
+            ct.ThrowIfCancellationRequested();
+
+            if (c1 is null || c2 is null)
+            {
+                AppendLog("[batch] master detection: backend fallback");
+
+                if (c1 is null)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var inferM1 = await BackendAPI
+                        .InferAsync(imagePath, _layout.Master1Pattern!, _preset, AppendLog)
+                        .ConfigureAwait(false);
+
+                    if (inferM1.ok && inferM1.result != null)
+                    {
+                        var result = inferM1.result;
+                        var (cx, cy) = _layout.Master1Pattern!.GetCenter();
+                        c1 = new SWPoint(cx, cy);
+                        string thrText = result.threshold.HasValue
+                            ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                            : "n/a";
+                        bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
+                        AppendLog($"[batch] backend M1 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
+                    }
+                    else
+                    {
+                        AppendLog($"[batch] backend M1 failed: {inferM1.error ?? "unknown"}");
+                    }
+                }
+
+                if (c2 is null)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var inferM2 = await BackendAPI
+                        .InferAsync(imagePath, _layout.Master2Pattern!, _preset, AppendLog)
+                        .ConfigureAwait(false);
+
+                    if (inferM2.ok && inferM2.result != null)
+                    {
+                        var result = inferM2.result;
+                        var (cx, cy) = _layout.Master2Pattern!.GetCenter();
+                        c2 = new SWPoint(cx, cy);
+                        string thrText = result.threshold.HasValue
+                            ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                            : "n/a";
+                        bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
+                        AppendLog($"[batch] backend M2 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
+                    }
+                    else
+                    {
+                        AppendLog($"[batch] backend M2 failed: {inferM2.error ?? "unknown"}");
+                    }
+                }
+            }
+
+            return (c1, c2);
+        }
+
         private async Task RepositionInspectionRoisForBatchAsync(string imagePath, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || _layout == null)
@@ -4538,10 +4756,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            byte[] bytes;
             string imageKey;
             try
             {
-                var bytes = await File.ReadAllBytesAsync(imagePath, ct).ConfigureAwait(false);
+                bytes = await File.ReadAllBytesAsync(imagePath, ct).ConfigureAwait(false);
                 imageKey = HashSHA256(bytes);
             }
             catch (OperationCanceledException)
@@ -4550,14 +4769,23 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[batch] reposition hash failed: {ex.Message}");
+                AppendLog($"[batch] hash/read failed: {ex.Message} : {imagePath}");
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(imageKey) || ct.IsCancellationRequested)
+            SWPoint? detectedM1 = null;
+            SWPoint? detectedM2 = null;
+            try
             {
-                return;
+                (detectedM1, detectedM2) = await DetectMastersForImageAsync(bytes, imagePath, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[batch] master detection error: {ex.Message} : {imagePath}");
             }
 
             await Dispatcher.InvokeAsync(() =>
@@ -4566,6 +4794,57 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     return;
                 }
+
+                bool shouldFallback = true;
+
+                if (detectedM1 is SWPoint m1 && detectedM2 is SWPoint m2)
+                {
+                    try
+                    {
+                        var inspection = _layout.Inspection;
+                        if (inspection == null)
+                        {
+                            AppendLog("[batch] inspection ROI missing -> fallback to snapshot");
+                            shouldFallback = true;
+                        }
+                        else if (inspection.IsFrozen)
+                        {
+                            AppendLog("[batch] inspection ROI is frozen -> skip reposition (no fallback)");
+                            shouldFallback = false;
+                        }
+                        else
+                        {
+                            using var freeze = FreezeRoiRepositionScope(nameof(RepositionInspectionRoisForBatchAsync));
+                            using (SuppressAutoSaves())
+                            {
+                                MoveInspectionTo(inspection, m1, m2);
+                                ClipInspectionROI(inspection, _imgW, _imgH);
+                                RefreshInspectionRoiSlots();
+                            }
+
+                            RedrawOverlay();
+                            AppendLog($"[batch] repositioned via master detection: M1=({m1.X:F1},{m1.Y:F1}) M2=({m2.X:F1},{m2.Y:F1})");
+                            shouldFallback = false;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[batch] reposition apply failed: {ex.Message}");
+                        shouldFallback = true;
+                    }
+                }
+                else
+                {
+                    AppendLog("[batch] master detection unavailable -> fallback to snapshot");
+                    shouldFallback = true;
+                }
+
+                if (!shouldFallback)
+                {
+                    return;
+                }
+
+                AppendLog("[batch] using baseline snapshot fallback");
 
                 try
                 {
@@ -4580,20 +4859,27 @@ namespace BrakeDiscInspector_GUI_ROI
 
                         if (clones.Count > 0)
                         {
-                            using (SuppressAutoSaves()) // CODEX: mute autosaves while restoring batch baselines.
+                            using (SuppressAutoSaves())
                             {
                                 _layout.Inspection = clones[0].Clone();
                                 RefreshInspectionRoiSlots(clones);
                             }
 
-                            AppendLog($"[batch] restored {clones.Count} inspection ROIs from baseline"); // CODEX: restore without triggering autosave to avoid persisting transient drift.
+                            AppendLog("[batch] restored ROI snapshot (fallback)");
                         }
+                        else
+                        {
+                            AppendLog("[batch] no snapshot to restore");
+                        }
+                    }
+                    else
+                    {
+                        AppendLog("[batch] no baseline snapshot for this image");
                     }
                 }
                 catch (Exception ex)
                 {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[batch] reposition apply failed: {ex.Message}");
+                    AppendLog($"[batch] fallback apply failed: {ex.Message}");
                 }
             }, DispatcherPriority.Background);
         }

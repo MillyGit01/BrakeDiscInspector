@@ -21,6 +21,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using BrakeDiscInspector_GUI_ROI;
 using BrakeDiscInspector_GUI_ROI.Util;
+using BrakeDiscInspector_GUI_ROI.Imaging;
 using BrakeDiscInspector_GUI_ROI.Models;
 using Forms = System.Windows.Forms;
 
@@ -179,6 +180,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private Task? _initializationTask;
         private bool _initialized;
         private bool _isInitializing;
+        private string? _annotatedOutputDir;
 
         private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
         {
@@ -384,6 +386,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _batchFolder = value;
                     OnPropertyChanged();
                     UpdateCanStart();
+                    _annotatedOutputDir = null;
                 }
             }
         }
@@ -3524,6 +3527,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
+                _annotatedOutputDir = null;
+
                 foreach (var row in rows)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -3638,6 +3643,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                     }
 
+                    await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
                     UpdateBatchProgress(processed, total);
                 }
 
@@ -3849,6 +3855,76 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         break;
                 }
             });
+        }
+
+        private bool IsRowNg(BatchRow row)
+        {
+            if (row == null)
+            {
+                return false;
+            }
+
+            return row.ROI1 == BatchCellStatus.Nok
+                || row.ROI2 == BatchCellStatus.Nok
+                || row.ROI3 == BatchCellStatus.Nok
+                || row.ROI4 == BatchCellStatus.Nok;
+        }
+
+        private async Task OnRowCompletedAsync(BatchRow row, CancellationToken ct)
+        {
+            if (row == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(row.FullPath) || !File.Exists(row.FullPath))
+                {
+                    return;
+                }
+
+                bool isNg = IsRowNg(row);
+                string fileName = Path.GetFileName(row.FullPath);
+                string status = isNg ? "NG" : "OK";
+                string label = $"{fileName} — {status}";
+
+                string? baseDir = null;
+                if (!string.IsNullOrWhiteSpace(BatchFolder) && Directory.Exists(BatchFolder))
+                {
+                    baseDir = BatchFolder;
+                }
+                else
+                {
+                    baseDir = Path.GetDirectoryName(row.FullPath);
+                }
+
+                if (string.IsNullOrWhiteSpace(baseDir))
+                {
+                    _log("[batch] annotate skipped: unresolved output directory");
+                    return;
+                }
+
+                _annotatedOutputDir ??= Path.Combine(baseDir, "Annotated");
+                var outputName = Path.GetFileNameWithoutExtension(row.FullPath) + "_annotated.png";
+                var outputPath = Path.Combine(_annotatedOutputDir, outputName);
+
+                await Task.Run(() =>
+                {
+                    ct.ThrowIfCancellationRequested();
+                    Annotator.SaveAnnotated(row.FullPath, outputPath, label);
+                }, ct).ConfigureAwait(false);
+
+                _log($"[batch] annotated saved: {outputPath}");
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] annotate failed: {ex.Message}");
+            }
         }
 
         private static BitmapSource NormalizeDpiTo96(BitmapSource src)

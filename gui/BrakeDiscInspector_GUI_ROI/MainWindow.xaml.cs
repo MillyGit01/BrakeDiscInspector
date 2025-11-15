@@ -6757,12 +6757,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                if (baseImage.ActualWidth <= 0 || baseImage.ActualHeight <= 0 || roiCanvas.ActualWidth <= 0 || roiCanvas.ActualHeight <= 0)
-                {
-                    ScheduleBatchHeatmapPlacement(vm, $"{reason}:await-size"); // CODEX: wait until layout system reports non-zero sizes.
-                    return;
-                }
-
                 if (roiIndex <= 0)
                 {
                     heatmap.Source = null;
@@ -6786,6 +6780,12 @@ namespace BrakeDiscInspector_GUI_ROI
                     heatmap.Source = null;
                     heatmap.Visibility = Visibility.Collapsed;
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:no-src", roiIndex, null);
+                    return; // CODEX: no heatmap available yet; skip scheduling await-size retries.
+                }
+
+                if (baseImage.ActualWidth <= 0 || baseImage.ActualHeight <= 0 || roiCanvas.ActualWidth <= 0 || roiCanvas.ActualHeight <= 0)
+                {
+                    ScheduleBatchHeatmapPlacement(vm, $"{reason}:await-size"); // CODEX: wait until layout system reports non-zero sizes, but only when a source exists.
                     return;
                 }
 

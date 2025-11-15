@@ -4598,9 +4598,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             else
             {
-                useLocalMatcher = await Dispatcher
-                    .InvokeAsync(() => ChkUseLocalMatcher?.IsChecked == true)
-                    .ConfigureAwait(false);
+                var dispatcherOp = Dispatcher.InvokeAsync(() => ChkUseLocalMatcher?.IsChecked == true);
+                useLocalMatcher = await dispatcherOp.Task.ConfigureAwait(false);
             }
 
             SWPoint? c1 = null;

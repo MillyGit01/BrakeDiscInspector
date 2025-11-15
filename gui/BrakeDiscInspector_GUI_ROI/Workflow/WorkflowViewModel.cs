@@ -29,6 +29,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
     public sealed class BatchRow : INotifyPropertyChanged
     {
+        private int _indexOneBased;
         private BatchCellStatus _roi1 = BatchCellStatus.Unknown;
         private BatchCellStatus _roi2 = BatchCellStatus.Unknown;
         private BatchCellStatus _roi3 = BatchCellStatus.Unknown;
@@ -42,6 +43,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public string FileName { get; }
         public string FullPath { get; }
+
+        public int IndexOneBased
+        {
+            get => _indexOneBased;
+            internal set
+            {
+                if (_indexOneBased != value)
+                {
+                    _indexOneBased = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public BatchCellStatus ROI1
         {
@@ -124,6 +138,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private InspectionRoiConfig? _selectedInspectionRoi;
         private bool? _hasFitEndpoint;
         private bool? _hasCalibrateEndpoint;
+        private long _batchStepId;
+        private int _currentRowIndex;
+        private string? _currentImagePath;
+        private bool? _batchRowOk;
 
         private bool _isBusy;
         private bool _isImageLoaded;
@@ -181,6 +199,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _initialized;
         private bool _isInitializing;
         private string? _annotatedOutputDir;
+        private int _layoutIoDepth;
 
         private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
         {
@@ -209,7 +228,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Action<bool?> updateGlobalBadge,
             Action<int>? activateInspectionIndex = null,
             Func<InspectionRoiConfig, string?>? resolveModelDirectory = null,
-            Func<string, CancellationToken, Task>? repositionInspectionRoisAsync = null)
+            Func<string, long, CancellationToken, Task>? repositionInspectionRoisAsync = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -262,8 +281,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 InvokeOnUi(() =>
                 {
                     _batchRows.Clear();
+                    int index = 0;
                     foreach (var row in snapshot)
                     {
+                        index++;
+                        row.IndexOneBased = index;
                         row.ROI1 = BatchCellStatus.Unknown;
                         row.ROI2 = BatchCellStatus.Unknown;
                         row.ROI3 = BatchCellStatus.Unknown;
@@ -375,6 +397,49 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public ObservableCollection<InspectionRoiConfig> InspectionRois { get; private set; } = new();
 
         public ObservableCollection<BatchRow> BatchRows => _batchRows;
+
+        public long BatchStepId => Interlocked.Read(ref _batchStepId);
+
+        public int CurrentRowIndex
+        {
+            get => _currentRowIndex;
+            private set
+            {
+                if (_currentRowIndex != value)
+                {
+                    _currentRowIndex = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string? CurrentImagePath
+        {
+            get => _currentImagePath;
+            private set
+            {
+                if (!string.Equals(_currentImagePath, value, StringComparison.Ordinal))
+                {
+                    _currentImagePath = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool? BatchRowOk
+        {
+            get => _batchRowOk;
+            private set
+            {
+                if (_batchRowOk != value)
+                {
+                    _batchRowOk = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsLayoutIo => Volatile.Read(ref _layoutIoDepth) > 0;
 
         public string? BatchFolder
         {
@@ -3497,6 +3562,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _isBatchRunning = false;
             SetBatchStatusSafe("Stopped");
             UpdateBatchCommandStates();
+            BatchRowOk = null;
+            CurrentRowIndex = 0;
+            CurrentImagePath = null;
         }
 
         private async Task RunBatchAsync(CancellationToken ct)
@@ -3521,6 +3589,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var ensuredModels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int processed = 0;
+            int rowIndex = 0;
 
             UpdateBatchProgress(0, total);
             SetBatchStatusSafe("Running...");
@@ -3534,7 +3603,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ct.ThrowIfCancellationRequested();
                     _pauseGate.Wait(ct);
 
-                    processed++;
+                    rowIndex++;
+                    row.IndexOneBased = rowIndex;
+                    BeginBatchStep(rowIndex, row.FullPath);
+                    var stepId = BatchStepId;
+
+                    processed = rowIndex;
                     SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
 
                     if (!File.Exists(row.FullPath))
@@ -3544,13 +3618,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         {
                             UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                         }
+                        BatchRowOk = false;
                         UpdateBatchProgress(processed, total);
                         continue;
                     }
 
                     SetBatchBaseImage(row.FullPath);
 
-                    await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
+                    await RepositionInspectionRoisForImageAsync(row.FullPath, stepId, ct).ConfigureAwait(false);
 
                     for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                     {
@@ -3643,6 +3718,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                     }
 
+                    bool isNg = IsRowNg(row);
+                    BatchRowOk = !isNg;
+
                     await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
                     UpdateBatchProgress(processed, total);
                 }
@@ -3670,6 +3748,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _batchCts = null;
                 IsBusy = false;
                 UpdateBatchCommandStates();
+                BatchRowOk = null;
+                CurrentRowIndex = 0;
+                CurrentImagePath = null;
             }
         }
 
@@ -3678,7 +3759,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
         }
 
-        private async Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
+        private async Task RepositionInspectionRoisForImageAsync(string imagePath, long stepId, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || _repositionInspectionRoisAsync == null)
             {
@@ -3687,7 +3768,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
+                await _repositionInspectionRoisAsync(imagePath, stepId, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -3797,9 +3878,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(() =>
             {
                 _batchRows.Clear();
+                int index = 0;
                 foreach (var file in files)
                 {
-                    _batchRows.Add(new BatchRow(file));
+                    index++;
+                    _batchRows.Add(new BatchRow(file) { IndexOneBased = index });
                 }
 
                 BatchSummary = files.Count == 0 ? $"no images in {dir}" : $"{files.Count} images found in {dir}";
@@ -4534,6 +4617,64 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        public void TraceBatch(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            try
+            {
+                _log(message);
+            }
+            catch
+            {
+                // never throw from tracing
+            }
+        }
+
+        public void BeginBatchStep(int rowIndex1Based, string imagePath)
+        {
+            var id = Interlocked.Increment(ref _batchStepId);
+            CurrentRowIndex = Math.Max(1, rowIndex1Based);
+            CurrentImagePath = imagePath;
+            BatchRowOk = null;
+            TraceBatch(FormattableString.Invariant($"[batch-vm] step++ id={id} row={CurrentRowIndex:000} file='{Path.GetFileName(imagePath) ?? string.Empty}'"));
+        }
+
+        public IDisposable BeginLayoutIo(string tag)
+        {
+            return new LayoutIoGuard(this, tag);
+        }
+
+        private sealed class LayoutIoGuard : IDisposable
+        {
+            private readonly WorkflowViewModel _vm;
+            private readonly string _tag;
+            private bool _disposed;
+
+            public LayoutIoGuard(WorkflowViewModel vm, string tag)
+            {
+                _vm = vm;
+                _tag = string.IsNullOrWhiteSpace(tag) ? "<unnamed>" : tag;
+                var depth = Interlocked.Increment(ref vm._layoutIoDepth);
+                vm.TraceBatch(FormattableString.Invariant($"[layout-io] begin tag={_tag} depth={depth}"));
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                var depth = Interlocked.Decrement(ref _vm._layoutIoDepth);
+                _vm.TraceBatch(FormattableString.Invariant($"[layout-io] end tag={_tag} depth={depth}"));
+            }
         }
 
         private void RedrawOverlays()

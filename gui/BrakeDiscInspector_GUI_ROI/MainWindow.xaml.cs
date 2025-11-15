@@ -868,6 +868,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return false;
             }
 
+            using var layoutIo = ViewModel?.BeginLayoutIo(context);
+
             string layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
             AppendLog($"[save] requested reason={context} path={layoutPath} suppress={_suppressSaves}");
 
@@ -1682,6 +1684,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _batchSizeHandlersHooked = false; // CODEX: wire size events once to prevent duplicate scheduling.
         private WorkflowViewModel? _batchVmCached = null;
         private DispatcherOperation? _pendingBatchPlacementOp; // CODEX: coalesce pending batch placements to avoid stale ROI indices.
+        private TextBlock? _batchInfoOverlay;
 
         // Cache of last gray heatmap to recolor on-the-fly
         private byte[]? _lastHeatmapGray;
@@ -2811,7 +2814,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     UpdateGlobalBadge,
                     SetActiveInspectionIndex,
                     ResolveInspectionModelDirectory,
-                    RepositionInspectionRoisForBatchAsync);
+                    RepositionBeforeBatchStepAsync);
 
                 _workflowViewModel.PropertyChanged += WorkflowViewModelOnPropertyChanged;
                 _workflowViewModel.OverlayVisibilityChanged += WorkflowViewModelOnOverlayVisibilityChanged;
@@ -4748,7 +4751,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return (c1, c2);
         }
 
-        private async Task RepositionInspectionRoisForBatchAsync(string imagePath, CancellationToken ct)
+        public async Task RepositionBeforeBatchStepAsync(string imagePath, long stepId, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || _layout == null)
             {
@@ -4756,11 +4759,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             byte[] bytes;
-            string imageKey;
             try
             {
                 bytes = await File.ReadAllBytesAsync(imagePath, ct).ConfigureAwait(false);
-                imageKey = HashSHA256(bytes);
             }
             catch (OperationCanceledException)
             {
@@ -4768,7 +4769,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog($"[batch] hash/read failed: {ex.Message} : {imagePath}");
+                AppendLog($"[batch-repos] read failed: {ex.Message} path='{imagePath}'");
                 return;
             }
 
@@ -4784,7 +4785,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog($"[batch] master detection error: {ex.Message} : {imagePath}");
+                AppendLog($"[batch-repos] detect masters error: {ex.Message}");
             }
 
             await Dispatcher.InvokeAsync(() =>
@@ -4794,93 +4795,110 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                bool shouldFallback = true;
+                if (ViewModel?.BatchStepId != stepId)
+                {
+                    AppendLog($"[batch-repos] skip stale step: was={stepId} now={ViewModel?.BatchStepId}");
+                    return;
+                }
 
-                if (detectedM1 is SWPoint m1 && detectedM2 is SWPoint m2)
+                var inspection = _layout?.Inspection;
+                if (inspection?.IsFrozen == true)
+                {
+                    AppendLog("[batch-repos] skip: inspection frozen");
+                    return;
+                }
+
+                bool applied = false;
+
+                if (inspection != null && detectedM1 is SWPoint m1 && detectedM2 is SWPoint m2)
                 {
                     try
                     {
-                        var inspection = _layout.Inspection;
-                        if (inspection == null)
+                        using var freeze = FreezeRoiRepositionScope(nameof(RepositionBeforeBatchStepAsync));
+                        using (SuppressAutoSaves())
                         {
-                            AppendLog("[batch] inspection ROI missing -> fallback to snapshot");
-                            shouldFallback = true;
+                            MoveInspectionTo(inspection, m1, m2);
+                            ClipInspectionROI(inspection, _imgW, _imgH);
+                            RefreshInspectionRoiSlots();
                         }
-                        else if (inspection.IsFrozen)
-                        {
-                            AppendLog("[batch] inspection ROI is frozen -> skip reposition (no fallback)");
-                            shouldFallback = false;
-                        }
-                        else
-                        {
-                            using var freeze = FreezeRoiRepositionScope(nameof(RepositionInspectionRoisForBatchAsync));
-                            using (SuppressAutoSaves())
-                            {
-                                MoveInspectionTo(inspection, m1, m2);
-                                ClipInspectionROI(inspection, _imgW, _imgH);
-                                RefreshInspectionRoiSlots();
-                            }
 
-                            RedrawOverlay();
-                            AppendLog($"[batch] repositioned via master detection: M1=({m1.X:F1},{m1.Y:F1}) M2=({m2.X:F1},{m2.Y:F1})");
-                            shouldFallback = false;
-                        }
+                        RedrawOverlay();
+                        AppendLog($"[batch-repos] applied via masters step={stepId} M1=({m1.X:F1},{m1.Y:F1}) M2=({m2.X:F1},{m2.Y:F1})");
+                        applied = true;
                     }
                     catch (Exception ex)
                     {
-                        AppendLog($"[batch] reposition apply failed: {ex.Message}");
-                        shouldFallback = true;
+                        AppendLog($"[batch-repos] apply masters failed: {ex.Message}");
                     }
                 }
-                else
+                else if (inspection == null)
                 {
-                    AppendLog("[batch] master detection unavailable -> fallback to snapshot");
-                    shouldFallback = true;
+                    AppendLog("[batch-repos] inspection ROI missing -> fallback");
                 }
 
-                if (!shouldFallback)
+                if (applied)
                 {
                     return;
                 }
 
-                AppendLog("[batch] using baseline snapshot fallback");
-
-                try
+                bool restored = TryRestoreSnapshotForImage(bytes);
+                if (restored)
                 {
-                    if (_layout?.InspectionBaselinesByImage != null &&
-                        _layout.InspectionBaselinesByImage.TryGetValue(imageKey, out var snapshot) &&
-                        snapshot != null && snapshot.Count > 0)
-                    {
-                        var clones = snapshot
-                            .Where(r => r != null)
-                            .Select(r => r!.Clone())
-                            .ToList();
-
-                        if (clones.Count > 0)
-                        {
-                            using (SuppressAutoSaves())
-                            {
-                                _layout.Inspection = clones[0].Clone();
-                                RefreshInspectionRoiSlots(clones);
-                            }
-
-                            AppendLog("[batch] restored ROI snapshot (fallback)");
-                        }
-                        else
-                        {
-                            AppendLog("[batch] no snapshot to restore");
-                        }
-                    }
-                    else
-                    {
-                        AppendLog("[batch] no baseline snapshot for this image");
-                    }
+                    RedrawOverlay();
+                    AppendLog("[batch-repos] fallback snapshot restored");
                 }
-                catch (Exception ex)
+                else
                 {
-                    AppendLog($"[batch] fallback apply failed: {ex.Message}");
+                    AppendLog("[batch-repos] no masters and no snapshot");
                 }
             }, DispatcherPriority.Background);
+        }
+
+        private bool TryRestoreSnapshotForImage(byte[] imageBytes)
+        {
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                return false;
+            }
+
+            if (_layout?.InspectionBaselinesByImage == null || _layout.InspectionBaselinesByImage.Count == 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                var imageKey = HashSHA256(imageBytes);
+                if (string.IsNullOrWhiteSpace(imageKey))
+                {
+                    return false;
+                }
+
+                if (_layout.InspectionBaselinesByImage.TryGetValue(imageKey, out var snapshot) && snapshot != null && snapshot.Count > 0)
+                {
+                    var clones = snapshot
+                        .Where(r => r != null)
+                        .Select(r => r!.Clone())
+                        .ToList();
+
+                    if (clones.Count > 0)
+                    {
+                        using (SuppressAutoSaves())
+                        {
+                            _layout.Inspection = clones[0].Clone();
+                            RefreshInspectionRoiSlots(clones);
+                        }
+
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[batch-repos] snapshot restore failed: {ex.Message}");
+            }
+
+            return false;
         }
 
         private async Task ShowHeatmapOverlayAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)
@@ -5892,6 +5910,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            using var layoutIo = ViewModel?.BeginLayoutIo($"save-slot:{index}");
+
             var slotSnapshot = GetInspectionSlotModelClone(index);
             LogSaveSlot("pre-slot", index, slotSnapshot);
 
@@ -6435,7 +6455,10 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             else if (string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchHeatmapSource), StringComparison.Ordinal)
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchImageSource), StringComparison.Ordinal)
-                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.ActiveInspectionRoiImageRectPx), StringComparison.Ordinal))
+                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.ActiveInspectionRoiImageRectPx), StringComparison.Ordinal)
+                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.CurrentRowIndex), StringComparison.Ordinal)
+                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.CurrentImagePath), StringComparison.Ordinal)
+                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchRowOk), StringComparison.Ordinal))
             {
                 RequestBatchHeatmapPlacement($"vm-global:{e.PropertyName}", ViewModel); // CODEX: ensure global VM changes still capture the ROI index at schedule time.
             }
@@ -6666,7 +6689,10 @@ namespace BrakeDiscInspector_GUI_ROI
                             || e.PropertyName == nameof(WorkflowViewModel.CanvasRoiActualHeight)
                             || e.PropertyName == nameof(WorkflowViewModel.BaseImagePixelWidth)
                             || e.PropertyName == nameof(WorkflowViewModel.BaseImagePixelHeight)
-                            || e.PropertyName == nameof(WorkflowViewModel.UseCanvasPlacementForBatchHeatmap))
+                            || e.PropertyName == nameof(WorkflowViewModel.UseCanvasPlacementForBatchHeatmap)
+                            || e.PropertyName == nameof(WorkflowViewModel.CurrentRowIndex)
+                            || e.PropertyName == nameof(WorkflowViewModel.CurrentImagePath)
+                            || e.PropertyName == nameof(WorkflowViewModel.BatchRowOk))
                         {
                             RequestPlaceForVm($"VM.{e.PropertyName}");
                         }
@@ -6710,6 +6736,71 @@ namespace BrakeDiscInspector_GUI_ROI
             RequestBatchHeatmapPlacement("[ui] metrics-updated", vm); // CODEX: align metrics update with scheduled placement.
         }
 
+        private void EnsureBatchInfoOverlay()
+        {
+            if (_batchInfoOverlay != null || Overlay == null)
+            {
+                return;
+            }
+
+            _batchInfoOverlay = new TextBlock
+            {
+                Name = "BatchInfoOverlay",
+                FontFamily = new FontFamily("Consolas"),
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 14,
+                Foreground = Brushes.White,
+                Background = new SolidColorBrush(Color.FromArgb(180, 0, 0, 0)),
+                Padding = new Thickness(6, 2, 6, 2),
+                Visibility = Visibility.Collapsed,
+                Text = string.Empty
+            };
+
+            Overlay.Children.Add(_batchInfoOverlay);
+            Panel.SetZIndex(_batchInfoOverlay, int.MaxValue);
+            Canvas.SetLeft(_batchInfoOverlay, 8);
+            Canvas.SetTop(_batchInfoOverlay, 8);
+        }
+
+        private void UpdateBatchInfoOverlay(WorkflowViewModel vm)
+        {
+            if (vm == null)
+            {
+                return;
+            }
+
+            if (Overlay == null)
+            {
+                return;
+            }
+
+            EnsureBatchInfoOverlay();
+            if (_batchInfoOverlay == null)
+            {
+                return;
+            }
+
+            int rowIndex = vm.CurrentRowIndex;
+            string name = Path.GetFileName(vm.CurrentImagePath ?? string.Empty) ?? string.Empty;
+            bool hasContent = rowIndex > 0 || !string.IsNullOrEmpty(name);
+
+            if (!hasContent)
+            {
+                _batchInfoOverlay.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            string status = vm.BatchRowOk.HasValue ? (vm.BatchRowOk.Value ? "OK" : "NG") : "…";
+            string text = FormattableString.Invariant($"#{Math.Max(0, rowIndex):000}  {name}  — {status}");
+
+            _batchInfoOverlay.Visibility = Visibility.Visible;
+            if (!string.Equals(_batchInfoOverlay.Text, text, StringComparison.Ordinal))
+            {
+                _batchInfoOverlay.Text = text;
+                AppendLog(FormattableString.Invariant($"[batch-ui:info] overlay='{text}' step={vm.BatchStepId}"));
+            }
+        }
+
         private void UpdateBatchMetricsFromControls(WorkflowViewModel vm)
         {
             if (vm == null)
@@ -6743,6 +6834,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (vm == null)
                 {
                     GuiLog.Warn($"[batch-ui] TryPlaceBatchHeatmap: VM not found (reason={reason})");
+                    return;
+                }
+
+                UpdateBatchInfoOverlay(vm);
+
+                if (vm.IsLayoutIo)
+                {
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:io-busy", roiIndex, null);
+                    ScheduleBatchHeatmapPlacement(vm, $"{reason}:retry-after-io");
                     return;
                 }
 
@@ -6885,6 +6985,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             // CODEX: capture ROI index immediately to avoid late reads of SelectedInspectionRoi.
             int roiIndex = Math.Max(0, vm.BatchHeatmapRoiIndex);
+            long stepId = vm.BatchStepId;
 
             try
             {
@@ -6895,9 +6996,16 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Warn($"[batch-ui] pending placement abort failed: {ex.Message}");
             }
 
-            _pendingBatchPlacementOp = Dispatcher.BeginInvoke(
-                DispatcherPriority.Render,
-                new Action(() => TryPlaceBatchHeatmap(reason, roiIndex, vm)));
+            _pendingBatchPlacementOp = Dispatcher.InvokeAsync(() =>
+            {
+                if (vm.BatchStepId != stepId)
+                {
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:skip-stale stepWas={stepId} now={vm.BatchStepId}", roiIndex, null);
+                    return;
+                }
+
+                TryPlaceBatchHeatmap(reason, roiIndex, vm);
+            }, DispatcherPriority.Background);
         }
         #endregion
 
@@ -8814,7 +8922,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void MoveInspectionTo(RoiModel insp, SWPoint master1, SWPoint master2)
         {
-            bool detectionAccepted = _lastDetectionAccepted;
+            bool isBatch = ViewModel?.CurrentRowIndex > 0;
+            bool detectionAccepted = _lastDetectionAccepted || isBatch;
             _lastDetectionAccepted = false;
 
             if (insp?.IsFrozen == true)
@@ -8823,6 +8932,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[Analyze] Inspection ROI frozen; skipping MoveInspectionTo.");
                 return;
             }
+
+            bool useFixedBaseline = _useFixedInspectionBaseline && !isBatch;
 
             double oldLeft = insp?.Left ?? 0;
             double oldTop = insp?.Top ?? 0;
@@ -8836,7 +8947,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // DEFENSIVE: do NOT re-seed here if already seeded for this image
             var fallbackBaseline = _layout?.InspectionBaseline ?? insp;
-            if (_useFixedInspectionBaseline && !_inspectionBaselineSeededForImage && fallbackBaseline != null)
+            if (useFixedBaseline && !_inspectionBaselineSeededForImage && fallbackBaseline != null)
             {
                 // Only seed if the image key is different (should not happen if [3] ran properly)
                 if (!string.Equals(__seedKeyNow, _lastImageSeedKey, System.StringComparison.Ordinal))
@@ -8861,7 +8972,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
 
             RoiModel? baselineInspection;
-            if (_useFixedInspectionBaseline)
+            if (useFixedBaseline)
             {
                 baselineInspection = _inspectionBaselineFixed;
                 if (baselineInspection == null)
@@ -8963,7 +9074,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 insp.Top  = cy - (__inspH0 * 0.5);
             }
 
-            if (!_useFixedInspectionBaseline)
+            if (!useFixedBaseline)
             {
                 try
                 {
@@ -9035,7 +9146,7 @@ namespace BrakeDiscInspector_GUI_ROI
             InspLog($"[Analyze] AFTER  insp: {FInsp(insp)}");
             if (_inspectionBaselineFixed != null)
             {
-                InspLog($"[Analyze] DELTA  : dCX={(insp.CX - _inspectionBaselineFixed.CX):F3}, dCY={(insp.CY - _inspectionBaselineFixed.CY):F3}  (fixedBaseline={_useFixedInspectionBaseline})");
+                InspLog($"[Analyze] DELTA  : dCX={(insp.CX - _inspectionBaselineFixed.CX):F3}, dCY={(insp.CY - _inspectionBaselineFixed.CY):F3}  (fixedBaseline={useFixedBaseline})");
             }
 
             _lastAccM1X = m1NewX; _lastAccM1Y = m1NewY;
@@ -10013,6 +10124,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            using var layoutIo = ViewModel?.BeginLayoutIo("save-layout");
+
             var targetPath = MasterLayoutManager.GetDefaultPath(preset);
             AppendLog($"[save] requested reason=btn-save path={targetPath} suppress={_suppressSaves}");
 
@@ -10188,6 +10301,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (dlg.ShowDialog(this) != true)
                     return;
+
+                using var layoutIo = ViewModel?.BeginLayoutIo("load-layout");
 
                 var loaded = MasterLayoutManager.LoadFromFile(dlg.FileName);
                 _layout = loaded ?? new MasterLayout();

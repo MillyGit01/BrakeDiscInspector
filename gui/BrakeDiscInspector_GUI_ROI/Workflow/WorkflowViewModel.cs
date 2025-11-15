@@ -228,7 +228,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Action<bool?> updateGlobalBadge,
             Action<int>? activateInspectionIndex = null,
             Func<InspectionRoiConfig, string?>? resolveModelDirectory = null,
-            Func<string, long, CancellationToken, Task>? repositionInspectionRoisAsync = null)
+            Func<string, CancellationToken, Task>? repositionInspectionRoisAsync = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -3606,8 +3606,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     rowIndex++;
                     row.IndexOneBased = rowIndex;
                     BeginBatchStep(rowIndex, row.FullPath);
-                    var stepId = BatchStepId;
-
                     processed = rowIndex;
                     SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
 
@@ -3625,7 +3623,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     SetBatchBaseImage(row.FullPath);
 
-                    await RepositionInspectionRoisForImageAsync(row.FullPath, stepId, ct).ConfigureAwait(false);
+                    await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
 
                     for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                     {
@@ -3718,8 +3716,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                     }
 
-                    bool isNg = IsRowNg(row);
-                    BatchRowOk = !isNg;
+                    BatchRowOk = !IsRowNg(row);
 
                     await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
                     UpdateBatchProgress(processed, total);
@@ -3759,7 +3756,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
         }
 
-        private async Task RepositionInspectionRoisForImageAsync(string imagePath, long stepId, CancellationToken ct)
+        private async Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || _repositionInspectionRoisAsync == null)
             {
@@ -3768,7 +3765,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                await _repositionInspectionRoisAsync(imagePath, stepId, ct).ConfigureAwait(false);
+                await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

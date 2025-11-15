@@ -3909,7 +3909,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var outputName = Path.GetFileNameWithoutExtension(row.FullPath) + "_annotated.png";
                 var outputPath = Path.Combine(_annotatedOutputDir, outputName);
 
-                await Task.Run(() =>
+                await RunOnStaThreadAsync(() =>
                 {
                     ct.ThrowIfCancellationRequested();
                     Annotator.SaveAnnotated(row.FullPath, outputPath, label);
@@ -3924,6 +3924,55 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             catch (Exception ex)
             {
                 _log($"[batch] annotate failed: {ex.Message}");
+            }
+        }
+
+        private static async Task RunOnStaThreadAsync(Action action, CancellationToken cancellationToken)
+        {
+            if (action == null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var tcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    action();
+                    tcs.TrySetResult(null);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            })
+            {
+                IsBackground = true
+            };
+            thread.SetApartmentState(ApartmentState.STA);
+
+            CancellationTokenRegistration registration = default;
+            if (cancellationToken.CanBeCanceled)
+            {
+                registration = cancellationToken.Register(() =>
+                {
+                    tcs.TrySetCanceled(cancellationToken);
+                });
+            }
+
+            thread.Start();
+
+            try
+            {
+                await tcs.Task.ConfigureAwait(false);
+            }
+            finally
+            {
+                registration.Dispose();
             }
         }
 

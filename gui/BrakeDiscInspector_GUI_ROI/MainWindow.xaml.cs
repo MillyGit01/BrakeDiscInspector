@@ -4886,7 +4886,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private async Task ShowHeatmapOverlayAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)
         {
-            await EnsureOverlayAlignedForHeatmapAsync();
+            await EnsureOverlayAlignedForHeatmapAsync().ConfigureAwait(false);
 
             if (export == null || heatmapBytes == null || heatmapBytes.Length == 0)
                 return;

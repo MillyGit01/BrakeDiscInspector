@@ -128,7 +128,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Action _clearHeatmap;
         private readonly Action<bool?> _updateGlobalBadge;
         private readonly Action<int>? _activateInspectionIndex;
-        private readonly Func<string, CancellationToken, Task>? _repositionInspectionRoisAsync;
+        private readonly Func<string, long, CancellationToken, Task>? _repositionInspectionRoisAsync;
 
         private ObservableCollection<InspectionRoiConfig>? _inspectionRois;
         private RoiModel? _inspection1;
@@ -228,7 +228,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Action<bool?> updateGlobalBadge,
             Action<int>? activateInspectionIndex = null,
             Func<InspectionRoiConfig, string?>? resolveModelDirectory = null,
-            Func<string, CancellationToken, Task>? repositionInspectionRoisAsync = null)
+            Func<string, long, CancellationToken, Task>? repositionInspectionRoisAsync = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -3765,7 +3765,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
+                var stepId = BatchStepId;
+                await _repositionInspectionRoisAsync(imagePath, stepId, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

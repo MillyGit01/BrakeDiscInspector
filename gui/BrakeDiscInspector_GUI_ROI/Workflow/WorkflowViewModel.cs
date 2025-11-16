@@ -3738,7 +3738,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                                 var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
-                                UpdateHeatmapFromResult(result, config.Index);
+                                await UpdateHeatmapFromResultAsync(result, config.Index).ConfigureAwait(false);
 
                                 InvokeOnUi(() =>
                                 {
@@ -4334,7 +4334,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             });
         }
 
-        public void SetBatchHeatmapForRoi(byte[]? heatmapPngBytes, int roiIndex)
+        public bool SetBatchHeatmapForRoi(byte[]? heatmapPngBytes, int roiIndex)
         {
             BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex));
             _lastHeatmapPngBytes = heatmapPngBytes ?? Array.Empty<byte>();
@@ -4343,6 +4343,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 UpdateHeatmapThreshold();
                 GuiLog.Info($"[batch-hm:VM] set roiIdx={BatchHeatmapRoiIndex} bytes={_lastHeatmapPngBytes.Length}");
+
+                var shouldTriggerReposition = false;
 
                 if (_isBatchRunning)
                 {
@@ -4359,19 +4361,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (_batchAnchorM1Ready && _batchAnchorM2Ready)
                     {
-                        var imagePath = CurrentImagePath ?? string.Empty;
-                        var ct = _currentBatchCt;
-                        _ = EnsureBatchRepositionAsync(imagePath, ct, $"anchors-ready:roiIdx={roiIndex}");
+                        shouldTriggerReposition = true;
                     }
                 }
+
+                return shouldTriggerReposition;
             }
             catch (Exception ex)
             {
                 GuiLog.Error($"[batch-hm:VM] SetBatchHeatmapForRoi failed", ex); // CODEX: FormattableString compatibility.
+                return false;
             }
         }
 
-        private void UpdateHeatmapFromResult(InferResult result, int roiIndex)
+        private async Task UpdateHeatmapFromResultAsync(InferResult result, int roiIndex)
         {
             if (result == null || string.IsNullOrWhiteSpace(result.heatmap_png_base64))
             {
@@ -4382,12 +4385,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 var heatmapBytes = Convert.FromBase64String(result.heatmap_png_base64);
+                var shouldAwaitReposition = false;
 
                 InvokeOnUi(() =>
                 {
                     try
                     {
-                        SetBatchHeatmapForRoi(heatmapBytes, roiIndex);
+                        shouldAwaitReposition = SetBatchHeatmapForRoi(heatmapBytes, roiIndex);
                         LogImg("hm:set-after-update", BatchHeatmapSource);
                         LogHeatmapState("hm:after-update");
                     }
@@ -4397,6 +4401,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         ClearBatchHeatmap();
                     }
                 });
+
+                if (shouldAwaitReposition)
+                {
+                    var imagePath = CurrentImagePath ?? string.Empty;
+                    var ct = _currentBatchCt;
+                    await EnsureBatchRepositionAsync(imagePath, ct, $"anchors-ready:roiIdx={roiIndex}").ConfigureAwait(false);
+                }
             }
             catch (FormatException ex)
             {

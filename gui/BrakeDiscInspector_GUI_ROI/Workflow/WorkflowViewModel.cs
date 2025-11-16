@@ -139,6 +139,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool? _hasFitEndpoint;
         private bool? _hasCalibrateEndpoint;
         private long _batchStepId;
+
+        private volatile bool _batchAnchorM1Ready;
+        private volatile bool _batchAnchorM2Ready;
+        public string? CurrentManualImagePath { get; private set; }
         private int _currentRowIndex;
         private string? _currentImagePath;
         private bool? _batchRowOk;
@@ -165,8 +169,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _showInspectionRoi = true;
 
         // CODEX: batch reposition flags
-        private volatile bool _batchAnchorM1Ready;
-        private volatile bool _batchAnchorM2Ready;
         private CancellationToken _currentBatchCt = CancellationToken.None;
 
         // CODEX: bloquear persistencia de layout durante batch
@@ -208,6 +210,25 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _isInitializing;
         private string? _annotatedOutputDir;
         private int _layoutIoDepth;
+
+        public event EventHandler? BatchStarted;
+        public event EventHandler? BatchEnded;
+
+        private sealed class BatchSimilarity
+        {
+            public double Scale { get; set; } = 1.0;
+            public double RotationDeg { get; set; } = 0.0;
+            public double Tx { get; set; } = 0.0;
+            public double Ty { get; set; } = 0.0;
+            public long StepId { get; set; }
+        }
+
+        private BatchSimilarity _batchXform = new();
+
+        private Point? _batchDetectedM1;
+        private Point? _batchDetectedM2;
+        private Point? _batchBaselineM1;
+        private Point? _batchBaselineM2;
 
         private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
         {
@@ -434,6 +455,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public string? CurrentManualImagePath
+        {
+            get; private set;
+        }
+
         public bool? BatchRowOk
         {
             get => _batchRowOk;
@@ -467,7 +493,91 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             TraceBatch($"[batch] layout-persist:UNLOCK depth={_layoutPersistenceLock}");
         }
 
-        private bool IsLayoutPersistenceLocked => _layoutPersistenceLock > 0;
+        public bool IsLayoutPersistenceLocked => _layoutPersistenceLock > 0;
+
+        private void ResetBatchTransform()
+        {
+            _batchXform = new BatchSimilarity { StepId = BatchStepId };
+            TraceBatch($"[batch-xform] reset step={_batchXform.StepId} S=1 R=0 Tx=0 Ty=0");
+        }
+
+        public void SetBatchTransformFromMasters(double cx1Old, double cy1Old, double cx2Old, double cy2Old,
+            double cx1New, double cy1New, double cx2New, double cy2New)
+        {
+            var dxO = cx2Old - cx1Old; var dyO = cy2Old - cy1Old;
+            var dxN = cx2New - cx1New; var dyN = cy2New - cy1New;
+
+            var distO = Math.Sqrt(dxO * dxO + dyO * dyO);
+            var distN = Math.Sqrt(dxN * dxN + dyN * dyN);
+            var scale = (distO > 1e-6) ? distN / distO : 1.0;
+
+            var angO = Math.Atan2(dyO, dxO);
+            var angN = Math.Atan2(dyN, dxN);
+            var rotRad = angN - angO;
+            var rotDeg = rotRad * 180.0 / Math.PI;
+
+            double x = cx1Old, y = cy1Old;
+            double xr = (x * Math.Cos(rotRad) - y * Math.Sin(rotRad)) * scale;
+            double yr = (x * Math.Sin(rotRad) + y * Math.Cos(rotRad)) * scale;
+            double tx = cx1New - xr;
+            double ty = cy1New - yr;
+
+            _batchXform.Scale = scale;
+            _batchXform.RotationDeg = rotDeg;
+            _batchXform.Tx = tx;
+            _batchXform.Ty = ty;
+            _batchXform.StepId = BatchStepId;
+
+            TraceBatch($"[batch-xform] set step={_batchXform.StepId} S={scale:0.000} Rdeg={rotDeg:0.00} Tx={tx:0.00} Ty={ty:0.00}");
+        }
+
+        private Rect ApplyBatchTransformToRect(Rect r)
+        {
+            double rad = _batchXform.RotationDeg * Math.PI / 180.0;
+            double cos = Math.Cos(rad), sin = Math.Sin(rad), s = _batchXform.Scale;
+            Point[] pts = new[]
+            {
+                new Point(r.Left,  r.Top),
+                new Point(r.Right, r.Top),
+                new Point(r.Right, r.Bottom),
+                new Point(r.Left,  r.Bottom),
+            };
+
+            for (int i = 0; i < 4; i++)
+            {
+                var x = pts[i].X; var y = pts[i].Y;
+                var xr = (x * cos - y * sin) * s + _batchXform.Tx;
+                var yr = (x * sin + y * cos) * s + _batchXform.Ty;
+                pts[i] = new Point(xr, yr);
+            }
+
+            double minX = double.PositiveInfinity, minY = double.PositiveInfinity, maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
+            foreach (var p in pts)
+            {
+                if (p.X < minX) minX = p.X;
+                if (p.Y < minY) minY = p.Y;
+                if (p.X > maxX) maxX = p.X;
+                if (p.Y > maxY) maxY = p.Y;
+            }
+
+            return new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
+        }
+
+        public void RegisterBatchAnchors(Point baselineM1, Point baselineM2, Point detectedM1, Point detectedM2)
+        {
+            _batchBaselineM1 = baselineM1;
+            _batchBaselineM2 = baselineM2;
+            _batchDetectedM1 = detectedM1;
+            _batchDetectedM2 = detectedM2;
+            _batchAnchorM1Ready = true;
+            _batchAnchorM2Ready = true;
+
+            SetBatchTransformFromMasters(
+                baselineM1.X, baselineM1.Y, baselineM2.X, baselineM2.Y,
+                detectedM1.X, detectedM1.Y, detectedM2.X, detectedM2.Y);
+
+            TraceBatch($"[batch] anchors-ready file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' M1=({detectedM1.X:0.0},{detectedM1.Y:0.0}) M2=({detectedM2.X:0.0},{detectedM2.Y:0.0})");
+        }
 
         public string? BatchFolder
         {
@@ -1108,7 +1218,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public Int32Rect? GetInspectionRoiImageRectPx(int idx)
         {
             var roi = GetInspectionRoiModelByIndex(idx);
-            return roi != null ? BuildImageRectPx(roi) : null;
+            if (roi == null)
+            {
+                return null;
+            }
+
+            var roiForRect = GetBatchTransformedRoi(roi);
+            return BuildImageRectPx(roiForRect);
         }
 
         public Rect? GetInspectionRoiCanvasRect(int roiIndex)
@@ -1222,6 +1338,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ? $"{canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}"
                     : "null";
 
+                string xformText = _isBatchRunning
+                    ? FormattableString.Invariant($"S={_batchXform.Scale:0.000},R={_batchXform.RotationDeg:0.00},T=({_batchXform.Tx:0.0},{_batchXform.Ty:0.0})")
+                    : "identity";
+
                 // Estado del modelo (si existe)
                 string modelText = roiModel != null
                     ? FormattableString.Invariant(
@@ -1232,7 +1352,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 TraceBatch(
                     $"[batch] place roiIdx={roiIndex} enabled={enabled} " +
                     $"reason={reason} row={CurrentRowIndex:000}/{totalRows:000} file='{fileName}' " +
-                    $"rectImg=({rectImgText}) rectCanvas=({rectCanvasText}) model=({modelText})");
+                    $"rectImg=({rectImgText}) rectCanvas=({rectCanvasText}) model=({modelText}) xform({xformText})");
             }
             catch (Exception ex)
             {
@@ -1304,6 +1424,40 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return null;
+        }
+
+        private RoiModel GetBatchTransformedRoi(RoiModel source)
+        {
+            if (!_isBatchRunning || _batchXform.StepId != BatchStepId)
+            {
+                return source;
+            }
+
+            var clone = source.Clone();
+            double rad = _batchXform.RotationDeg * Math.PI / 180.0;
+            double cos = Math.Cos(rad);
+            double sin = Math.Sin(rad);
+            double scale = _batchXform.Scale;
+
+            var (cx, cy) = source.GetCenter();
+            double newCx = (cx * cos - cy * sin) * scale + _batchXform.Tx;
+            double newCy = (cx * sin + cy * cos) * scale + _batchXform.Ty;
+
+            clone.Width = Math.Max(1.0, source.Width * scale);
+            clone.Height = Math.Max(1.0, source.Height * scale);
+            clone.R = Math.Max(1.0, source.R * scale);
+            clone.RInner = Math.Max(0.0, source.RInner * scale);
+            if (clone.RInner >= clone.R)
+            {
+                clone.RInner = Math.Max(0.0, clone.R - 1.0);
+            }
+
+            clone.CX = newCx;
+            clone.CY = newCy;
+            clone.Left = newCx - clone.Width * 0.5;
+            clone.Top = newCy - clone.Height * 0.5;
+            clone.AngleDeg = source.AngleDeg + _batchXform.RotationDeg;
+            return clone;
         }
 
         private static Int32Rect? BuildImageRectPx(RoiModel roi)
@@ -3648,6 +3802,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             UpdateBatchProgress(0, total);
             SetBatchStatusSafe("Running...");
 
+            BatchStarted?.Invoke(this, EventArgs.Empty);
+
             try
             {
                 _annotatedOutputDir = null;
@@ -3658,11 +3814,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _pauseGate.Wait(ct);
 
                     // CODEX: reset anchors para la nueva imagen
-                    _batchAnchorM1Ready = false;
-                    _batchAnchorM2Ready = false;
                     _currentBatchCt = ct;
 
-                    EnterLayoutPersistenceLock();
                     try
                     {
                         rowIndex++;
@@ -3700,6 +3853,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             }
 
                             _log($"[batch] processing file='{row.FileName}' roiIdx={config.Index} enabled={config.Enabled}");
+
+                            if (config.Index >= 3 && !(_batchAnchorM1Ready && _batchAnchorM2Ready))
+                            {
+                                TraceBatch("[batch] wait: anchors not ready -> delaying ROI 3/4");
+                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Nok);
+                                continue;
+                            }
 
                             if (!config.Enabled)
                             {
@@ -3785,7 +3945,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
                 finally
                 {
-                    ExitLayoutPersistenceLock();
+                    EndBatchStep();
                 }
             }
 
@@ -3806,6 +3966,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             finally
             {
+                BatchEnded?.Invoke(this, EventArgs.Empty);
                 _isBatchRunning = false;
                 _pauseGate.Set();
                 _batchCts?.Dispose();
@@ -4356,13 +4517,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     }
 
                     TraceBatch($"[batch] anchors state M1={_batchAnchorM1Ready} M2={_batchAnchorM2Ready} after roiIdx={roiIndex}");
-
-                    if (_batchAnchorM1Ready && _batchAnchorM2Ready)
-                    {
-                        var imagePath = CurrentImagePath ?? string.Empty;
-                        var ct = _currentBatchCt;
-                        _ = EnsureBatchRepositionAsync(imagePath, ct, $"anchors-ready:roiIdx={roiIndex}");
-                    }
                 }
             }
             catch (Exception ex)
@@ -4453,9 +4607,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 throw new InvalidOperationException($"ROI model missing for index {roiConfig.Index}.");
             }
 
+            var roiForExport = GetBatchTransformedRoi(roiModel);
+
             return await Task.Run(() =>
             {
-                if (!BackendAPI.TryPrepareCanonicalRoi(fullPath, roiModel, out var payload, out var fileName, _log) || payload == null)
+                if (!BackendAPI.TryPrepareCanonicalRoi(fullPath, roiForExport, out var payload, out var fileName, _log) || payload == null)
                 {
                     throw new InvalidOperationException($"ROI export failed for '{fullPath}'.");
                 }
@@ -4750,6 +4906,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public void TraceManual(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            try
+            {
+                _log(message);
+            }
+            catch
+            {
+            }
+        }
+
+        public void BeginManualInspection(string imagePath)
+        {
+            CurrentManualImagePath = imagePath;
+            TraceManual($"[manual] open file='{System.IO.Path.GetFileName(imagePath)}'");
+        }
+
         public void TraceBatchInspectionRoisSnapshot(string label)
         {
             try
@@ -4788,10 +4966,24 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public void BeginBatchStep(int rowIndex1Based, string imagePath)
         {
             var id = Interlocked.Increment(ref _batchStepId);
+            _batchAnchorM1Ready = false;
+            _batchAnchorM2Ready = false;
+            _batchDetectedM1 = null;
+            _batchDetectedM2 = null;
+            _batchBaselineM1 = null;
+            _batchBaselineM2 = null;
             CurrentRowIndex = Math.Max(1, rowIndex1Based);
             CurrentImagePath = imagePath;
             BatchRowOk = null;
-            TraceBatch(FormattableString.Invariant($"[batch-vm] step++ id={id} row={CurrentRowIndex:000} file='{Path.GetFileName(imagePath) ?? string.Empty}'"));
+            ResetBatchTransform();
+            TraceBatch($"[batch] step++ id={BatchStepId} row={CurrentRowIndex:000} file='{Path.GetFileName(imagePath) ?? string.Empty}'");
+            EnterLayoutPersistenceLock();
+        }
+
+        public void EndBatchStep()
+        {
+            TraceBatch($"[batch] step-- id={BatchStepId}");
+            ExitLayoutPersistenceLock();
         }
 
         public IDisposable BeginLayoutIo(string tag)

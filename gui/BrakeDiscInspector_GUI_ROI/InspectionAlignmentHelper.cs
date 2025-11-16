@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using BrakeDiscInspector_GUI_ROI.Util;
 
 namespace BrakeDiscInspector_GUI_ROI;
 
@@ -13,6 +14,7 @@ internal static class InspectionAlignmentHelper
         Point master1,
         Point master2)
     {
+        GuiLog.Info($"[analyze-master] reposition inspection m1=({master1.X:0.0},{master1.Y:0.0}) m2=({master2.X:0.0},{master2.Y:0.0})");
         if (inspectionTarget == null)
         {
             return;

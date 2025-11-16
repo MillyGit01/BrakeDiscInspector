@@ -1197,11 +1197,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 // Estado del modelo (si existe)
                 string modelText = roiModel != null
                     ? FormattableString.Invariant(
-                        $"shape={roiModel.Shape} " +
-                        $"CX={roiModel.CX:0.##} CY={roiModel.CY:0.##} R={roiModel.R:0.##} " +
-                        $"L={roiModel.Left:0.##} T={roiModel.Top:0.##} " +
-                        $"W={roiModel.Width:0.##} H={roiModel.Height:0.##} " +
-                        $"Angle={roiModel.AngleDeg:0.##}")
+                        $"shape={roiModel.Shape} CX={roiModel.CX:0.##} CY={roiModel.CY:0.##} R={roiModel.R:0.##} L={roiModel.Left:0.##} T={roiModel.Top:0.##} W={roiModel.Width:0.##} H={roiModel.Height:0.##} Angle={roiModel.AngleDeg:0.##}")
                     : "null";
 
                 // Segundo bloque: traza completa de la colocación

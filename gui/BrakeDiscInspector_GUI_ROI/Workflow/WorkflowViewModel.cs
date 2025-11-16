@@ -164,6 +164,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _showMaster2Inspection = true;
         private bool _showInspectionRoi = true;
 
+        // CODEX: batch reposition flags
+        private volatile bool _batchAnchorM1Ready;
+        private volatile bool _batchAnchorM2Ready;
+        private CancellationToken _currentBatchCt = CancellationToken.None;
+
+        // CODEX: bloquear persistencia de layout durante batch
+        private int _layoutPersistenceLock; // 0=no bloqueado; >0 bloqueado
+
         private RoiExportResult? _lastExport;
         private byte[]? _lastHeatmapBytes;
         private InferResult? _lastInferResult;
@@ -440,6 +448,26 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         }
 
         public bool IsLayoutIo => Volatile.Read(ref _layoutIoDepth) > 0;
+
+        // CODEX: helpers para bloquear persistencia de layout durante batch
+        private void EnterLayoutPersistenceLock()
+        {
+            System.Threading.Interlocked.Increment(ref _layoutPersistenceLock);
+            TraceBatch($"[batch] layout-persist:LOCK depth={_layoutPersistenceLock}");
+        }
+
+        private void ExitLayoutPersistenceLock()
+        {
+            var v = System.Threading.Interlocked.Decrement(ref _layoutPersistenceLock);
+            if (v < 0)
+            {
+                _layoutPersistenceLock = 0;
+            }
+
+            TraceBatch($"[batch] layout-persist:UNLOCK depth={_layoutPersistenceLock}");
+        }
+
+        private bool IsLayoutPersistenceLocked => _layoutPersistenceLock > 0;
 
         public string? BatchFolder
         {
@@ -3629,95 +3657,103 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ct.ThrowIfCancellationRequested();
                     _pauseGate.Wait(ct);
 
-                    rowIndex++;
-                    row.IndexOneBased = rowIndex;
-                    BeginBatchStep(rowIndex, row.FullPath);
-                    processed = rowIndex;
-                    SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
+                    // CODEX: reset anchors para la nueva imagen
+                    _batchAnchorM1Ready = false;
+                    _batchAnchorM2Ready = false;
+                    _currentBatchCt = ct;
 
-                    if (!File.Exists(row.FullPath))
+                    EnterLayoutPersistenceLock();
+                    try
                     {
-                        _log($"[batch] file missing: '{row.FullPath}'");
+                        rowIndex++;
+                        row.IndexOneBased = rowIndex;
+                        BeginBatchStep(rowIndex, row.FullPath);
+                        processed = rowIndex;
+                        SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
+
+                        if (!File.Exists(row.FullPath))
+                        {
+                            _log($"[batch] file missing: '{row.FullPath}'");
+                            for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
+                            {
+                                UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            }
+                            BatchRowOk = false;
+                            UpdateBatchProgress(processed, total);
+                            continue;
+                        }
+
+                        SetBatchBaseImage(row.FullPath);
+
+                        await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
+
                         for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                         {
-                            UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
-                        }
-                        BatchRowOk = false;
-                        UpdateBatchProgress(processed, total);
-                        continue;
-                    }
+                            ct.ThrowIfCancellationRequested();
+                            _pauseGate.Wait(ct);
 
-                    SetBatchBaseImage(row.FullPath);
-
-                    await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
-
-                    for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        _pauseGate.Wait(ct);
-
-                        var config = GetInspectionConfigByIndex(roiIndex);
-                        if (config == null)
-                        {
-                            UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
-                            continue;
-                        }
-
-                        _log($"[batch] processing file='{row.FileName}' roiIdx={config.Index} enabled={config.Enabled}");
-
-                        if (!config.Enabled)
-                        {
-                            UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
-                            InvokeOnUi(ClearBatchHeatmap);
-                            _clearHeatmap();
-                            _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
-                            continue;
-                        }
-
-                        try
-                        {
-                            var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
-
-                            var resolvedRoiId = NormalizeInspectionKey(config.ModelKey, config.Index);
-                            if (!string.Equals(config.ModelKey, resolvedRoiId, StringComparison.Ordinal))
+                            var config = GetInspectionConfigByIndex(roiIndex);
+                            if (config == null)
                             {
-                                config.ModelKey = resolvedRoiId;
+                                UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                                continue;
                             }
 
-                            if (ensuredModels.Add(resolvedRoiId))
+                            _log($"[batch] processing file='{row.FileName}' roiIdx={config.Index} enabled={config.Enabled}");
+
+                            if (!config.Enabled)
                             {
-                                try
+                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
+                                InvokeOnUi(ClearBatchHeatmap);
+                                _clearHeatmap();
+                                _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
+                                continue;
+                            }
+
+                            try
+                            {
+                                var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
+
+                                var resolvedRoiId = NormalizeInspectionKey(config.ModelKey, config.Index);
+                                if (!string.Equals(config.ModelKey, resolvedRoiId, StringComparison.Ordinal))
                                 {
-                                    await _client.EnsureFittedAsync(RoleId, resolvedRoiId, MmPerPx).ConfigureAwait(false);
+                                    config.ModelKey = resolvedRoiId;
                                 }
-                                catch (BackendMemoryNotFittedException ex)
+
+                                if (ensuredModels.Add(resolvedRoiId))
                                 {
-                                    _log($"[batch] ensure_fitted missing roi='{resolvedRoiId}': {ex.Message}");
-                                    UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
-                                    continue;
+                                    try
+                                    {
+                                        await _client.EnsureFittedAsync(RoleId, resolvedRoiId, MmPerPx).ConfigureAwait(false);
+                                    }
+                                    catch (BackendMemoryNotFittedException ex)
+                                    {
+                                        _log($"[batch] ensure_fitted missing roi='{resolvedRoiId}': {ex.Message}");
+                                        UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                                        continue;
+                                    }
                                 }
-                            }
 
-                            UpdateBatchHeatmapIndex(config.Index);
+                                UpdateBatchHeatmapIndex(config.Index);
 
-                            var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
+                                var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
-                            UpdateHeatmapFromResult(result, config.Index);
+                                UpdateHeatmapFromResult(result, config.Index);
 
-                            InvokeOnUi(() =>
-                            {
-                                var canvasRect = GetInspectionRoiCanvasRect(config.Index);
-                                TraceBatchHeatmapPlacement("per-roi", config.Index, canvasRect);
-                            });
+                                InvokeOnUi(() =>
+                                {
+                                    var canvasRect = GetInspectionRoiCanvasRect(config.Index);
+                                    TraceBatchHeatmapPlacement("per-roi", config.Index, canvasRect);
+                                });
 
-                            double decisionThreshold = result.threshold
-                                ?? config.CalibratedThreshold
-                                ?? config.ThresholdDefault;
+                                double decisionThreshold = result.threshold
+                                    ?? config.CalibratedThreshold
+                                    ?? config.ThresholdDefault;
 
-                            if (decisionThreshold <= 0 && LocalThreshold > 0)
-                            {
-                                decisionThreshold = LocalThreshold;
-                            }
+                                if (decisionThreshold <= 0 && LocalThreshold > 0)
+                                {
+                                    decisionThreshold = LocalThreshold;
+                                }
 
                             bool isNg = result.score > decisionThreshold;
                             UpdateBatchRowStatus(row, config.Index, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
@@ -3747,9 +3783,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
                     UpdateBatchProgress(processed, total);
                 }
+                finally
+                {
+                    ExitLayoutPersistenceLock();
+                }
+            }
 
-                _log($"[batch] completed processed={processed}/{total}");
-                SetBatchStatusSafe("Completed");
+            _log($"[batch] completed processed={processed}/{total}");
+            SetBatchStatusSafe("Completed");
             }
             catch (OperationCanceledException)
             {
@@ -3782,25 +3823,53 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
         }
 
-        private async Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
+        private Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
         {
-            if (string.IsNullOrWhiteSpace(imagePath) || _repositionInspectionRoisAsync == null)
+            if (string.IsNullOrWhiteSpace(imagePath))
             {
-                return;
+                return Task.CompletedTask;
             }
 
+            return EnsureBatchRepositionAsync(imagePath, ct, "row-start");
+        }
+
+        private async Task EnsureBatchRepositionAsync(string imagePath, CancellationToken ct, string reason)
+        {
             try
             {
-                var stepId = BatchStepId;
-                await _repositionInspectionRoisAsync(imagePath, stepId, ct).ConfigureAwait(false);
+                var fileName = string.IsNullOrWhiteSpace(imagePath)
+                    ? "<none>"
+                    : Path.GetFileName(imagePath);
+
+                TraceBatch($"[batch-repos] BEGIN row={CurrentRowIndex} file='{fileName}' reason={reason} useCanvas={UseCanvasPlacementForBatchHeatmap}");
+
+                TraceBatchInspectionRoisSnapshot("BEFORE");
+
+                if (_repositionInspectionRoisAsync != null)
+                {
+                    var stepId = BatchStepId;
+                    await _repositionInspectionRoisAsync(imagePath, stepId, ct).ConfigureAwait(false);
+                    TraceBatch(FormattableString.Invariant($"[batch-repos] reposition delegate DONE stepId={stepId}"));
+                }
+                else
+                {
+                    TraceBatch("[batch-repos] SKIP: _repositionInspectionRoisAsync == null");
+                }
+
+                InvokeOnUi(RedrawOverlays);
+
+                TraceBatchInspectionRoisSnapshot("AFTER");
+
+                TraceBatch($"[batch-repos] END row={CurrentRowIndex} file='{fileName}'");
             }
             catch (OperationCanceledException)
             {
+                TraceBatch("[batch-repos] CANCELLED");
                 throw;
             }
             catch (Exception ex)
             {
-                _log($"[batch] reposition failed for '{imagePath}': {ex.Message}");
+                TraceBatch($"[batch-repos] FAIL: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -4274,6 +4343,27 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 UpdateHeatmapThreshold();
                 GuiLog.Info($"[batch-hm:VM] set roiIdx={BatchHeatmapRoiIndex} bytes={_lastHeatmapPngBytes.Length}");
+
+                if (_isBatchRunning)
+                {
+                    if (roiIndex == 1)
+                    {
+                        _batchAnchorM1Ready = true;
+                    }
+                    else if (roiIndex == 2)
+                    {
+                        _batchAnchorM2Ready = true;
+                    }
+
+                    TraceBatch($"[batch] anchors state M1={_batchAnchorM1Ready} M2={_batchAnchorM2Ready} after roiIdx={roiIndex}");
+
+                    if (_batchAnchorM1Ready && _batchAnchorM2Ready)
+                    {
+                        var imagePath = CurrentImagePath ?? string.Empty;
+                        var ct = _currentBatchCt;
+                        _ = EnsureBatchRepositionAsync(imagePath, ct, $"anchors-ready:roiIdx={roiIndex}");
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -4657,6 +4747,41 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             catch
             {
                 // never throw from tracing
+            }
+        }
+
+        public void TraceBatchInspectionRoisSnapshot(string label)
+        {
+            try
+            {
+                for (int idx = 1; idx <= 4; idx++)
+                {
+                    var roiModel = GetInspectionRoiModelByIndex(idx);
+                    var roiConfig = GetInspectionConfigByIndex(idx);
+
+                    if (roiModel == null && (roiConfig?.Enabled != true))
+                    {
+                        continue;
+                    }
+
+                    string enabled = (roiConfig?.Enabled ?? false) ? "true" : "false";
+
+                    if (roiModel != null)
+                    {
+                        TraceBatch(
+                            $"[batch-snap:{label}] roiIdx={idx} enabled={enabled} shape={roiModel.Shape} " +
+                            $"CX={roiModel.CX:0.##} CY={roiModel.CY:0.##} R={roiModel.R:0.##} " +
+                            $"L={roiModel.Left:0.##} T={roiModel.Top:0.##} W={roiModel.Width:0.##} H={roiModel.Height:0.##} Ang={roiModel.AngleDeg:0.##}");
+                    }
+                    else
+                    {
+                        TraceBatch($"[batch-snap:{label}] roiIdx={idx} enabled={enabled} <no-model>");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                TraceBatch($"[batch-snap:{label}] FAIL: {ex.Message}");
             }
         }
 

@@ -87,6 +87,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _hasInspectionAnalysisTransform;
         private bool _isFirstImageForCurrentKey = true;
         private bool _inspectionBaselineRestorePending;
+        private volatile bool _suspendManualOverlayInvalidations;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
@@ -865,6 +866,13 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 AppendLog($"{prefix} skipped ({context}) layout/preset null");
                 errorMessage = "Layout o preset no inicializados.";
+                return false;
+            }
+
+            if (ViewModel?.IsLayoutPersistenceLocked == true)
+            {
+                AppendLog("[batch] layout-persist:SKIP");
+                errorMessage = "Layout persistence locked.";
                 return false;
             }
 
@@ -2801,6 +2809,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     _workflowViewModel.PropertyChanged -= WorkflowViewModelOnPropertyChanged;
                     _workflowViewModel.OverlayVisibilityChanged -= WorkflowViewModelOnOverlayVisibilityChanged;
+                    _workflowViewModel.BatchStarted -= WorkflowViewModelOnBatchStarted;
+                    _workflowViewModel.BatchEnded -= WorkflowViewModelOnBatchEnded;
                 }
 
                 _workflowViewModel = new WorkflowViewModel(
@@ -2818,6 +2828,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 _workflowViewModel.PropertyChanged += WorkflowViewModelOnPropertyChanged;
                 _workflowViewModel.OverlayVisibilityChanged += WorkflowViewModelOnOverlayVisibilityChanged;
+                _workflowViewModel.BatchStarted += WorkflowViewModelOnBatchStarted;
+                _workflowViewModel.BatchEnded += WorkflowViewModelOnBatchEnded;
                 _workflowViewModel.IsImageLoaded = _hasLoadedImage;
                 _workflowViewModel.HeatmapOpacity = _heatmapOverlayOpacity;
 
@@ -3376,6 +3388,8 @@ namespace BrakeDiscInspector_GUI_ROI
             _currentImagePathBackend = path;
             _currentImagePath = _currentImagePathWin;
 
+            ViewModel?.BeginManualInspection(path);
+
             _imgSourceBI = new BitmapImage();
             _imgSourceBI.BeginInit();
             _imgSourceBI.CacheOption = BitmapCacheOption.OnLoad;
@@ -3584,6 +3598,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void RedrawOverlaySafe()
         {
+            if (_suspendManualOverlayInvalidations)
+            {
+                AppendLog("[batch] skip redraw (batch running)");
+                return;
+            }
+
             bool aligned = IsOverlayAligned();
             AppendLog($"[guard] RedrawOverlaySafe aligned={aligned} " +
                       $"canvasActual=({CanvasROI?.ActualWidth:0.##}x{CanvasROI?.ActualHeight:0.##}) " +
@@ -3724,6 +3744,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void RedrawOverlay()
         {
+            if (_suspendManualOverlayInvalidations)
+            {
+                AppendLog("[batch] skip overlay redraw (batch running)");
+                return;
+            }
+
             AppendResizeLog($"[redraw] start: CanvasROI={CanvasROI.ActualWidth:0}x{CanvasROI.ActualHeight:0}");
             if (CanvasROI == null || _imgW <= 0 || _imgH <= 0)
                 return;
@@ -4801,56 +4827,17 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                var inspection = _layout?.Inspection;
-                if (inspection?.IsFrozen == true)
+                if (detectedM1 is SWPoint m1 && detectedM2 is SWPoint m2 && _layout?.Master1Pattern != null && _layout.Master2Pattern != null)
                 {
-                    AppendLog("[batch-repos] skip: inspection frozen");
+                    var (cx1, cy1) = _layout.Master1Pattern.GetCenter();
+                    var (cx2, cy2) = _layout.Master2Pattern.GetCenter();
+                    ViewModel?.RegisterBatchAnchors(new SWPoint(cx1, cy1), new SWPoint(cx2, cy2), m1, m2);
+                    GuiLog.Info($"[analyze-master] file='{Path.GetFileName(ViewModel?.CurrentImagePath ?? ViewModel?.CurrentManualImagePath ?? string.Empty)}' found M1=({m1.X:0.0},{m1.Y:0.0}) M2=({m2.X:0.0},{m2.Y:0.0}) score=(0,0)");
+                    AppendLog($"[batch-repos] anchors registered step={stepId} M1=({m1.X:F1},{m1.Y:F1}) M2=({m2.X:F1},{m2.Y:F1})");
                     return;
                 }
 
-                bool applied = false;
-
-                if (inspection != null && detectedM1 is SWPoint m1 && detectedM2 is SWPoint m2)
-                {
-                    try
-                    {
-                        using var freeze = FreezeRoiRepositionScope(nameof(RepositionBeforeBatchStepAsync));
-                        using (SuppressAutoSaves())
-                        {
-                            MoveInspectionTo(inspection, m1, m2);
-                            ClipInspectionROI(inspection, _imgW, _imgH);
-                            RefreshInspectionRoiSlots();
-                        }
-
-                        RedrawOverlay();
-                        AppendLog($"[batch-repos] applied via masters step={stepId} M1=({m1.X:F1},{m1.Y:F1}) M2=({m2.X:F1},{m2.Y:F1})");
-                        applied = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"[batch-repos] apply masters failed: {ex.Message}");
-                    }
-                }
-                else if (inspection == null)
-                {
-                    AppendLog("[batch-repos] inspection ROI missing -> fallback");
-                }
-
-                if (applied)
-                {
-                    return;
-                }
-
-                bool restored = TryRestoreSnapshotForImage(bytes);
-                if (restored)
-                {
-                    RedrawOverlay();
-                    AppendLog("[batch-repos] fallback snapshot restored");
-                }
-                else
-                {
-                    AppendLog("[batch-repos] no masters and no snapshot");
-                }
+                AppendLog("[batch-repos] anchors unavailable -> skip transform update");
             }, DispatcherPriority.Background);
         }
 
@@ -6462,6 +6449,16 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RequestBatchHeatmapPlacement($"vm-global:{e.PropertyName}", ViewModel); // CODEX: ensure global VM changes still capture the ROI index at schedule time.
             }
+        }
+
+        private void WorkflowViewModelOnBatchStarted(object? sender, EventArgs e)
+        {
+            _suspendManualOverlayInvalidations = true;
+        }
+
+        private void WorkflowViewModelOnBatchEnded(object? sender, EventArgs e)
+        {
+            _suspendManualOverlayInvalidations = false;
         }
 
         private void WorkflowViewModelOnOverlayVisibilityChanged(object? sender, EventArgs e)
@@ -8365,6 +8362,8 @@ namespace BrakeDiscInspector_GUI_ROI
             // CODEX: string interpolation compatibility.
             AppendLog($"[FLOW] Entrando en AnalyzeMastersAsync");
 
+            ViewModel?.TraceManual($"[manual-master] analyze file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}'");
+
             SWPoint? c1 = null, c2 = null;
             double s1 = 0, s2 = 0;
 
@@ -8481,6 +8480,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 Snack($"No se ha encontrado Master 1 en su zona de búsqueda"); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c1 null");
+                ViewModel?.TraceManual($"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=M1 not found");
                 return;
             }
             if (c2 is null)
@@ -8488,6 +8488,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 Snack($"No se ha encontrado Master 2 en su zona de búsqueda"); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c2 null");
+                ViewModel?.TraceManual($"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=M2 not found");
                 return;
             }
 
@@ -8501,6 +8502,11 @@ namespace BrakeDiscInspector_GUI_ROI
             _lastM2CenterPx = new CvPoint((int)System.Math.Round(c2.Value.X), (int)System.Math.Round(c2.Value.Y));
             _lastMidCenterPx = new CvPoint((int)System.Math.Round(mid.X), (int)System.Math.Round(mid.Y));
             RedrawAnalysisCrosses();
+
+            ViewModel?.TraceManual(
+                $"[manual-master] OK file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' " +
+                $"M1=({c1.Value.X:0.0},{c1.Value.Y:0.0}) M2=({c2.Value.X:0.0},{c2.Value.Y:0.0}) score=({s1:0},{s2:0})");
+            GuiLog.Info($"[analyze-master] file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' found M1=({c1.Value.X:0.0},{c1.Value.Y:0.0}) M2=({c2.Value.X:0.0},{c2.Value.Y:0.0}) score=({s1:0},{s2:0})");
 
             // === BEGIN: reposition Masters & Inspections ===
             try
@@ -10288,6 +10294,12 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             try
             {
+                if (ViewModel?.IsLayoutPersistenceLocked == true)
+                {
+                    AppendLog("[batch] layout-persist:SKIP");
+                    return;
+                }
+
                 var dir = MasterLayoutManager.GetLayoutsFolder(_preset);
                 Directory.CreateDirectory(dir);
 
@@ -11199,6 +11211,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void SyncOverlayToImage(bool scheduleResync)
         {
+            if (_suspendManualOverlayInvalidations)
+            {
+                AppendLog("[batch] skip overlay sync (batch running)");
+                return;
+            }
+
             if (ImgMain == null || CanvasROI == null) return;
             if (ImgMain.Source is not System.Windows.Media.Imaging.BitmapSource bmp) return;
 

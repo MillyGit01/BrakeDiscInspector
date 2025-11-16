@@ -24,6 +24,8 @@ using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Imaging;
 using BrakeDiscInspector_GUI_ROI.Models;
 using Forms = System.Windows.Forms;
+using GlobalInferResult = global::BrakeDiscInspector_GUI_ROI.InferResult;
+using WorkflowInferResult = global::BrakeDiscInspector_GUI_ROI.Workflow.InferResult;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
@@ -117,7 +119,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         }
     }
 
-    public sealed class WorkflowViewModel : INotifyPropertyChanged
+    public sealed partial class WorkflowViewModel : INotifyPropertyChanged
     {
         private readonly BackendClient _client;
         private readonly DatasetManager _datasetManager;
@@ -453,11 +455,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     OnPropertyChanged();
                 }
             }
-        }
-
-        public string? CurrentManualImagePath
-        {
-            get; private set;
         }
 
         public bool? BatchRowOk
@@ -3898,7 +3895,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                                 var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
-                                UpdateHeatmapFromResult(result, config.Index);
+                                UpdateHeatmapFromResult(ToGlobalInferResult(result), config.Index);
 
                                 InvokeOnUi(() =>
                                 {
@@ -4525,7 +4522,31 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
-        private void UpdateHeatmapFromResult(InferResult result, int roiIndex)
+        private static GlobalInferResult ToGlobalInferResult(WorkflowInferResult result)
+        {
+            if (result == null)
+            {
+                throw new ArgumentNullException(nameof(result));
+            }
+
+            return new GlobalInferResult
+            {
+                score = result.score,
+                threshold = result.threshold,
+                heatmap_png_base64 = result.heatmap_png_base64,
+                regions = result.regions?.Select(r => new BrakeDiscInspector_GUI_ROI.InferRegion
+                {
+                    x = r.x,
+                    y = r.y,
+                    w = r.w,
+                    h = r.h,
+                    area_px = r.area_px,
+                    area_mm2 = r.area_mm2,
+                }).ToArray(),
+            };
+        }
+
+        private void UpdateHeatmapFromResult(GlobalInferResult result, int roiIndex)
         {
             if (result == null || string.IsNullOrWhiteSpace(result.heatmap_png_base64))
             {

@@ -1179,21 +1179,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 int totalRows = _batchRows?.Count ?? 0;
 
                 // Primer bloque: métricas globales de imagen/canvas
-                TraceBatch(FormattableString.Invariant(
+                TraceBatch(
                     $"[batch] img px=({BaseImagePixelWidth}x{BaseImagePixelHeight}) " +
                     $"vis=({BaseImageActualWidth:0.##}x{BaseImageActualHeight:0.##}) " +
                     $"canvas=({CanvasRoiActualWidth:0.##}x{CanvasRoiActualHeight:0.##}) " +
-                    $"useCanvas={UseCanvasPlacementForBatchHeatmap}"));
+                    $"useCanvas={UseCanvasPlacementForBatchHeatmap}");
 
                 // Rectángulos en texto
                 string rectImgText = rectImg.HasValue
-                    ? FormattableString.Invariant(
-                        $"{rectImg.Value.X:0.##},{rectImg.Value.Y:0.##},{rectImg.Value.Width:0.##},{rectImg.Value.Height:0.##}")
+                    ? $"{rectImg.Value.X:0.##},{rectImg.Value.Y:0.##},{rectImg.Value.Width:0.##},{rectImg.Value.Height:0.##}"
                     : "null";
 
                 string rectCanvasText = canvasRect.HasValue
-                    ? FormattableString.Invariant(
-                        $"{canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}")
+                    ? $"{canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}"
                     : "null";
 
                 // Estado del modelo (si existe)
@@ -1207,10 +1205,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     : "null";
 
                 // Segundo bloque: traza completa de la colocación
-                TraceBatch(FormattableString.Invariant(
+                TraceBatch(
                     $"[batch] place roiIdx={roiIndex} enabled={enabled} " +
                     $"reason={reason} row={CurrentRowIndex:000}/{totalRows:000} file='{fileName}' " +
-                    $"rectImg=({rectImgText}) rectCanvas=({rectCanvasText}) model=({modelText})"));
+                    $"rectImg=({rectImgText}) rectCanvas=({rectCanvasText}) model=({modelText})");
             }
             catch (Exception ex)
             {

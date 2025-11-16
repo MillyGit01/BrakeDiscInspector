@@ -455,11 +455,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
-        public string? CurrentManualImagePath
-        {
-            get; private set;
-        }
-
         public bool? BatchRowOk
         {
             get => _batchRowOk;

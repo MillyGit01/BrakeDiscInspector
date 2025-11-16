@@ -1163,27 +1163,59 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     return;
                 }
 
+                // ROI en coordenadas de imagen (px)
                 var rectImg = GetInspectionRoiImageRectPx(roiIndex);
+
+                // Config y modelo del ROI
                 var roiConfig = GetInspectionConfigByIndex(roiIndex);
                 bool enabled = roiConfig?.Enabled ?? false;
+                var roiModel = GetInspectionRoiModelByIndex(roiIndex);
 
-                _log(FormattableString.Invariant(
-                    $"[batch] img px=({BaseImagePixelWidth}x{BaseImagePixelHeight}) vis=({BaseImageActualWidth:0.##}x{BaseImageActualHeight:0.##}) canvas=({CanvasRoiActualWidth:0.##}x{CanvasRoiActualHeight:0.##})"));
+                // Info de batch actual
+                string fileName = string.IsNullOrWhiteSpace(CurrentImagePath)
+                    ? "<none>"
+                    : System.IO.Path.GetFileName(CurrentImagePath);
 
+                int totalRows = _batchRows?.Count ?? 0;
+
+                // Primer bloque: métricas globales de imagen/canvas
+                TraceBatch(FormattableString.Invariant(
+                    $"[batch] img px=({BaseImagePixelWidth}x{BaseImagePixelHeight}) " +
+                    $"vis=({BaseImageActualWidth:0.##}x{BaseImageActualHeight:0.##}) " +
+                    $"canvas=({CanvasRoiActualWidth:0.##}x{CanvasRoiActualHeight:0.##}) " +
+                    $"useCanvas={UseCanvasPlacementForBatchHeatmap}"));
+
+                // Rectángulos en texto
                 string rectImgText = rectImg.HasValue
-                    ? FormattableString.Invariant($"{rectImg.Value.X:0.##},{rectImg.Value.Y:0.##},{rectImg.Value.Width:0.##},{rectImg.Value.Height:0.##}")
+                    ? FormattableString.Invariant(
+                        $"{rectImg.Value.X:0.##},{rectImg.Value.Y:0.##},{rectImg.Value.Width:0.##},{rectImg.Value.Height:0.##}")
                     : "null";
 
                 string rectCanvasText = canvasRect.HasValue
-                    ? FormattableString.Invariant($"{canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}")
+                    ? FormattableString.Invariant(
+                        $"{canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}")
                     : "null";
 
-                _log(FormattableString.Invariant($"[batch] roi idx={roiIndex} rectImg=({rectImgText}) rectCanvas=({rectCanvasText})"));
-                _log(FormattableString.Invariant($"[batch] place reason={reason} enabled={enabled}"));
+                // Estado del modelo (si existe)
+                string modelText = roiModel != null
+                    ? FormattableString.Invariant(
+                        $"shape={roiModel.Shape} " +
+                        $"CX={roiModel.CX:0.##} CY={roiModel.CY:0.##} R={roiModel.R:0.##} " +
+                        $"L={roiModel.Left:0.##} T={roiModel.Top:0.##} " +
+                        $"W={roiModel.Width:0.##} H={roiModel.Height:0.##} " +
+                        $"Angle={roiModel.AngleDeg:0.##}")
+                    : "null";
+
+                // Segundo bloque: traza completa de la colocación
+                TraceBatch(FormattableString.Invariant(
+                    $"[batch] place roiIdx={roiIndex} enabled={enabled} " +
+                    $"reason={reason} row={CurrentRowIndex:000}/{totalRows:000} file='{fileName}' " +
+                    $"rectImg=({rectImgText}) rectCanvas=({rectCanvasText}) model=({modelText})"));
             }
             catch (Exception ex)
             {
-                GuiLog.Warn(FormattableString.Invariant($"[batch] trace placement failed: {ex.Message}"));
+                // Nunca romper el flujo por culpa de un log
+                TraceBatch("[batch] TraceBatchHeatmapPlacement failed: " + ex.Message);
             }
         }
 

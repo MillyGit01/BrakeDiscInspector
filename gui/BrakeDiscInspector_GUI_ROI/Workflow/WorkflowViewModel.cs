@@ -2568,7 +2568,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 yield break;
             }
 
-            foreach (var file in Directory.EnumerateFiles(targetDir, "*.png", SearchOption.TopDirectoryOnly)
+            foreach (var file in Directory.EnumerateFiles(targetDir, "*.*", SearchOption.AllDirectories)
+                                         .Where(f => BatchImageExtensions.Contains(Path.GetExtension(f)))
                                          .OrderByDescending(File.GetCreationTimeUtc)
                                          .Take(take))
             {
@@ -2739,6 +2740,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var okDir = Path.Combine(folderPath, "ok");
                 if (!Directory.Exists(okDir))
                 {
+                    GuiLog.Info($"[dataset] folder '{folderPath}' missing OK dir at '{okDir}'");
                     return RoiDatasetAnalysis.Empty("Folder must contain /ok and /ko subfolders");
                 }
 
@@ -2746,11 +2748,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var negDir = Path.Combine(folderPath, negLabel);
                 if (!Directory.Exists(negDir))
                 {
+                    GuiLog.Info($"[dataset] folder '{folderPath}' missing NG dir at '{negDir}'");
                     return RoiDatasetAnalysis.Empty("Folder must contain /ok and /ko subfolders");
                 }
 
                 var okFiles = EnumerateImages(okDir);
                 var koFiles = EnumerateImages(negDir);
+
+                GuiLog.Info($"[dataset] folder '{folderPath}' contains {okFiles.Count} OK images and {koFiles.Count} {negLabel.ToUpper()} images");
 
                 var entries = okFiles.Select(path => new DatasetEntry(path, true))
                     .Concat(koFiles.Select(path => new DatasetEntry(path, false)))
@@ -2893,13 +2898,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return new List<string>();
             }
 
-            string[] patterns = { "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tif", "*.tiff" };
-            foreach (var pattern in patterns)
+            foreach (var file in Directory
+                         .EnumerateFiles(directory, "*.*", SearchOption.AllDirectories)
+                         .Where(f => BatchImageExtensions.Contains(Path.GetExtension(f))))
             {
-                foreach (var file in Directory.EnumerateFiles(directory, pattern, SearchOption.AllDirectories))
-                {
-                    set.Add(file);
-                }
+                set.Add(file);
             }
 
             var list = set.ToList();
@@ -4112,10 +4115,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 _log($"[batch] dir={dir} exists={Directory.Exists(dir)}");
-                files = Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                files = Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
                     .Where(p => BatchImageExtensions.Contains(Path.GetExtension(p)))
                     .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                     .ToList();
+
+                _log($"[batch] {files.Count} image files found in '{dir}' (including subfolders)");
 
                 for (int i = 0; i < Math.Min(12, files.Count); i++)
                 {

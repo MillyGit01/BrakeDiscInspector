@@ -2139,7 +2139,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private static readonly string HeatmapLogPath = @"C:\BDI\logs\gui_heatmap.log";
+        private static readonly string HeatmapLogPath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BrakeDiscInspector", "logs", "gui_heatmap.log");
 
         private static void LogHeatmap(string msg)
         {

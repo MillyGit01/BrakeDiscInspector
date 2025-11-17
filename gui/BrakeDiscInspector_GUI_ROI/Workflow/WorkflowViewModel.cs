@@ -4879,7 +4879,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return bestThr;
         }
 
-        public sealed record RoiDatasetAnalysis(
+        private sealed record RoiDatasetAnalysis(
             string DatasetPath,
             List<DatasetEntry> Entries,
             int OkCount,

@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using BrakeDiscInspector_GUI_ROI;
 using BrakeDiscInspector_GUI_ROI.Workflow;
+using BrakeDiscInspector_GUI_ROI.Util;
 
 namespace BrakeDiscInspector_GUI_ROI.Models
 {
@@ -128,8 +129,9 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             get => _datasetPath;
             set
             {
-                if (string.Equals(_datasetPath, value, StringComparison.Ordinal)) return;
-                _datasetPath = value;
+                var normalized = DatasetPathHelper.NormalizeDatasetPath(value);
+                if (string.Equals(_datasetPath, normalized, StringComparison.OrdinalIgnoreCase)) return;
+                _datasetPath = normalized;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasDatasetPath));
                 HasFitOk = false;

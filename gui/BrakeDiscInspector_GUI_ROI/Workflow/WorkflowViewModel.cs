@@ -2468,7 +2468,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (dialog.ShowDialog() == Forms.DialogResult.OK)
                     {
-                        roi.DatasetPath = dialog.SelectedPath;
+                        roi.DatasetPath = DatasetPathHelper.NormalizeDatasetPath(dialog.SelectedPath);
                     }
                 });
                 return;
@@ -2492,7 +2492,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 if (dialog.ShowDialog() == true)
                 {
-                    roi.DatasetPath = dialog.FileName;
+                    roi.DatasetPath = DatasetPathHelper.NormalizeDatasetPath(dialog.FileName);
                 }
             });
         }
@@ -2543,6 +2543,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private static IEnumerable<string> EnumerateDatasetFiles(string rootDir, string labelDir, string roiDisplayName, int take = 24)
         {
+            var normalizedRoot = DatasetPathHelper.NormalizeDatasetPath(rootDir);
+            if (string.IsNullOrWhiteSpace(normalizedRoot))
+            {
+                yield break;
+            }
+
+            rootDir = normalizedRoot;
             var roiFolder = RoiFolderName(roiDisplayName);
             var subDir = Path.Combine(rootDir, labelDir, roiFolder);
             string targetDir;
@@ -2669,12 +2676,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task<RoiDatasetAnalysis> RefreshRoiDatasetStateAsync(InspectionRoiConfig roi)
         {
-            var datasetPath = roi.DatasetPath;
+            var datasetPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
             roi.IsDatasetLoading = true;
             roi.DatasetReady = false;
             roi.DatasetStatus = roi.HasDatasetPath ? "Validating dataset..." : "Select a dataset";
 
             var refreshPath = string.IsNullOrWhiteSpace(datasetPath) ? "<none>" : datasetPath;
+            var loadingMessage = $"Loading dataset from path: {refreshPath}";
+            _log(loadingMessage);
+            GuiLog.Info(loadingMessage);
             GuiLog.Info($"[dataset] Refresh START roi='{roi.DisplayName}' path='{refreshPath}'");
 
             var analysis = await Task.Run(() => AnalyzeDatasetPath(datasetPath)).ConfigureAwait(false);
@@ -2698,6 +2708,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private static RoiDatasetAnalysis AnalyzeDatasetPath(string? datasetPath)
         {
+            datasetPath = DatasetPathHelper.NormalizeDatasetPath(datasetPath);
             if (string.IsNullOrWhiteSpace(datasetPath))
             {
                 return RoiDatasetAnalysis.Empty("Select a dataset");
@@ -4868,7 +4879,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return bestThr;
         }
 
-        private sealed record RoiDatasetAnalysis(
+        public sealed record RoiDatasetAnalysis(
             string DatasetPath,
             List<DatasetEntry> Entries,
             int OkCount,

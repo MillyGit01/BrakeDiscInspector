@@ -15,6 +15,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -218,6 +219,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _isInitializing;
         private string? _annotatedOutputDir;
         private int _layoutIoDepth;
+
+        public Canvas? OverlayCanvas { get; set; }
+        public Action<string, bool>? OverlayBatchCaption { get; set; }
 
         public event EventHandler? BatchStarted;
         public event EventHandler? BatchEnded;
@@ -581,7 +585,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 detectedM1.X, detectedM1.Y, detectedM2.X, detectedM2.Y);
 
             TraceBatch($"[batch] anchors-ready file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' M1=({detectedM1.X:0.0},{detectedM1.Y:0.0}) M2=({detectedM2.X:0.0},{detectedM2.Y:0.0})");
-            _log?.Invoke($"[analyze-master] step={_batchStepId} file='{CurrentImagePath}' M1={detectedM1} M2={detectedM2}");
+            GuiLog.Info($"[analyze-master] anchors-ready step={_batchStepId} file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' M1=({detectedM1.X:0.0},{detectedM1.Y:0.0}) M2=({detectedM2.X:0.0},{detectedM2.Y:0.0})");
         }
 
         public string? BatchFolder
@@ -1278,6 +1282,55 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public bool IsBatchAnchorReady => _batchAnchorReadyForStep == _batchStepId;
 
+        private static Rect BuildRoiRect(RoiModel roi)
+        {
+            return roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus
+                ? new Rect(roi.CX - roi.R, roi.CY - roi.R, roi.R * 2.0, roi.R * 2.0)
+                : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
+        }
+
+        private void ApplyTransformedRectToRoi(RoiModel roi, Rect tRect, double scale, double rot)
+        {
+            double width = Math.Max(1.0, tRect.Width);
+            double height = Math.Max(1.0, tRect.Height);
+            double cx = tRect.X + width * 0.5;
+            double cy = tRect.Y + height * 0.5;
+
+            if (_baseImagePixelWidth > 0)
+            {
+                cx = Math.Clamp(cx, 0, _baseImagePixelWidth);
+            }
+
+            if (_baseImagePixelHeight > 0)
+            {
+                cy = Math.Clamp(cy, 0, _baseImagePixelHeight);
+            }
+
+            roi.Width = width;
+            roi.Height = height;
+            roi.X = cx;
+            roi.Y = cy;
+            roi.Left = cx - width * 0.5;
+            roi.Top = cy - height * 0.5;
+            roi.CX = cx;
+            roi.CY = cy;
+
+            if (roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus)
+            {
+                roi.R = Math.Max(0.0, width * 0.5);
+                roi.RInner = Math.Max(0.0, roi.RInner * scale);
+                if (roi.RInner >= roi.R)
+                {
+                    roi.RInner = Math.Max(0.0, roi.R - 1.0);
+                }
+            }
+
+            if (Math.Abs(rot) > 0.01)
+            {
+                roi.AngleDeg = (roi.AngleDeg + rot) % 360.0;
+            }
+        }
+
         public void TraceBatchHeatmapPlacement(string reason, int roiIndex, Rect? canvasRect)
         {
             try
@@ -1338,6 +1391,111 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 // Nunca romper el flujo por culpa de un log
                 TraceBatch("[batch] TraceBatchHeatmapPlacement failed: " + ex.Message);
+            }
+        }
+
+        private async Task PlaceBatchFinalAsync(string reason, CancellationToken ct)
+        {
+            var imgName = System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty);
+            double s = _batchXform.Scale;
+            double dx = _batchXform.Tx;
+            double dy = _batchXform.Ty;
+            double rot = _batchXform.RotationDeg;
+
+            if (_inspectionRois != null)
+            {
+                foreach (var rcfg in _inspectionRois)
+                {
+                    var roi = GetInspectionModelByIndex(rcfg.Index);
+                    if (roi == null)
+                    {
+                        continue;
+                    }
+
+                    var baseRect = BuildRoiRect(roi);
+                    var tRect = ApplyBatchTransformToRect(baseRect);
+
+                    ApplyTransformedRectToRoi(roi, tRect, s, rot);
+
+                    GuiLog.Info($"[batch-ui] step={_batchStepId} file='{imgName}' reason={reason} idx={rcfg.Index} " +
+                                $"imgRoi=({baseRect.X:0},{baseRect.Y:0},{baseRect.Width:0},{baseRect.Height:0}) " +
+                                $"xform(s={s:0.000},dx={dx:0.##},dy={dy:0.##},rot={rot:0.##}) " +
+                                $"imgRoi'->({tRect.X:0},{tRect.Y:0},{tRect.Width:0},{tRect.Height:0}) anchorReady={(_batchAnchorReadyForStep == _batchStepId)}");
+                }
+            }
+
+            InvokeOnUi(RedrawOverlays);
+
+            try
+            {
+                if (BatchRowOk.HasValue)
+                {
+                    OverlayBatchCaption?.Invoke(imgName, BatchRowOk.Value);
+                }
+            }
+            catch
+            {
+            }
+
+            await CaptureCanvasIfNeededAsync(imgName, "afterFinalPlacement").ConfigureAwait(false);
+        }
+
+        public async Task CaptureCanvasIfNeededAsync(string imgName, string reason)
+        {
+            await Task.Delay(50).ConfigureAwait(false);
+            try
+            {
+                var target = OverlayCanvas;
+                if (target == null)
+                {
+                    return;
+                }
+
+                int W = (int)Math.Max(1, target.ActualWidth);
+                int H = (int)Math.Max(1, target.ActualHeight);
+
+                bool outOfBounds = false;
+                if (_inspectionRois != null)
+                {
+                    foreach (var rcfg in _inspectionRois)
+                    {
+                        var roi = GetInspectionModelByIndex(rcfg.Index);
+                        if (roi == null)
+                        {
+                            continue;
+                        }
+
+                        var r = BuildRoiRect(roi);
+                        if (r.X < 0 || r.Y < 0 || r.Right > _baseImagePixelWidth || r.Bottom > _baseImagePixelHeight)
+                        {
+                            outOfBounds = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!outOfBounds && !string.Equals(reason, "anchorNotReady", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var rtb = new RenderTargetBitmap(W, H, 96, 96, PixelFormats.Pbgra32);
+                rtb.Render(target);
+
+                var dir = System.IO.Path.Combine("logs", "canvas_captures");
+                System.IO.Directory.CreateDirectory(dir);
+                var path = System.IO.Path.Combine(dir, $"Canvas_{imgName}_{reason}_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+
+                var enc = new PngBitmapEncoder();
+                enc.Frames.Add(BitmapFrame.Create(rtb));
+                using var fs = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+                enc.Save(fs);
+
+                GuiLog.Info($"[batch-ui] canvas-capture saved: {path}");
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error($"[batch-ui] canvas-capture failed: {ex.Message}", ex);
             }
         }
 
@@ -3953,7 +4111,33 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                     }
 
+                    if (_batchPlacedForStep != _batchStepId)
+                    {
+                        if (_batchAnchorReadyForStep != _batchStepId)
+                        {
+                            GuiLog.Warn($"[batch-ui] row-end without anchors step={_batchStepId} file='{Path.GetFileName(CurrentImagePath ?? string.Empty)}'");
+                            await CaptureCanvasIfNeededAsync(Path.GetFileName(CurrentImagePath ?? string.Empty), "rowEnd_noAnchors").ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            await PlaceBatchFinalAsync("VM.BatchRowOk", ct).ConfigureAwait(false);
+                            _batchPlacedForStep = (int)_batchStepId;
+                        }
+                    }
+
                     BatchRowOk = !IsRowNg(row);
+                    GuiLog.Info($"[batch] row result file='{Path.GetFileName(CurrentImagePath ?? string.Empty)}' => {(BatchRowOk == true ? "OK" : "NG")}");
+
+                    try
+                    {
+                        if (BatchRowOk.HasValue)
+                        {
+                            OverlayBatchCaption?.Invoke(Path.GetFileName(CurrentImagePath ?? string.Empty), BatchRowOk.Value);
+                        }
+                    }
+                    catch
+                    {
+                    }
 
                     await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
                     UpdateBatchProgress(processed, total);
@@ -4011,8 +4195,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task EnsureBatchRepositionAsync(string imagePath, CancellationToken ct, string reason)
         {
+            if (_batchRepositionGuard)
+            {
+                TraceBatch($"[batch-repos] SKIP: guard active reason={reason}");
+                return;
+            }
+
             try
             {
+                _batchRepositionGuard = true;
                 var fileName = string.IsNullOrWhiteSpace(imagePath)
                     ? "<none>"
                     : Path.GetFileName(imagePath);
@@ -4046,6 +4237,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             catch (Exception ex)
             {
                 TraceBatch($"[batch-repos] FAIL: {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                _batchRepositionGuard = false;
             }
         }
 
@@ -4520,7 +4715,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 UpdateHeatmapThreshold();
-                GuiLog.Info($"[batch-hm:VM] set roiIdx={BatchHeatmapRoiIndex} bytes={_lastHeatmapPngBytes.Length}");
+                GuiLog.Info($"[batch-hm] step={_batchStepId} file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' bytes={_lastHeatmapPngBytes.Length}");
 
                 if (_isBatchRunning)
                 {
@@ -5036,6 +5231,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             CurrentImagePath = imagePath;
             BatchRowOk = null;
             ResetBatchTransform();
+            GuiLog.Info($"[batch] step++ id={_batchStepId} file='{Path.GetFileName(imagePath) ?? string.Empty}'");
             TraceBatch($"[batch] step++ id={BatchStepId} row={CurrentRowIndex:000} file='{Path.GetFileName(imagePath) ?? string.Empty}'");
             EnterLayoutPersistenceLock();
         }

@@ -9,7 +9,7 @@ namespace BrakeDiscInspector_GUI_ROI.Helpers
         {
             if (roi == null)
             {
-                return Rect.Empty;
+                return new Rect();
             }
 
             double left, top, right, bottom;

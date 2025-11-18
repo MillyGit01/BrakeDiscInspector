@@ -1736,8 +1736,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ApplyTransformedRectToRoi(roi, baseline, tRect, xf.s, xf.rot);
 
                     GuiLog.Info(FormattableString.Invariant(
-                        $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} " +
-                        $"s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}"));
+                        $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}"));
                 }
 
                 if (_inspectionRois.Count >= 2)
@@ -4600,8 +4599,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
 
                 TraceBatch(FormattableString.Invariant(
-                    $"[match] OK: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  " +
-                    $"M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
+                    $"[match] OK: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
 
                 var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
                 var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
@@ -5721,10 +5719,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _layoutOriginal.Inspection4?.Clone());
 
                 GuiLog.Info(FormattableString.Invariant(
-                    $"[reset] ROI1={RectToStr(BuildRoiRect(_inspection1))} " +
-                    $"ROI2={RectToStr(BuildRoiRect(_inspection2))} " +
-                    $"ROI3={RectToStr(BuildRoiRect(_inspection3))} " +
-                    $"ROI4={RectToStr(BuildRoiRect(_inspection4))}"));
+                    $"[reset] ROI1={RectToStr(BuildRoiRect(_inspection1))} ROI2={RectToStr(BuildRoiRect(_inspection2))} ROI3={RectToStr(BuildRoiRect(_inspection3))} ROI4={RectToStr(BuildRoiRect(_inspection4))}"));
             }
 
             EnterLayoutPersistenceLock();

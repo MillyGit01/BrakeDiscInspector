@@ -363,6 +363,39 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             LastEvaluatedAt = DateTime.UtcNow;
         }
 
+        public InspectionRoiConfig Clone()
+        {
+            var clone = new InspectionRoiConfig(Index)
+            {
+                Id = Id,
+                Name = Name,
+                Enabled = Enabled,
+                IsEditable = IsEditable,
+                ModelKey = ModelKey,
+                DatasetPath = DatasetPath,
+                TrainMemoryFit = TrainMemoryFit,
+                CalibratedThreshold = CalibratedThreshold,
+                ThresholdDefault = ThresholdDefault,
+                Threshold = Threshold,
+                Shape = Shape,
+                LastScore = LastScore,
+                LastResultOk = LastResultOk,
+                LastEvaluatedAt = LastEvaluatedAt,
+                DatasetReady = DatasetReady,
+                DatasetStatus = DatasetStatus,
+                DatasetOkCount = DatasetOkCount,
+                DatasetKoCount = DatasetKoCount,
+                HasFitOk = HasFitOk,
+                BaseImgW = BaseImgW,
+                BaseImgH = BaseImgH,
+                IsDatasetLoading = IsDatasetLoading
+            };
+
+            clone.OkPreview = new ObservableCollection<DatasetPreviewItem>(OkPreview);
+            clone.NgPreview = new ObservableCollection<DatasetPreviewItem>(NgPreview);
+            return clone;
+        }
+
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {

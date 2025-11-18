@@ -21,9 +21,11 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using BrakeDiscInspector_GUI_ROI;
+using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Imaging;
 using BrakeDiscInspector_GUI_ROI.Models;
+using OpenCvSharp;
 using Forms = System.Windows.Forms;
 using GlobalInferResult = global::BrakeDiscInspector_GUI_ROI.InferResult;
 using WorkflowInferResult = global::BrakeDiscInspector_GUI_ROI.Workflow.InferResult;
@@ -131,13 +133,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Action _clearHeatmap;
         private readonly Action<bool?> _updateGlobalBadge;
         private readonly Action<int>? _activateInspectionIndex;
-        private readonly Func<string, long, CancellationToken, Task>? _repositionInspectionRoisAsync;
+        private readonly Func<string, long, CancellationToken, Task>? _repositionInspectionRoisAsyncExternal;
 
         private ObservableCollection<InspectionRoiConfig>? _inspectionRois;
         private RoiModel? _inspection1;
         private RoiModel? _inspection2;
         private RoiModel? _inspection3;
         private RoiModel? _inspection4;
+        private MasterLayout? _layout;
+        private MasterLayout? _layoutOriginal;
         private InspectionRoiConfig? _selectedInspectionRoi;
         private bool? _hasFitEndpoint;
         private bool? _hasCalibrateEndpoint;
@@ -298,7 +302,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
             _activateInspectionIndex = activateInspectionIndex;
             _resolveModelDirectory = resolveModelDirectory;
-            _repositionInspectionRoisAsync = repositionInspectionRoisAsync;
+            _repositionInspectionRoisAsyncExternal = repositionInspectionRoisAsync;
 
             _backendBaseUrl = _client.BaseUrl;
 
@@ -1284,6 +1288,29 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Inspection4 = inspection4;
         }
 
+        public void SetMasterLayout(MasterLayout? layout)
+        {
+            _layout = layout;
+            _layoutOriginal = layout?.DeepClone();
+
+            if (layout != null)
+            {
+                SetInspectionRoiModels(
+                    layout.Inspection1?.Clone(),
+                    layout.Inspection2?.Clone(),
+                    layout.Inspection3?.Clone(),
+                    layout.Inspection4?.Clone());
+            }
+        }
+
+        public void InitializeBatchSession()
+        {
+            if (_layout != null)
+            {
+                _layoutOriginal = _layout.DeepClone();
+            }
+        }
+
         public void SetInspectionAutoRepositionEnabled(string? roiId, bool enable)
         {
             // Hook for future auto-reposition toggles. No-op by default.
@@ -1492,8 +1519,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public bool IsBatchAnchorReady => _batchAnchorReadyForStep == _batchStepId;
 
-        private static Rect BuildRoiRect(RoiModel roi)
+        private static Rect BuildRoiRect(RoiModel? roi)
         {
+            if (roi == null)
+            {
+                return Rect.Empty;
+            }
+
             return roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus
                 ? new Rect(roi.CX - roi.R, roi.CY - roi.R, roi.R * 2.0, roi.R * 2.0)
                 : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
@@ -1604,7 +1636,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
-        private static string RectToStr(Rect r) => $"({r.X:0},{r.Y:0},{r.Width:0},{r.Height:0})";
+        private static string RectToStr(Rect r) => r.IsEmpty ? "(empty)" : $"({r.X:0},{r.Y:0},{r.Width:0},{r.Height:0})";
 
         private static string Sanitize(string s)
         {
@@ -1701,7 +1733,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     ApplyTransformedRectToRoi(roi, baseline, tRect, xf.s, xf.rot);
 
-                    GuiLog.Info($"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} anchorsOk={anchorsOk} reason={reason}");
+                    GuiLog.Info(FormattableString.Invariant(
+                        $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} " +
+                        $"s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}"));
                 }
 
                 if (_inspectionRois.Count >= 2)
@@ -4274,6 +4308,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             EnsureRoleRoi();
 
+            InitializeBatchSession();
+
             var rows = GetBatchRowsSnapshot();
             int total = rows.Count;
 
@@ -4515,6 +4551,56 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return EnsureBatchRepositionAsync(imagePath, ct, "row-start");
         }
 
+        private async Task _repositionInspectionRoisAsync(string imagePath)
+        {
+            if (string.IsNullOrWhiteSpace(imagePath) || _layoutOriginal == null)
+            {
+                TraceBatch("[match] SKIP: missing image/layout");
+                return;
+            }
+
+            if (_layoutOriginal.Master1Pattern == null || _layoutOriginal.Master2Pattern == null
+                || _layoutOriginal.Master1Search == null || _layoutOriginal.Master2Search == null)
+            {
+                TraceBatch("[match] SKIP: missing master patterns/search");
+                return;
+            }
+
+            using var mat = new Mat(imagePath, ImreadModes.Grayscale);
+
+            using var pattern1 = _layoutOriginal.Master1Pattern.ExtractSubMat(mat);
+            using var pattern2 = _layoutOriginal.Master2Pattern.ExtractSubMat(mat);
+
+            var search1 = _layoutOriginal.Master1Search.ToCvRect(mat.Width, mat.Height);
+            var search2 = _layoutOriginal.Master2Search.ToCvRect(mat.Width, mat.Height);
+
+            var (m1, score1) = LocalMatcher.MatchInSearchROI(mat, search1, pattern1);
+            var (m2, score2) = LocalMatcher.MatchInSearchROI(mat, search2, pattern2);
+
+            if (m1 == null || m2 == null)
+            {
+                TraceBatch(FormattableString.Invariant(
+                    $"[match] Failed: M1={(m1 != null)} score={score1:0.00} M2={(m2 != null)} score={score2:0.00}"));
+                _batchAnchorsOk = false;
+                return;
+            }
+
+            TraceBatch(FormattableString.Invariant(
+                $"[match] OK: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  " +
+                $"M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
+
+            var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
+            var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
+
+            RegisterBatchAnchors(
+                new Point(m1Base.cx, m1Base.cy),
+                new Point(m2Base.cx, m2Base.cy),
+                new Point(m1.Value.X, m1.Value.Y),
+                new Point(m2.Value.X, m2.Value.Y),
+                (int)Math.Round(score1 * 100),
+                (int)Math.Round(score2 * 100));
+        }
+
         private async Task EnsureBatchRepositionAsync(string imagePath, CancellationToken ct, string reason)
         {
             if (_batchRepositionGuard)
@@ -4534,15 +4620,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 TraceBatchInspectionRoisSnapshot("BEFORE");
 
-                if (_repositionInspectionRoisAsync != null)
+                if (_layoutOriginal != null)
+                {
+                    await _repositionInspectionRoisAsync(imagePath).ConfigureAwait(false);
+                    TraceBatch(FormattableString.Invariant($"[batch-repos] reposition layout DONE stepId={stepId}"));
+                }
+                else if (_repositionInspectionRoisAsyncExternal != null)
                 {
                     var stepId = BatchStepId;
-                    await _repositionInspectionRoisAsync(imagePath, stepId, ct).ConfigureAwait(false);
+                    await _repositionInspectionRoisAsyncExternal(imagePath, stepId, ct).ConfigureAwait(false);
                     TraceBatch(FormattableString.Invariant($"[batch-repos] reposition delegate DONE stepId={stepId}"));
                 }
                 else
                 {
-                    TraceBatch("[batch-repos] SKIP: _repositionInspectionRoisAsync == null");
+                    TraceBatch("[batch-repos] SKIP: no reposition delegate available");
                 }
 
                 ClearBaselines();
@@ -5507,6 +5598,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             TraceManual($"[manual] open file='{System.IO.Path.GetFileName(imagePath)}'");
         }
 
+        public Task RepositionMastersAsync(string imagePath)
+        {
+            InitializeBatchSession();
+            return _repositionInspectionRoisAsync(imagePath);
+        }
+
         public void TraceBatchInspectionRoisSnapshot(string label)
         {
             try
@@ -5565,6 +5662,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             ResetBatchTransform();
             GuiLog.Info($"[batch] step++ id={_batchStepId} file='{Path.GetFileName(imagePath) ?? string.Empty}'");
             TraceBatch($"[batch] step++ id={BatchStepId} row={CurrentRowIndex:000} file='{Path.GetFileName(imagePath) ?? string.Empty}'");
+
+            if (_layoutOriginal != null)
+            {
+                SetInspectionRoiModels(
+                    _layoutOriginal.Inspection1?.Clone(),
+                    _layoutOriginal.Inspection2?.Clone(),
+                    _layoutOriginal.Inspection3?.Clone(),
+                    _layoutOriginal.Inspection4?.Clone());
+
+                GuiLog.Info(FormattableString.Invariant(
+                    $"[reset] ROI1={RectToStr(BuildRoiRect(_inspection1))} " +
+                    $"ROI2={RectToStr(BuildRoiRect(_inspection2))} " +
+                    $"ROI3={RectToStr(BuildRoiRect(_inspection3))} " +
+                    $"ROI4={RectToStr(BuildRoiRect(_inspection4))}"));
+            }
+
             EnterLayoutPersistenceLock();
         }
 

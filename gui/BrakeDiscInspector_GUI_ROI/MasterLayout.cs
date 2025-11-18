@@ -41,6 +41,56 @@ namespace BrakeDiscInspector_GUI_ROI
                 new InspectionRoiConfig(3),
                 new InspectionRoiConfig(4),
             };
+
+        public MasterLayout DeepClone()
+        {
+            var clone = new MasterLayout
+            {
+                Master1Pattern = Master1Pattern?.Clone(),
+                Master1PatternImagePath = Master1PatternImagePath,
+                Master1Search = Master1Search?.Clone(),
+                Master2Pattern = Master2Pattern?.Clone(),
+                Master2PatternImagePath = Master2PatternImagePath,
+                Master2Search = Master2Search?.Clone(),
+                Inspection = Inspection?.Clone(),
+                InspectionBaseline = InspectionBaseline?.Clone(),
+                Inspection1 = Inspection1?.Clone(),
+                Inspection2 = Inspection2?.Clone(),
+                Inspection3 = Inspection3?.Clone(),
+                Inspection4 = Inspection4?.Clone(),
+                Analyze = new AnalyzeOptions
+                {
+                    PosTolPx = Analyze?.PosTolPx ?? new AnalyzeOptions().PosTolPx,
+                    AngTolDeg = Analyze?.AngTolDeg ?? new AnalyzeOptions().AngTolDeg,
+                    ScaleLock = Analyze?.ScaleLock ?? new AnalyzeOptions().ScaleLock,
+                    UseLocalMatcher = Analyze?.UseLocalMatcher ?? new AnalyzeOptions().UseLocalMatcher
+                },
+                Ui = new UiOptions
+                {
+                    HeatmapGamma = Ui?.HeatmapGamma ?? new UiOptions().HeatmapGamma,
+                    HeatmapGain = Ui?.HeatmapGain ?? new UiOptions().HeatmapGain,
+                    HeatmapOverlayOpacity = Ui?.HeatmapOverlayOpacity ?? new UiOptions().HeatmapOverlayOpacity
+                },
+                InspectionBaselinesByImage = new Dictionary<string, List<RoiModel>>(StringComparer.OrdinalIgnoreCase)
+            };
+
+            if (InspectionBaselinesByImage != null)
+            {
+                foreach (var kvp in InspectionBaselinesByImage)
+                {
+                    var list = kvp.Value?.Where(r => r != null).Select(r => r!.Clone()).ToList() ?? new List<RoiModel>();
+                    clone.InspectionBaselinesByImage[kvp.Key] = list;
+                }
+            }
+
+            clone.InspectionRois.Clear();
+            foreach (var cfg in InspectionRois)
+            {
+                clone.InspectionRois.Add(cfg.Clone());
+            }
+
+            return clone;
+        }
     }
 
     public sealed class AnalyzeOptions

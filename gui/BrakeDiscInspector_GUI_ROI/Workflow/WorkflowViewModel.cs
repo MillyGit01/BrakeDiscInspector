@@ -170,6 +170,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _showMaster2Inspection = true;
         private bool _showInspectionRoi = true;
 
+        // CODEX: UI placement guards
+        private bool _manualRepositionGuard;
+        private bool _batchRepositionGuard;
+        private int _batchPlacedForStep = -1;
+        private volatile int _batchAnchorReadyForStep = -1;
+
         // CODEX: batch reposition flags
         private CancellationToken _currentBatchCt = CancellationToken.None;
 
@@ -568,12 +574,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchDetectedM2 = detectedM2;
             _batchAnchorM1Ready = true;
             _batchAnchorM2Ready = true;
+            _batchAnchorReadyForStep = (int)_batchStepId;
 
             SetBatchTransformFromMasters(
                 baselineM1.X, baselineM1.Y, baselineM2.X, baselineM2.Y,
                 detectedM1.X, detectedM1.Y, detectedM2.X, detectedM2.Y);
 
             TraceBatch($"[batch] anchors-ready file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' M1=({detectedM1.X:0.0},{detectedM1.Y:0.0}) M2=({detectedM2.X:0.0},{detectedM2.Y:0.0})");
+            _log?.Invoke($"[analyze-master] step={_batchStepId} file='{CurrentImagePath}' M1={detectedM1} M2={detectedM2}");
         }
 
         public string? BatchFolder
@@ -1226,45 +1234,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public Rect? GetInspectionRoiCanvasRect(int roiIndex)
         {
-            if (!TryGetBatchPlacementTransform(out var uniformScale, out var offsetX, out var offsetY, out var legacyScaleX, out var legacyScaleY))
-            {
-                return null;
-            }
+            var source = BatchImageSource ?? BatchHeatmapSource;
+            var t = ImgToCanvas(source ?? new DrawingImage(), CanvasRoiActualWidth, CanvasRoiActualHeight);
 
-            Rect? rectFromModel = null;
-
-            if (UseCanvasPlacementForBatchHeatmap)
+            var roiModel = GetInspectionRoiModelByIndex(roiIndex);
+            if (roiModel != null)
             {
-                var roiModel = GetInspectionRoiModelByIndex(roiIndex);
-                if (roiModel != null)
-                {
-                    switch (roiModel.Shape)
-                    {
-                        case RoiShape.Circle:
-                        case RoiShape.Annulus:
-                            {
-                                double radius = Math.Max(1.0, roiModel.R * uniformScale);
-                                double cx = offsetX + roiModel.CX * uniformScale;
-                                double cy = offsetY + roiModel.CY * uniformScale;
-                                rectFromModel = new Rect(cx - radius, cy - radius, radius * 2.0, radius * 2.0);
-                                break;
-                            }
-                        default:
-                            {
-                                rectFromModel = new Rect(
-                                    offsetX + roiModel.Left * uniformScale,
-                                    offsetY + roiModel.Top * uniformScale,
-                                    Math.Max(1.0, roiModel.Width * uniformScale),
-                                    Math.Max(1.0, roiModel.Height * uniformScale));
-                                break;
-                            }
-                    }
-                }
-            }
+                Rect imgRect = roiModel.Shape == RoiShape.Circle || roiModel.Shape == RoiShape.Annulus
+                    ? new Rect(roiModel.CX - roiModel.R, roiModel.CY - roiModel.R, roiModel.R * 2.0, roiModel.R * 2.0)
+                    : new Rect(roiModel.Left, roiModel.Top, roiModel.Width, roiModel.Height);
 
-            if (rectFromModel != null)
-            {
-                return rectFromModel;
+                return RectImgToCanvas(imgRect, t);
             }
 
             var rectPx = GetInspectionRoiImageRectPx(roiIndex);
@@ -1273,27 +1253,30 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return null;
             }
 
-            bool useLegacyScale = !UseCanvasPlacementForBatchHeatmap;
-            double scaleX = useLegacyScale ? legacyScaleX : uniformScale;
-            double scaleY = useLegacyScale ? legacyScaleY : uniformScale;
-
-            if (scaleX <= 0 || scaleY <= 0)
-            {
-                return null;
-            }
-
-            var rect = rectPx.Value;
-            double left = offsetX + rect.X * scaleX;
-            double top = offsetY + rect.Y * scaleY;
-            double width = Math.Max(1.0, rect.Width * scaleX);
-            double height = Math.Max(1.0, rect.Height * scaleY);
-            return new Rect(left, top, width, height);
+            return RectImgToCanvas(new Rect(rectPx.Value.X, rectPx.Value.Y, rectPx.Value.Width, rectPx.Value.Height), t);
         }
 
         public InspectionRoiConfig? GetInspectionRoiConfig(int idx)
         {
             return GetInspectionConfigByIndex(idx);
         }
+
+        public bool ShouldPlaceBatchPlacement(string? reason)
+        {
+            if (reason != null && reason.Contains("BatchHeatmapSource", StringComparison.Ordinal) && _batchPlacedForStep == _batchStepId)
+            {
+                return false;
+            }
+
+            if (reason != null && reason.Contains("BatchRowOk", StringComparison.Ordinal))
+            {
+                _batchPlacedForStep = (int)_batchStepId;
+            }
+
+            return true;
+        }
+
+        public bool IsBatchAnchorReady => _batchAnchorReadyForStep == _batchStepId;
 
         public void TraceBatchHeatmapPlacement(string reason, int roiIndex, Rect? canvasRect)
         {
@@ -1398,6 +1381,27 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             offsetX = offOuterX + offInsideX;
             offsetY = offOuterY + offInsideY;
             return true;
+        }
+
+        // CODEX: image -> canvas transform (Uniform + center)
+        private static (double scale, double dx, double dy) ImgToCanvas(ImageSource img, double canvasW, double canvasH)
+        {
+            if (img is not BitmapSource bmp || canvasW <= 0 || canvasH <= 0) return (1, 0, 0);
+            var sx = canvasW / bmp.PixelWidth;
+            var sy = canvasH / bmp.PixelHeight;
+            var s = Math.Min(sx, sy);
+            var drawW = bmp.PixelWidth * s;
+            var drawH = bmp.PixelHeight * s;
+            var dx = (canvasW - drawW) * 0.5;
+            var dy = (canvasH - drawH) * 0.5;
+            return (s, dx, dy);
+        }
+
+        // CODEX: apply transform to a rect in image pixels
+        private static Rect RectImgToCanvas(in Rect rImg, in (double s, double dx, double dy) t)
+        {
+            var (s, dx, dy) = t;
+            return new Rect(dx + rImg.X * s, dy + rImg.Y * s, rImg.Width * s, rImg.Height * s);
         }
 
         private RoiModel? GetActiveInspectionRoiModel()
@@ -4959,6 +4963,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private void LogBatchPlacement(string reason, int roiIdx, (double s, double dx, double dy) t, Rect rImg, Rect rCv)
+        {
+            _log?.Invoke($"[batch-ui] step={_batchStepId} file='{CurrentImagePath}' reason={reason} idx={roiIdx} " +
+                        $"imgRoi=({rImg.X:0},{rImg.Y:0},{rImg.Width:0},{rImg.Height:0}) " +
+                        $"t=(s={t.s:F6},dx={t.dx:0.##},dy={t.dy:0.##}) " +
+                        $"cvRoi=({rCv.X:0},{rCv.Y:0},{rCv.Width:0},{rCv.Height:0}) " +
+                        $"anchorReady={(_batchAnchorReadyForStep == _batchStepId)}");
+        }
+
+        private void LogManualPlacement(string reason, int roiIdx, (double s, double dx, double dy) t, Rect rImg, Rect rCv)
+        {
+            _log?.Invoke($"[manual-ui] file='{CurrentManualImagePath}' reason={reason} idx={roiIdx} " +
+                        $"imgRoi=({rImg.X:0},{rImg.Y:0},{rImg.Width:0},{rImg.Height:0}) " +
+                        $"t=(s={t.s:F6},dx={t.dx:0.##},dy={t.dy:0.##}) " +
+                        $"cvRoi=({rCv.X:0},{rCv.Y:0},{rCv.Width:0},{rCv.Height:0})");
+        }
+
         public void BeginManualInspection(string imagePath)
         {
             CurrentManualImagePath = imagePath;
@@ -5005,6 +5026,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var id = Interlocked.Increment(ref _batchStepId);
             _batchAnchorM1Ready = false;
             _batchAnchorM2Ready = false;
+            _batchAnchorReadyForStep = -1;
+            _batchPlacedForStep = -1;
             _batchDetectedM1 = null;
             _batchDetectedM2 = null;
             _batchBaselineM1 = null;

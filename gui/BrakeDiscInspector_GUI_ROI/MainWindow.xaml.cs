@@ -6449,7 +6449,6 @@ namespace BrakeDiscInspector_GUI_ROI
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchImageSource), StringComparison.Ordinal)
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.ActiveInspectionRoiImageRectPx), StringComparison.Ordinal)
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.CurrentRowIndex), StringComparison.Ordinal)
-                     || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.CurrentImagePath), StringComparison.Ordinal)
                      || string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.BatchRowOk), StringComparison.Ordinal))
             {
                 RequestBatchHeatmapPlacement($"vm-global:{e.PropertyName}", ViewModel); // CODEX: ensure global VM changes still capture the ROI index at schedule time.
@@ -6696,7 +6695,6 @@ namespace BrakeDiscInspector_GUI_ROI
                             || e.PropertyName == nameof(WorkflowViewModel.BaseImagePixelHeight)
                             || e.PropertyName == nameof(WorkflowViewModel.UseCanvasPlacementForBatchHeatmap)
                             || e.PropertyName == nameof(WorkflowViewModel.CurrentRowIndex)
-                            || e.PropertyName == nameof(WorkflowViewModel.CurrentImagePath)
                             || e.PropertyName == nameof(WorkflowViewModel.BatchRowOk))
                         {
                             RequestPlaceForVm($"VM.{e.PropertyName}");
@@ -6735,6 +6733,11 @@ namespace BrakeDiscInspector_GUI_ROI
             if (vm == null)
             {
                 return;
+            }
+
+            if (BaseImage != null && Overlay != null && (BaseImage.ActualWidth <= 0 || BaseImage.ActualHeight <= 0 || Overlay.ActualWidth <= 0 || Overlay.ActualHeight <= 0))
+            {
+                _ = vm.WaitUntilMeasuredAsync(BaseImage, Overlay, CancellationToken.None);
             }
 
             UpdateBatchMetricsFromControls(vm);

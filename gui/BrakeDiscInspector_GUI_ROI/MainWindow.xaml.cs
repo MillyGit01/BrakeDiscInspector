@@ -6670,6 +6670,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            attachedVm.OverlayCanvas ??= Overlay;
+            attachedVm.OverlayBatchCaption ??= OverlayBatchCaption;
+
             void RequestPlaceForVm(string reason)
                 => RequestBatchHeatmapPlacement(reason, attachedVm); // CODEX: capture VM + ROI index once per request.
             void RequestPlaceLive(string reason)
@@ -6856,6 +6859,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (!vm.IsBatchAnchorReady && reason != null && reason.Contains("BatchHeatmapSource", StringComparison.Ordinal))
                 {
+                    GuiLog.Warn($"[batch-ui] skip placement (anchors not ready) step={vm.BatchStepId} file='{Path.GetFileName(vm.CurrentImagePath ?? string.Empty)}' reason={reason}");
+                    _ = vm.CaptureCanvasIfNeededAsync(Path.GetFileName(vm.CurrentImagePath ?? string.Empty), "anchorNotReady");
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:anchor-wait", roiIndex, null);
                     return;
                 }

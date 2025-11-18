@@ -2706,6 +2706,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     return byKey;
                 }
+
+                var byId = _inspectionRois.FirstOrDefault(r => string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase));
+                if (byId != null)
+                {
+                    return byId;
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(roi.Id)
@@ -4389,6 +4395,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             if (config.Index >= 3 && !(_batchAnchorM1Ready && _batchAnchorM2Ready))
                             {
                                 TraceBatch("[batch] wait: anchors not ready -> delaying ROI 3/4");
+                                _log?.Invoke($"[batch] ROI{config.Index} '{config.Name}' omitido: anclas no disponibles.");
                                 UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Nok);
                                 continue;
                             }
@@ -4594,6 +4601,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     TraceBatch(FormattableString.Invariant(
                         $"[match] Failed: M1={(m1 != null)} score={score1:0.00} M2={(m2 != null)} score={score2:0.00}"));
+                    _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
                     _batchAnchorsOk = false;
                     return;
                 }

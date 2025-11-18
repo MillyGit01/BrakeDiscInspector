@@ -28,6 +28,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 // WPF media & shapes
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
@@ -654,6 +655,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private double _heatmapGain = 1.0;
         private double _heatmapGamma = 1.0;
         private bool _lastIsNg;
+
+        private TextBlock? _batchCaption;
 
         private int _activeInspectionIndex = 1;
         private bool _updatingActiveInspection;
@@ -6836,12 +6839,24 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                if (!vm.ShouldPlaceBatchPlacement(reason))
+                {
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:skip-placed", roiIndex, null);
+                    return;
+                }
+
                 UpdateBatchInfoOverlay(vm);
 
                 if (vm.IsLayoutIo)
                 {
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:io-busy", roiIndex, null);
                     ScheduleBatchHeatmapPlacement(vm, $"{reason}:retry-after-io");
+                    return;
+                }
+
+                if (!vm.IsBatchAnchorReady && reason != null && reason.Contains("BatchHeatmapSource", StringComparison.Ordinal))
+                {
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:anchor-wait", roiIndex, null);
                     return;
                 }
 
@@ -6917,6 +6932,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 GuiLog.Info($"[batch-ui] place idx={roiIndex} RECTimg=({rectImgText}) RECTcanvas=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) CVimg=({rectImgCvText}) CVcanvas=({cvCanvasRect.X},{cvCanvasRect.Y},{cvCanvasRect.Width},{cvCanvasRect.Height}) reason={reason}"); // CODEX: log both WPF and OpenCV-friendly rectangles for diagnostics.
 
+                if (vm.BatchRowOk.HasValue && !string.IsNullOrWhiteSpace(vm.CurrentImagePath))
+                {
+                    OverlayBatchCaption(vm.CurrentImagePath!, vm.BatchRowOk.Value);
+                }
+
                 if (roiIndex == 2)
                 {
                     WInt32Rect? roi1Rect = vm.GetInspectionRoiImageRectPx(1); // CODEX: ensure consistent Int32Rect typing for ROI1.
@@ -6967,6 +6987,27 @@ namespace BrakeDiscInspector_GUI_ROI
             int w = Math.Clamp(rect.Width, 0, Math.Max(0, mat.Width - x)); // CODEX: adjust width so rectangle fits inside the Mat.
             int h = Math.Clamp(rect.Height, 0, Math.Max(0, mat.Height - y)); // CODEX: adjust height so rectangle fits inside the Mat.
             return new CvRect(x, y, w, h); // CODEX: return the bounded rectangle.
+        }
+
+        private void OverlayBatchCaption(string fileName, bool isOk)
+        {
+            var tb = _batchCaption ??= new TextBlock
+            {
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = Brushes.White,
+                Effect = new DropShadowEffect { ShadowDepth = 0, BlurRadius = 3, Color = Colors.Black, Opacity = 0.8 }
+            };
+
+            tb.Text = $"{System.IO.Path.GetFileName(fileName)}  —  {(isOk ? "OK" : "NG")}";
+
+            if (Overlay != null && !Overlay.Children.Contains(tb))
+            {
+                Overlay.Children.Add(tb);
+            }
+
+            Canvas.SetLeft(tb, 8);
+            Canvas.SetTop(tb, 8);
         }
 
         private void RequestBatchHeatmapPlacement(string reason, WorkflowViewModel? vmOverride = null)

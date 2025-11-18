@@ -656,6 +656,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private double _heatmapGamma = 1.0;
         private bool _lastIsNg;
 
+        private bool _sharedHeatmapGuardLogged;
+
         private TextBlock? _batchCaption;
 
         private int _activeInspectionIndex = 1;
@@ -2831,6 +2833,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     ResolveInspectionModelDirectory,
                     RepositionBeforeBatchStepAsync);
 
+                _workflowViewModel.AnchorScoreMin = Math.Max(1, _appConfig.Analyze.AnchorScoreMin);
+                _sharedHeatmapGuardLogged = false;
+
                 _workflowViewModel.PropertyChanged += WorkflowViewModelOnPropertyChanged;
                 _workflowViewModel.OverlayVisibilityChanged += WorkflowViewModelOnOverlayVisibilityChanged;
                 _workflowViewModel.BatchStarted += WorkflowViewModelOnBatchStarted;
@@ -4588,18 +4593,18 @@ namespace BrakeDiscInspector_GUI_ROI
             }, ct);
         }
 
-        private async Task<(SWPoint? c1, SWPoint? c2)> DetectMastersForImageAsync(byte[] imageBytes, string imagePath, CancellationToken ct)
+        private async Task<(SWPoint? c1, int s1, SWPoint? c2, int s2)> DetectMastersForImageAsync(byte[] imageBytes, string imagePath, CancellationToken ct)
         {
             if (_layout == null || _preset == null)
             {
-                return (null, null);
+                return (null, 0, null, 0);
             }
 
             if (_layout.Master1Pattern == null || _layout.Master1Search == null ||
                 _layout.Master2Pattern == null || _layout.Master2Search == null)
             {
                 AppendLog("[batch] master detection skipped: layout incomplete");
-                return (null, null);
+                return (null, 0, null, 0);
             }
 
             BitmapSource? probe = null;
@@ -4614,13 +4619,13 @@ namespace BrakeDiscInspector_GUI_ROI
             catch (Exception ex)
             {
                 AppendLog($"[batch] image decode failed: {ex.Message}");
-                return (null, null);
+                return (null, 0, null, 0);
             }
 
             if (probe == null)
             {
                 AppendLog("[batch] image decode returned null");
-                return (null, null);
+                return (null, 0, null, 0);
             }
 
             AppendLog($"[batch] master detection input size: {probe.PixelWidth}x{probe.PixelHeight}");
@@ -4638,6 +4643,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SWPoint? c1 = null;
             SWPoint? c2 = null;
+            int s1 = 0;
+            int s2 = 0;
 
             if (useLocalMatcher)
             {
@@ -4665,26 +4672,27 @@ namespace BrakeDiscInspector_GUI_ROI
                                 m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
                             }
 
-                            var res1 = LocalMatcher.MatchInSearchROI(
-                                img,
-                                _layout.Master1Pattern,
-                                _layout.Master1Search,
-                                _preset.Feature,
-                                _preset.MatchThr,
-                                _preset.RotRange,
-                                _preset.ScaleMin,
-                                _preset.ScaleMax,
-                                m1Override,
-                                LogToFileAndUI);
+                        var res1 = LocalMatcher.MatchInSearchROI(
+                            img,
+                            _layout.Master1Pattern,
+                            _layout.Master1Search,
+                            _preset.Feature,
+                            _preset.MatchThr,
+                            _preset.RotRange,
+                            _preset.ScaleMin,
+                            _preset.ScaleMax,
+                            m1Override,
+                            LogToFileAndUI);
 
-                            if (res1.center.HasValue)
-                            {
-                                c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y);
-                            }
-                            else
-                            {
-                                AppendLog("[batch] local matcher: Master1 not found");
-                            }
+                        if (res1.center.HasValue)
+                        {
+                            c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y);
+                            s1 = res1.score;
+                        }
+                        else
+                        {
+                            AppendLog("[batch] local matcher: Master1 not found");
+                        }
 
                             var res2 = LocalMatcher.MatchInSearchROI(
                                 img,
@@ -4692,20 +4700,21 @@ namespace BrakeDiscInspector_GUI_ROI
                                 _layout.Master2Search,
                                 _preset.Feature,
                                 _preset.MatchThr,
-                                _preset.RotRange,
-                                _preset.ScaleMin,
-                                _preset.ScaleMax,
-                                m2Override,
-                                LogToFileAndUI);
+                            _preset.RotRange,
+                            _preset.ScaleMin,
+                            _preset.ScaleMax,
+                            m2Override,
+                            LogToFileAndUI);
 
-                            if (res2.center.HasValue)
-                            {
-                                c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y);
-                            }
-                            else
-                            {
-                                AppendLog("[batch] local matcher: Master2 not found");
-                            }
+                        if (res2.center.HasValue)
+                        {
+                            c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y);
+                            s2 = res2.score;
+                        }
+                        else
+                        {
+                            AppendLog("[batch] local matcher: Master2 not found");
+                        }
                         }
                         finally
                         {
@@ -4742,6 +4751,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         var result = inferM1.result;
                         var (cx, cy) = _layout.Master1Pattern!.GetCenter();
                         c1 = new SWPoint(cx, cy);
+                        s1 = 100;
                         string thrText = result.threshold.HasValue
                             ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
                             : "n/a";
@@ -4766,6 +4776,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         var result = inferM2.result;
                         var (cx, cy) = _layout.Master2Pattern!.GetCenter();
                         c2 = new SWPoint(cx, cy);
+                        s2 = 100;
                         string thrText = result.threshold.HasValue
                             ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
                             : "n/a";
@@ -4779,7 +4790,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            return (c1, c2);
+            return (c1, s1, c2, s2);
         }
 
         public async Task RepositionBeforeBatchStepAsync(string imagePath, long stepId, CancellationToken ct)
@@ -4806,9 +4817,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SWPoint? detectedM1 = null;
             SWPoint? detectedM2 = null;
+            int scoreM1 = 0;
+            int scoreM2 = 0;
             try
             {
-                (detectedM1, detectedM2) = await DetectMastersForImageAsync(bytes, imagePath, ct).ConfigureAwait(false);
+                (detectedM1, scoreM1, detectedM2, scoreM2) = await DetectMastersForImageAsync(bytes, imagePath, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -4836,8 +4849,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     var (cx1, cy1) = _layout.Master1Pattern.GetCenter();
                     var (cx2, cy2) = _layout.Master2Pattern.GetCenter();
-                    ViewModel?.RegisterBatchAnchors(new SWPoint(cx1, cy1), new SWPoint(cx2, cy2), m1, m2);
-                    GuiLog.Info($"[analyze-master] file='{Path.GetFileName(ViewModel?.CurrentImagePath ?? ViewModel?.CurrentManualImagePath ?? string.Empty)}' found M1=({m1.X:0.0},{m1.Y:0.0}) M2=({m2.X:0.0},{m2.Y:0.0}) score=(0,0)");
+                    ViewModel?.RegisterBatchAnchors(new SWPoint(cx1, cy1), new SWPoint(cx2, cy2), m1, m2, scoreM1, scoreM2);
+                    GuiLog.Info($"[analyze-master] file='{Path.GetFileName(ViewModel?.CurrentImagePath ?? ViewModel?.CurrentManualImagePath ?? string.Empty)}' found M1=({m1.X:0.0},{m1.Y:0.0}) M2=({m2.X:0.0},{m2.Y:0.0}) score=({scoreM1},{scoreM2})");
                     AppendLog($"[batch-repos] anchors registered step={stepId} M1=({m1.X:F1},{m1.Y:F1}) M2=({m2.X:F1},{m2.Y:F1})");
                     return;
                 }
@@ -6458,6 +6471,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void WorkflowViewModelOnBatchStarted(object? sender, EventArgs e)
         {
             _suspendManualOverlayInvalidations = true;
+            _sharedHeatmapGuardLogged = false;
         }
 
         private void WorkflowViewModelOnBatchEnded(object? sender, EventArgs e)
@@ -6896,11 +6910,17 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                var src = vm.BatchHeatmapSource;
+                var src = vm.BatchHeatmapRoiIndex == roiIndex ? vm.BatchHeatmapSource : null;
                 if (src == null)
                 {
                     heatmap.Source = null;
                     heatmap.Visibility = Visibility.Collapsed;
+                    if (vm.BatchHeatmapSource != null && vm.BatchHeatmapRoiIndex != roiIndex && roiIndex == 2 && !_sharedHeatmapGuardLogged)
+                    {
+                        GuiLog.Warn("[guard] idx=2 was sharing source with idx=1 (FIXED)");
+                        _sharedHeatmapGuardLogged = true;
+                    }
+
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:no-src", roiIndex, null);
                     return; // CODEX: no heatmap available yet; skip scheduling await-size retries.
                 }

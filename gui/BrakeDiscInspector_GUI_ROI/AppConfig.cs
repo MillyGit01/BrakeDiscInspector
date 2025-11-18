@@ -27,6 +27,7 @@ namespace BrakeDiscInspector_GUI_ROI
             public double PosTolPx { get; set; } = 1.0;
             public double AngTolDeg { get; set; } = 0.5;
             public bool ScaleLockDefault { get; set; } = true;
+            public int AnchorScoreMin { get; set; } = 85;
         }
 
         public sealed class UiConfig
@@ -88,20 +89,25 @@ namespace BrakeDiscInspector_GUI_ROI
                 target.Dataset.Root = source.Dataset.Root;
             }
 
-            if (source.Analyze != null)
-            {
-                if (source.Analyze.PosTolPx > 0)
+                if (source.Analyze != null)
                 {
-                    target.Analyze.PosTolPx = source.Analyze.PosTolPx;
-                }
+                    if (source.Analyze.PosTolPx > 0)
+                    {
+                        target.Analyze.PosTolPx = source.Analyze.PosTolPx;
+                    }
 
-                if (source.Analyze.AngTolDeg > 0)
-                {
-                    target.Analyze.AngTolDeg = source.Analyze.AngTolDeg;
-                }
+                    if (source.Analyze.AngTolDeg > 0)
+                    {
+                        target.Analyze.AngTolDeg = source.Analyze.AngTolDeg;
+                    }
 
-                target.Analyze.ScaleLockDefault = source.Analyze.ScaleLockDefault;
-            }
+                    target.Analyze.ScaleLockDefault = source.Analyze.ScaleLockDefault;
+
+                    if (source.Analyze.AnchorScoreMin > 0)
+                    {
+                        target.Analyze.AnchorScoreMin = source.Analyze.AnchorScoreMin;
+                    }
+                }
 
             if (source.UI != null && source.UI.HeatmapOverlayOpacity >= 0)
             {
@@ -116,6 +122,7 @@ namespace BrakeDiscInspector_GUI_ROI
             OverrideDouble("BDI_ANALYZE_POS_TOL_PX", value => config.Analyze.PosTolPx = value);
             OverrideDouble("BDI_ANALYZE_ANG_TOL_DEG", value => config.Analyze.AngTolDeg = value);
             OverrideBool("BDI_SCALELOCK_DEFAULT", value => config.Analyze.ScaleLockDefault = value);
+            OverrideInt("BDI_ANCHOR_SCORE_MIN", value => config.Analyze.AnchorScoreMin = value);
             OverrideDouble("BDI_HEATMAP_OPACITY", value => config.UI.HeatmapOverlayOpacity = Clamp01(value));
         }
 
@@ -162,6 +169,20 @@ namespace BrakeDiscInspector_GUI_ROI
                      string.Equals(value, "no", StringComparison.OrdinalIgnoreCase))
             {
                 assign(false);
+            }
+        }
+
+        private static void OverrideInt(string envVar, Action<int> assign)
+        {
+            var value = Environment.GetEnvironmentVariable(envVar);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                assign(parsed);
             }
         }
 

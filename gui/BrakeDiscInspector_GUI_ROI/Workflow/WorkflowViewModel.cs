@@ -4568,37 +4568,83 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             using var mat = new Mat(imagePath, ImreadModes.Grayscale);
 
-            using var pattern1 = _layoutOriginal.Master1Pattern.ExtractSubMat(mat);
-            using var pattern2 = _layoutOriginal.Master2Pattern.ExtractSubMat(mat);
+            var pattern1 = LoadMasterPatternTemplate(_layoutOriginal.Master1PatternImagePath, "M1");
+            var pattern2 = LoadMasterPatternTemplate(_layoutOriginal.Master2PatternImagePath, "M2");
 
-            var search1 = _layoutOriginal.Master1Search.ToCvRect(mat.Width, mat.Height);
-            var search2 = _layoutOriginal.Master2Search.ToCvRect(mat.Width, mat.Height);
-
-            var (m1, score1) = LocalMatcher.MatchInSearchROI(mat, search1, pattern1);
-            var (m2, score2) = LocalMatcher.MatchInSearchROI(mat, search2, pattern2);
-
-            if (m1 == null || m2 == null)
+            if (pattern1 == null || pattern2 == null)
             {
-                TraceBatch(FormattableString.Invariant(
-                    $"[match] Failed: M1={(m1 != null)} score={score1:0.00} M2={(m2 != null)} score={score2:0.00}"));
+                pattern1?.Dispose();
+                pattern2?.Dispose();
+                TraceBatch("[match] SKIP: missing reference patterns (M1/M2)");
                 _batchAnchorsOk = false;
                 return;
             }
 
-            TraceBatch(FormattableString.Invariant(
-                $"[match] OK: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  " +
-                $"M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
+            using (pattern1)
+            using (pattern2)
+            {
+                var search1 = _layoutOriginal.Master1Search.ToCvRect(mat.Width, mat.Height);
+                var search2 = _layoutOriginal.Master2Search.ToCvRect(mat.Width, mat.Height);
 
-            var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
-            var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
+                var (m1, score1) = LocalMatcher.MatchInSearchROI(mat, search1, pattern1);
+                var (m2, score2) = LocalMatcher.MatchInSearchROI(mat, search2, pattern2);
 
-            RegisterBatchAnchors(
-                new Point(m1Base.cx, m1Base.cy),
-                new Point(m2Base.cx, m2Base.cy),
-                new Point(m1.Value.X, m1.Value.Y),
-                new Point(m2.Value.X, m2.Value.Y),
-                (int)Math.Round(score1 * 100),
-                (int)Math.Round(score2 * 100));
+                if (m1 == null || m2 == null)
+                {
+                    TraceBatch(FormattableString.Invariant(
+                        $"[match] Failed: M1={(m1 != null)} score={score1:0.00} M2={(m2 != null)} score={score2:0.00}"));
+                    _batchAnchorsOk = false;
+                    return;
+                }
+
+                TraceBatch(FormattableString.Invariant(
+                    $"[match] OK: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  " +
+                    $"M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
+
+                var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
+                var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
+
+                RegisterBatchAnchors(
+                    new Point(m1Base.cx, m1Base.cy),
+                    new Point(m2Base.cx, m2Base.cy),
+                    new Point(m1.Value.X, m1.Value.Y),
+                    new Point(m2.Value.X, m2.Value.Y),
+                    (int)Math.Round(score1 * 100),
+                    (int)Math.Round(score2 * 100));
+            }
+        }
+
+        private Mat? LoadMasterPatternTemplate(string? path, string tag)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                TraceBatch(FormattableString.Invariant($"[match] Missing {tag} pattern path"));
+                return null;
+            }
+
+            try
+            {
+                if (!File.Exists(path))
+                {
+                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} not found at '{path}'"));
+                    return null;
+                }
+
+                var mat = Cv2.ImRead(path, ImreadModes.Grayscale);
+                if (mat.Empty())
+                {
+                    mat.Dispose();
+                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} empty at '{path}'"));
+                    return null;
+                }
+
+                return mat;
+            }
+            catch (Exception ex)
+            {
+                TraceBatch(FormattableString.Invariant($"[match] Failed to load pattern {tag}: {ex.Message}"));
+                return null;
+            }
         }
 
         private async Task EnsureBatchRepositionAsync(string imagePath, CancellationToken ct, string reason)
@@ -4616,6 +4662,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ? "<none>"
                     : Path.GetFileName(imagePath);
 
+                var stepId = BatchStepId;
+
                 TraceBatch($"[batch-repos] BEGIN row={CurrentRowIndex} file='{fileName}' reason={reason} useCanvas={UseCanvasPlacementForBatchHeatmap}");
 
                 TraceBatchInspectionRoisSnapshot("BEFORE");
@@ -4627,7 +4675,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
                 else if (_repositionInspectionRoisAsyncExternal != null)
                 {
-                    var stepId = BatchStepId;
                     await _repositionInspectionRoisAsyncExternal(imagePath, stepId, ct).ConfigureAwait(false);
                     TraceBatch(FormattableString.Invariant($"[batch-repos] reposition delegate DONE stepId={stepId}"));
                 }

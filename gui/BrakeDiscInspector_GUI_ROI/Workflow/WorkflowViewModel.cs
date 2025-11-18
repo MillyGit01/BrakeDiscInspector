@@ -26,6 +26,8 @@ using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Imaging;
 using BrakeDiscInspector_GUI_ROI.Models;
 using OpenCvSharp;
+using Point = System.Windows.Point;
+using Rect = System.Windows.Rect;
 using Forms = System.Windows.Forms;
 using GlobalInferResult = global::BrakeDiscInspector_GUI_ROI.InferResult;
 using WorkflowInferResult = global::BrakeDiscInspector_GUI_ROI.Workflow.InferResult;

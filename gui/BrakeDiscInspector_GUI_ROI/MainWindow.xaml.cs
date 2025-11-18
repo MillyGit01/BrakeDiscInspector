@@ -2853,6 +2853,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 EnsureInspectionDatasetStructure();
+                _workflowViewModel.SetMasterLayout(_layout);
                 _workflowViewModel.SetInspectionRoisCollection(_layout?.InspectionRois);
 
                 SyncDrawToolFromViewModel();
@@ -11902,6 +11903,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 Inspection3 = null;
                 Inspection4 = null;
 
+                _workflowViewModel?.SetMasterLayout(_layout);
                 _workflowViewModel?.SetInspectionRoiModels(null, null, null, null);
                 _workflowViewModel?.ResetModelStates();
 

@@ -343,6 +343,37 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        public static (Point2d? center, double score) MatchInSearchROI(Mat image, Rect searchRect, Mat template, double threshold = 0.65)
+        {
+            if (image == null || image.Empty() || template == null || template.Empty())
+            {
+                return (null, 0);
+            }
+
+            int x = Math.Clamp(searchRect.X, 0, Math.Max(image.Width - 1, 0));
+            int y = Math.Clamp(searchRect.Y, 0, Math.Max(image.Height - 1, 0));
+            int w = Math.Clamp(searchRect.Width, 1, Math.Max(image.Width - x, 1));
+            int h = Math.Clamp(searchRect.Height, 1, Math.Max(image.Height - y, 1));
+
+            var safeRect = new Rect(x, y, w, h);
+
+            using var roi = new Mat(image, safeRect);
+            using var result = new Mat();
+            Cv2.MatchTemplate(roi, template, result, TemplateMatchModes.CCoeffNormed);
+            Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out Point maxLoc);
+
+            if (maxVal < threshold)
+            {
+                return (null, maxVal);
+            }
+
+            var center = new Point2d(
+                safeRect.X + maxLoc.X + template.Width / 2.0,
+                safeRect.Y + maxLoc.Y + template.Height / 2.0);
+
+            return (center, maxVal);
+        }
+
         private static Rect RectFromRoi(Mat img, RoiModel roi)
         {
             double left, top, right, bottom;

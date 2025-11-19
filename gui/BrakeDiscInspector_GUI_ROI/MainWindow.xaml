@@ -90,10 +90,10 @@
                           Margin="0,0,8,0"
                           MinWidth="120"
                           Click="BtnSaveMaster_Click"/>
-                  <Button x:Name="BtnValidateM1"
-                          Content="Validar Master 1"
+                  <Button x:Name="BtnEditM1"
+                          Content="Editar Master 1"
                           MinWidth="120"
-                          Click="BtnValidateM1_Click"/>
+                          Click="BtnEditM1_Click"/>
                 </WrapPanel>
 
                 <Border Margin="0,12,0,0" Background="#11000000" Padding="8">
@@ -131,10 +131,10 @@
                           Margin="0,0,8,0"
                           MinWidth="120"
                           Click="BtnSaveMaster_Click"/>
-                  <Button x:Name="BtnValidateM2"
-                          Content="Validar Master 2"
+                  <Button x:Name="BtnEditM2"
+                          Content="Editar Master 2"
                           MinWidth="120"
-                          Click="BtnValidateM2_Click"/>
+                          Click="BtnEditM2_Click"/>
                 </WrapPanel>
               </StackPanel>
             </GroupBox>

@@ -2690,32 +2690,34 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (!string.IsNullOrWhiteSpace(roi.Label))
             {
+                var label = roi.Label.Trim();
                 var byLabel = _inspectionRois.FirstOrDefault(r =>
-                    string.Equals(r.Name, roi.Label, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(r.DisplayName, roi.Label, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(r.Name, label, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(r.DisplayName, label, StringComparison.OrdinalIgnoreCase));
                 if (byLabel != null)
                 {
                     return byLabel;
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(roi.Id))
+            var roiId = roi.Id?.Trim();
+            if (!string.IsNullOrWhiteSpace(roiId))
             {
-                var byKey = _inspectionRois.FirstOrDefault(r => string.Equals(r.ModelKey, roi.Id, StringComparison.OrdinalIgnoreCase));
+                var byKey = _inspectionRois.FirstOrDefault(r => string.Equals(r.ModelKey, roiId, StringComparison.OrdinalIgnoreCase));
                 if (byKey != null)
                 {
                     return byKey;
                 }
 
-                var byId = _inspectionRois.FirstOrDefault(r => string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase));
+                var byId = _inspectionRois.FirstOrDefault(r => string.Equals(r.Id, roiId, StringComparison.OrdinalIgnoreCase));
                 if (byId != null)
                 {
                     return byId;
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(roi.Id)
-                && int.TryParse(roi.Id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numericId))
+            if (!string.IsNullOrWhiteSpace(roiId)
+                && int.TryParse(roiId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numericId))
             {
                 var byIndex = _inspectionRois.FirstOrDefault(r => r.Index == numericId);
                 if (byIndex != null)
@@ -4392,20 +4394,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             _log($"[batch] processing file='{row.FileName}' roiIdx={config.Index} enabled={config.Enabled}");
 
-                            if (config.Index >= 3 && !(_batchAnchorM1Ready && _batchAnchorM2Ready))
-                            {
-                                TraceBatch("[batch] wait: anchors not ready -> delaying ROI 3/4");
-                                _log?.Invoke($"[batch] ROI{config.Index} '{config.Name}' omitido: anclas no disponibles.");
-                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Nok);
-                                continue;
-                            }
-
                             if (!config.Enabled)
                             {
                                 UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
                                 InvokeOnUi(ClearBatchHeatmap);
                                 _clearHeatmap();
                                 _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
+                                continue;
+                            }
+
+                            if (config.Index >= 3 && !(_batchAnchorM1Ready && _batchAnchorM2Ready))
+                            {
+                                TraceBatch("[batch] wait: anchors not ready -> delaying ROI 3/4");
+                                _log?.Invoke($"[batch] ROI{config.Index} '{config.Name}' omitido: anclas no disponibles.");
+                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Nok);
                                 continue;
                             }
 
@@ -4600,7 +4602,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (m1 == null || m2 == null)
                 {
                     TraceBatch(FormattableString.Invariant(
-                        $"[match] Failed: M1={(m1 != null)} score={score1:0.00} M2={(m2 != null)} score={score2:0.00}"));
+                        $"[match] Failed: M1={(m1 != null)} M2={(m2 != null)}"));
+                    TraceBatch(FormattableString.Invariant(
+                        $"[match] Scores: M1={score1:0.00} M2={score2:0.00}"));
                     _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
                     _batchAnchorsOk = false;
                     return;

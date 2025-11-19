@@ -11849,6 +11849,19 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RemoveAdornersForRoi(_layout.Master1Pattern);
                 RemoveAdornersForRoi(_layout.Master1Search);
+                if (_layout.Master1Pattern != null)
+                {
+                    SaveRoiCropPreview(_layout.Master1Pattern, "M1_pattern");
+                    var updatedPatternPath = SaveMasterPatternCanonical(_layout.Master1Pattern, "master1_pattern");
+                    if (!string.IsNullOrWhiteSpace(updatedPatternPath))
+                    {
+                        _layout.Master1PatternImagePath = updatedPatternPath;
+                    }
+                }
+                if (_layout.Master1Search != null)
+                {
+                    SaveRoiCropPreview(_layout.Master1Search, "M1_search");
+                }
                 MasterLayoutManager.Save(_preset, _layout);
                 _editingM1 = false;
                 BtnEditM1.Content = "Editar Master 1";
@@ -11887,6 +11900,19 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RemoveAdornersForRoi(_layout.Master2Pattern);
                 RemoveAdornersForRoi(_layout.Master2Search);
+                if (_layout.Master2Pattern != null)
+                {
+                    SaveRoiCropPreview(_layout.Master2Pattern, "M2_pattern");
+                    var updatedPatternPath = SaveMasterPatternCanonical(_layout.Master2Pattern, "master2_pattern");
+                    if (!string.IsNullOrWhiteSpace(updatedPatternPath))
+                    {
+                        _layout.Master2PatternImagePath = updatedPatternPath;
+                    }
+                }
+                if (_layout.Master2Search != null)
+                {
+                    SaveRoiCropPreview(_layout.Master2Search, "M2_search");
+                }
                 MasterLayoutManager.Save(_preset, _layout);
                 _editingM2 = false;
                 BtnEditM2.Content = "Editar Master 2";

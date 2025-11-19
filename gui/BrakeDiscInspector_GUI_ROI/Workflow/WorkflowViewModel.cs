@@ -1811,8 +1811,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         $"aligned=(cx={roi.CX:0.###},cy={roi.CY:0.###},r={roi.R:0.###}) angΔ={xf.rot:0.###} " +
                         $"d=(dx={xf.dx:0.##},dy={xf.dy:0.##})"));
 
-                    GuiLog.Info(FormattableString.Invariant(
-                        $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}"));
+                    FormattableString placeMessage =
+                        $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}";
+                    GuiLog.Info(placeMessage);
                 }
 
                 if (_inspectionRois.Count >= 2)
@@ -5841,8 +5842,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _layoutOriginal.Inspection3?.Clone(),
                     _layoutOriginal.Inspection4?.Clone());
 
-                GuiLog.Info(FormattableString.Invariant(
-                    $"[reset] ROI1={RectToStr(BuildRoiRect(_inspection1))} ROI2={RectToStr(BuildRoiRect(_inspection2))} ROI3={RectToStr(BuildRoiRect(_inspection3))} ROI4={RectToStr(BuildRoiRect(_inspection4))}"));
+                FormattableString resetMessage =
+                    $"[reset] ROI1={RectToStr(BuildRoiRect(_inspection1))} ROI2={RectToStr(BuildRoiRect(_inspection2))} ROI3={RectToStr(BuildRoiRect(_inspection3))} ROI4={RectToStr(BuildRoiRect(_inspection4))}";
+                GuiLog.Info(resetMessage);
             }
 
             EnterLayoutPersistenceLock();

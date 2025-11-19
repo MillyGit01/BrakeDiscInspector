@@ -7068,10 +7068,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     ? canvasRect.Value.Height / rectImgOpt.Value.Height
                     : double.NaN;
 
-                GuiLog.Info(FormattableString.Invariant(
-                    $"[batch-ui] roi-canvas step={vm.BatchStepId} file='{fileName}' idx={roiIndex} " +
-                    $"imgRect=({rectImgText}) canvasRect=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) " +
-                    $"scaleX={scaleX:0.####} scaleY={scaleY:0.####}"));
+                FormattableString roiCanvasMessage =
+                    $"[batch-ui] roi-canvas step={vm.BatchStepId} file='{fileName}' idx={roiIndex} imgRect=({rectImgText}) canvasRect=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) scaleX={scaleX:0.####} scaleY={scaleY:0.####}";
+                GuiLog.Info(roiCanvasMessage);
 
                 if (vm.BatchRowOk.HasValue && !string.IsNullOrWhiteSpace(vm.CurrentImagePath))
                 {

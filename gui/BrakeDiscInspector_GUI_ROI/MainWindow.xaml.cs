@@ -6958,6 +6958,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                var fileName = System.IO.Path.GetFileName(vm.CurrentImagePath ?? string.Empty) ?? string.Empty;
+
                 if (!vm.ShouldPlaceBatchPlacement(reason))
                 {
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:skip-placed", roiIndex, null);
@@ -7059,18 +7061,17 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 GuiLog.Info($"[batch-ui] place idx={roiIndex} RECTimg=({rectImgText}) RECTcanvas=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) CVimg=({rectImgCvText}) CVcanvas=({cvCanvasRect.X},{cvCanvasRect.Y},{cvCanvasRect.Width},{cvCanvasRect.Height}) reason={reason}"); // CODEX: log both WPF and OpenCV-friendly rectangles for diagnostics.
 
-                double canvasScale = 1.0;
-                var mappingSource = vm.BatchImageSource ?? vm.BatchHeatmapSource;
-                if (mappingSource is BitmapSource mapBmp && roiCanvas.ActualWidth > 0 && roiCanvas.ActualHeight > 0)
-                {
-                    canvasScale = Math.Min(
-                        roiCanvas.ActualWidth / Math.Max(1.0, mapBmp.PixelWidth),
-                        roiCanvas.ActualHeight / Math.Max(1.0, mapBmp.PixelHeight));
-                }
+                double scaleX = rectImgOpt.HasValue && rectImgOpt.Value.Width > 0
+                    ? canvasRect.Value.Width / rectImgOpt.Value.Width
+                    : double.NaN;
+                double scaleY = rectImgOpt.HasValue && rectImgOpt.Value.Height > 0
+                    ? canvasRect.Value.Height / rectImgOpt.Value.Height
+                    : double.NaN;
 
                 GuiLog.Info(FormattableString.Invariant(
-                    $"[batch-ui] roi-canvas step={vm.BatchStepId} file='{name}' idx={roiIndex} " +
-                    $"imgRect=({rectImgText}) canvasRect=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) scale={canvasScale:0.####}"));
+                    $"[batch-ui] roi-canvas step={vm.BatchStepId} file='{fileName}' idx={roiIndex} " +
+                    $"imgRect=({rectImgText}) canvasRect=({canvasRect.Value.Left:0.##},{canvasRect.Value.Top:0.##},{canvasRect.Value.Width:0.##},{canvasRect.Value.Height:0.##}) " +
+                    $"scaleX={scaleX:0.####} scaleY={scaleY:0.####}"));
 
                 if (vm.BatchRowOk.HasValue && !string.IsNullOrWhiteSpace(vm.CurrentImagePath))
                 {

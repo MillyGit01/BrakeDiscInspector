@@ -1447,27 +1447,34 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public Rect? GetInspectionRoiCanvasRect(int roiIndex)
         {
-            var source = BatchImageSource ?? BatchHeatmapSource;
-            var t = ImgToCanvas(source ?? new DrawingImage(), CanvasRoiActualWidth, CanvasRoiActualHeight);
-
             var roiModel = GetInspectionRoiModelByIndex(roiIndex);
+            Rect imgRect;
             if (roiModel != null)
             {
                 var roiForCanvas = _isBatchRunning ? GetBatchTransformedRoi(roiModel) : roiModel;
-                Rect imgRect = roiForCanvas.Shape == RoiShape.Circle || roiForCanvas.Shape == RoiShape.Annulus
+                imgRect = roiForCanvas.Shape == RoiShape.Circle || roiForCanvas.Shape == RoiShape.Annulus
                     ? new Rect(roiForCanvas.CX - roiForCanvas.R, roiForCanvas.CY - roiForCanvas.R, roiForCanvas.R * 2.0, roiForCanvas.R * 2.0)
                     : new Rect(roiForCanvas.Left, roiForCanvas.Top, roiForCanvas.Width, roiForCanvas.Height);
-
-                return RectImgToCanvas(imgRect, t);
             }
-
-            var rectPx = GetInspectionRoiImageRectPx(roiIndex);
-            if (rectPx == null)
+            else
             {
-                return null;
+                var rectPx = GetInspectionRoiImageRectPx(roiIndex);
+                if (rectPx == null)
+                {
+                    return null;
+                }
+
+                imgRect = new Rect(rectPx.Value.X, rectPx.Value.Y, rectPx.Value.Width, rectPx.Value.Height);
             }
 
-            return RectImgToCanvas(new Rect(rectPx.Value.X, rectPx.Value.Y, rectPx.Value.Width, rectPx.Value.Height), t);
+            if (TryGetBatchPlacementTransform(out var uniform, out var offsetX, out var offsetY, out _, out _))
+            {
+                return new Rect(offsetX + imgRect.X * uniform, offsetY + imgRect.Y * uniform, imgRect.Width * uniform, imgRect.Height * uniform);
+            }
+
+            var source = BatchImageSource ?? BatchHeatmapSource;
+            var fallback = ImgToCanvas(source ?? new DrawingImage(), CanvasRoiActualWidth, CanvasRoiActualHeight);
+            return RectImgToCanvas(imgRect, fallback);
         }
 
         public InspectionRoiConfig? GetInspectionRoiConfig(int idx)
@@ -1612,10 +1619,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void ApplyTransformedRectToRoi(RoiModel roi, RoiBaseline baseline, Rect tRect, double scale, double rot)
         {
-            double width = Math.Max(1.0, tRect.Width);
-            double height = Math.Max(1.0, tRect.Height);
-            double cx = tRect.X + width * 0.5;
-            double cy = tRect.Y + height * 0.5;
+            double width = Math.Max(1.0, baseline.BaseRect.Width * scale);
+            double height = Math.Max(1.0, baseline.BaseRect.Height * scale);
+            double cx = tRect.X + tRect.Width * 0.5;
+            double cy = tRect.Y + tRect.Height * 0.5;
 
             if (_baseImagePixelWidth > 0)
             {
@@ -1742,21 +1749,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         }
 
         private static Rect ApplyXformToRect(Rect r, (double s, double dx, double dy, double rot) xf)
-        {
-            var center = new Point(r.X + r.Width * 0.5, r.Y + r.Height * 0.5);
-            var m = new Matrix();
-            m.Translate(-center.X, -center.Y);
-            m.Scale(xf.s, xf.s);
-            if (Math.Abs(xf.rot) > 0.0001)
-            {
-                m.Rotate(xf.rot);
-            }
-
-            m.Translate(center.X + xf.dx, center.Y + xf.dy);
-            var p1 = m.Transform(new Point(r.Left, r.Top));
-            var p2 = m.Transform(new Point(r.Right, r.Bottom));
-            return new Rect(p1, p2);
-        }
+            => ApplyBatchTransformToRect(r, xf);
 
         private async Task PlaceBatchFinalAsync(string reason, CancellationToken ct)
         {
@@ -4520,9 +4513,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             if (config.Index >= 3 && !(_batchAnchorM1Ready && _batchAnchorM2Ready))
                             {
-                                TraceBatch("[batch] wait: anchors not ready -> delaying ROI 3/4");
-                                _log?.Invoke($"[batch] ROI{config.Index} '{config.Name}' omitido: anclas no disponibles.");
-                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Nok);
+                                var fileName = row.FileName;
+                                var message = FormattableString.Invariant($"[batch] skip ROI={config.Index} for file='{fileName}' because master fit failed (anchors not ready)");
+                                TraceBatch("[batch] wait: anchors not ready -> skipping ROI 3/4");
+                                _log?.Invoke(message);
+                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
                                 continue;
                             }
 

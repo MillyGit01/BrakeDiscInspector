@@ -1,52 +1,23 @@
-# Docker — Backend FastAPI (Octubre 2025)
+# Docker instructions
 
-## 1. Imágenes disponibles
-- `Dockerfile` — imagen CPU.
-- `Dockerfile.gpu` — imagen con soporte CUDA 12.x (NVIDIA).
-- `docker-compose.gpu.yml` — despliegue backend + watchtower opcional.
+This directory only contains a single `Dockerfile` that builds the FastAPI backend on top of `pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime`. It mirrors what the source code actually supports.
 
-## 2. Build CPU
+## Build image
 ```bash
 cd docker
-docker build -t brakedisc-backend:cpu -f Dockerfile ..
+docker build -t brakedisc-backend ..
 ```
+The resulting image includes CUDA-enabled PyTorch, installs `backend/requirements.txt` (with any CPU-only torch indexes removed) and copies the `backend/` package.
 
-## 3. Build GPU
+## Run container
 ```bash
-cd docker
-docker build -t brakedisc-backend:gpu -f Dockerfile.gpu ..
+docker run --gpus all -p 8000:8000 \
+  -v /data/brakedisc/models:/app/models \
+  --name brakedisc-backend brakedisc-backend
 ```
-- Requiere `nvidia-container-toolkit` instalado.
+- The container executes `python -m uvicorn backend.app:app --host 0.0.0.0 --port 8000`.
+- Logs are written to stdout (see `LOGGING.md`).
+- Mount a volume for `/app/models` if you want model persistence.
 
-## 4. docker-compose (GPU)
-```bash
-docker compose -f docker-compose.gpu.yml up -d
-```
-- Monta volúmenes:
-  - `/data/brakedisc/datasets:/app/datasets`
-  - `/data/brakedisc/models:/app/models`
-  - `/data/brakedisc/logs:/app/logs`
-- Variables (`.env`):
-  - `BACKEND_DEVICE=cuda:0`
-  - `BACKEND_API_KEY=<token>`
-  - `BACKEND_ALLOW_ORIGINS=*`
-
-## 5. Healthcheck
-- `GET http://localhost:8000/health`
-- Revisar logs con `docker logs brakedisc-backend`
-
-## 6. Actualizaciones
-```bash
-docker compose -f docker-compose.gpu.yml pull
-docker compose -f docker-compose.gpu.yml up -d
-```
-
-## 7. Integración con GUI
-- Configurar GUI con `http://<host>:8000`.
-- Validar handshake `/health`.
-- Asegurar API Key si está habilitada.
-
-## 8. Troubleshooting
-- Falta GPU → revisar `docker info | grep -i nvidia`.
-- Permisos volumen → usar `chown -R 1000:1000 /data/brakedisc`.
-- Latencia alta → ajustar `UVICORN_WORKERS`.
+## Configure the GUI
+Point `Backend.BaseUrl` to the host/port exposed above (for example `http://server-ip:8000`). No additional headers or API keys are required.

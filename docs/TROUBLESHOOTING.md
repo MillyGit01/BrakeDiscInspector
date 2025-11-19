@@ -1,33 +1,21 @@
-# Troubleshooting — Octubre 2025
+# Troubleshooting
 
-## 1. GUI
-- **No conecta al backend**: verificar URL, API Key, firewall.
-- **Heatmap desalineado**: confirmar que ROI está congelada; revisar `shape` guardado.
-- **UI bloqueada**: revisar que las llamadas HTTP sean `async/await` y usen `ConfigureAwait(false)` cuando corresponda.
+This checklist is derived from the current GUI/Backend code.
 
-## 2. Backend
-- **`503 /health`**: revisar logs; normalmente indica fallo al cargar modelo (drivers CUDA).
-- **`409 /fit_ok`**: `mm_per_px` distinto al registrado. Volver a calibrar cámara o ajustar manifest.
-- **`428 /infer`**: no existe `calibration.json`. Ejecutar `/calibrate_ng`.
-- **`404 /infer`**: no se ha ejecutado `/fit_ok`.
-- **`400 /infer`**: `shape` inválido (coordenadas fuera de rango).
+## GUI-side issues
+- **Backend unavailable:** `WorkflowViewModel.RefreshHealthAsync` reports the exception and `GuiLog` prints `[health] EX`. Verify `Backend.BaseUrl` (appsettings or `BDI_BACKEND_BASEURL`) and ensure `BackendClient.BaseUrl` points to the running FastAPI instance.
+- **Dataset path rejected:** when `InspectionRoiConfig.DatasetPath` is empty or invalid, the UI shows `Select a dataset`. Use the Browse button; valid folders must contain `/ok` and `/ng` (or `/ko`) subfolders.
+- **Cannot add sample:** `AddRoiToDatasetAsync` logs `AddToDataset aborted: ...`. Usually no image is loaded (`_getSourceImagePath()` null) or the ROI is not frozen; fix the ROI, re-export and retry.
+- **Heatmap missing or misaligned:** check `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` for the `[heatmap:tag]` entry. If `Transform Img→Canvas` shows `sx=0`, wait for the canvas to finish measuring (resize window or trigger a redraw). Batch mode also waits for `_batchAnchorReadyForStep`; ensure Master ROIs are visible.
 
-## 3. Rendimiento
-- **Inferencia lenta**: habilitar GPU (`BACKEND_DEVICE=cuda:0`), revisar `PATCHCORE_BATCH_SIZE`, optimizar red.
-- **`n_embeddings` muy alto**: ajustar `PATCHCORE_CORESET_RATIO` o limpiar dataset OK.
-- **Uso de memoria**: habilitar `PATCHCORE_FAISS_FP16` y `float16` en embeddings.
+## Backend-side issues
+- **`400` with "Memoria no encontrada":** `/infer` could not load `<role>__<roi>.npz`. Run `/fit_ok` again via the GUI or copy the expected file into `BDI_MODELS_DIR`.
+- **Token grid mismatch:** `/infer` returns `error` mentioning `Token grid mismatch`. The embedding grid stored during `/fit_ok` does not match the new input resolution. Rebuild the memory by running `/fit_ok` on crops with the current size.
+- **Calibration missing:** The GUI will still display scores even if `threshold` is `null`. Either run `/calibrate_ng` (button **Calibrate**) or set `InspectionRoiConfig.ThresholdDefault` to a conservative value.
+- **Slow inference:** Heatmaps are generated with Gaussian blur (`blur_sigma=1.0`). If using CPU only, consider reducing image size in the GUI, ensuring `torch` is compiled for CPU and that the Docker image has enough CPU shares.
 
-## 4. Datasets
-- **Archivos corruptos**: regenerar miniaturas, verificar PNG.
-- **Contadores incorrectos**: borrar `manifest.json` y regenerar usando script `scripts/rebuild_manifest.py`.
-
-## 5. Logs
-- Revisar `logs/gui/*.log` y stdout backend (JSON).
-- Buscar `request_id` compartido.
-
-## 6. Herramientas
-- `docs/curl_examples.md` para replicar llamadas.
-- `scripts/check_backend.py` para healthcheck.
-
-## 7. Escalamiento
-- Contactar responsable indicado en `agents.md` si persiste.
+## Logs to inspect
+1. `%LocalAppData%/BrakeDiscInspector/logs/gui.log` – look for `[eval]` or `[batch]` entries.
+2. Backend stdout (or Docker logs) – `slog("infer.response", ...)` includes `elapsed_ms`, `score`, `threshold`.
+3. `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` – overlay placement details.
+4. `%LocalAppData%/BrakeDiscInspector/logs/roi_analyze_master.log` – master anchor detection status when batch alignment fails.

@@ -1806,10 +1806,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ApplyTransformedRectToRoi(roi, baseline, tRect, xf.s, xf.rot);
 
                     TraceBatch(FormattableString.Invariant(
-                        $"[batch-roi] step={BatchStepId} file='{_currentBatchFile ?? "<none>"}' roiIndex={rcfg.Index} " +
-                        $"base=(cx={baseline.Center.X:0.###},cy={baseline.Center.Y:0.###},r={baseline.R:0.###},rin={baseline.Rin:0.###}) " +
-                        $"aligned=(cx={roi.CX:0.###},cy={roi.CY:0.###},r={roi.R:0.###}) angΔ={xf.rot:0.###} " +
-                        $"d=(dx={xf.dx:0.##},dy={xf.dy:0.##})"));
+                        $"[batch-roi] step={BatchStepId} file='{_currentBatchFile ?? "<none>"}' roiIndex={rcfg.Index} base=(cx={baseline.Center.X:0.###},cy={baseline.Center.Y:0.###},r={baseline.R:0.###},rin={baseline.Rin:0.###}) aligned=(cx={roi.CX:0.###},cy={roi.CY:0.###},r={roi.R:0.###}) angΔ={xf.rot:0.###} d=(dx={xf.dx:0.##},dy={xf.dy:0.##})"));
 
                     FormattableString placeMessage =
                         $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}";

@@ -84,6 +84,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private int _freezeRoiRepositionCounter;
         private bool _pendingActiveInspectionSync;
         private bool _globalUnlocked = false;
+        private bool _editingM1;
+        private bool _editingM2;
         private string? _activeEditableRoiId = null;
         private bool _hasInspectionAnalysisTransform;
         private bool _isFirstImageForCurrentKey = true;
@@ -3156,6 +3158,16 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private bool ShouldEnableRoiEditing(RoiRole role, RoiModel? roi = null)
         {
+            if (_editingM1 && (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search))
+            {
+                return true;
+            }
+
+            if (_editingM2 && (role == RoiRole.Master2Pattern || role == RoiRole.Master2Search))
+            {
+                return true;
+            }
+
             if (role == RoiRole.Inspection)
             {
                 if (_state != MasterState.DrawInspection && _state != MasterState.Ready)
@@ -6326,6 +6338,92 @@ namespace BrakeDiscInspector_GUI_ROI
             return _roiShapesById.TryGetValue(roiId, out var shape) ? shape : null;
         }
 
+        private Shape? EnsureShapeForRoi(RoiModel? roi)
+        {
+            if (roi == null || string.IsNullOrWhiteSpace(roi.Id) || CanvasROI == null)
+            {
+                return null;
+            }
+
+            if (_roiShapesById.TryGetValue(roi.Id, out var existing) && existing != null)
+            {
+                return existing;
+            }
+
+            RedrawOverlaySafe();
+
+            if (_roiShapesById.TryGetValue(roi.Id, out existing) && existing != null)
+            {
+                return existing;
+            }
+
+            var shape = CreateLayoutShape(roi);
+            if (shape != null)
+            {
+                CanvasROI.Children.Add(shape);
+                _roiShapesById[roi.Id] = shape;
+            }
+
+            return shape;
+        }
+
+        private void AttachAdornerForRoi(RoiModel? roi)
+        {
+            var shape = EnsureShapeForRoi(roi);
+            if (shape != null)
+            {
+                AttachRoiAdorner(shape);
+            }
+        }
+
+        private void RemoveAdornersForRoi(RoiModel? roi)
+        {
+            if (roi == null || string.IsNullOrWhiteSpace(roi.Id))
+            {
+                return;
+            }
+
+            var shape = FindRoiShapeById(roi.Id);
+            if (shape != null)
+            {
+                RemoveRoiAdorners(shape);
+            }
+        }
+
+        private void CancelMasterEditing(bool redraw = true)
+        {
+            bool changed = false;
+
+            if (_editingM1)
+            {
+                _editingM1 = false;
+                if (BtnEditM1 != null)
+                {
+                    BtnEditM1.Content = "Editar Master 1";
+                }
+                RemoveAdornersForRoi(_layout?.Master1Pattern);
+                RemoveAdornersForRoi(_layout?.Master1Search);
+                changed = true;
+            }
+
+            if (_editingM2)
+            {
+                _editingM2 = false;
+                if (BtnEditM2 != null)
+                {
+                    BtnEditM2.Content = "Editar Master 2";
+                }
+                RemoveAdornersForRoi(_layout?.Master2Pattern);
+                RemoveAdornersForRoi(_layout?.Master2Search);
+                changed = true;
+            }
+
+            if (changed && redraw)
+            {
+                RedrawOverlaySafe();
+            }
+        }
+
         private int CountRoiAdornersForShape(Shape shape)
         {
             if (shape == null)
@@ -8265,19 +8363,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private static bool IsAllowedMasterShape(RoiShape s)
             => s == RoiShape.Rectangle || s == RoiShape.Circle || s == RoiShape.Annulus;
-
-        // ====== Validadores ======
-        private void BtnValidateM1_Click(object sender, RoutedEventArgs e)
-        {
-            if (!ValidateMasterGroup(_layout.Master1Pattern, _layout.Master1Search)) return;
-            Snack($"Master 1 válido."); // CODEX: string interpolation compatibility.
-        }
-
-        private void BtnValidateM2_Click(object sender, RoutedEventArgs e)
-        {
-            if (!ValidateMasterGroup(_layout.Master2Pattern, _layout.Master2Search)) return;
-            Snack($"Master 2 válido."); // CODEX: string interpolation compatibility.
-        }
 
         private void BtnValidateInsp_Click(object sender, RoutedEventArgs e)
         {
@@ -10372,6 +10457,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                CancelMasterEditing(redraw: false);
+
                 var dir = MasterLayoutManager.GetLayoutsFolder(_preset);
                 Directory.CreateDirectory(dir);
 
@@ -11736,9 +11823,77 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BtnM1_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Pattern);
         private void BtnM1_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Pattern);
 
+        private void BtnEditM1_Click(object sender, RoutedEventArgs e)
+        {
+            if (_layout == null)
+            {
+                Snack("Carga un layout antes de editar Master 1.");
+                return;
+            }
+
+            if (!_editingM1)
+            {
+                if (_layout.Master1Pattern == null || _layout.Master1Search == null)
+                {
+                    Snack("Faltan ROI de Master 1.");
+                    return;
+                }
+
+                _editingM1 = true;
+                BtnEditM1.Content = "Guardar Master 1";
+                RedrawOverlaySafe();
+                AttachAdornerForRoi(_layout.Master1Pattern);
+                AttachAdornerForRoi(_layout.Master1Search);
+            }
+            else
+            {
+                RemoveAdornersForRoi(_layout.Master1Pattern);
+                RemoveAdornersForRoi(_layout.Master1Search);
+                MasterLayoutManager.Save(_preset, _layout);
+                _editingM1 = false;
+                BtnEditM1.Content = "Editar Master 1";
+                RedrawOverlaySafe();
+                Snack("Master 1 válido.");
+            }
+        }
+
         private void BtnM1S_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM1_Search, ComboMasterRoiShape);
         private void BtnM1S_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Search);
         private void BtnM1S_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Search);
+
+        private void BtnEditM2_Click(object sender, RoutedEventArgs e)
+        {
+            if (_layout == null)
+            {
+                Snack("Carga un layout antes de editar Master 2.");
+                return;
+            }
+
+            if (!_editingM2)
+            {
+                if (_layout.Master2Pattern == null || _layout.Master2Search == null)
+                {
+                    Snack("Faltan ROI de Master 2.");
+                    return;
+                }
+
+                _editingM2 = true;
+                BtnEditM2.Content = "Guardar Master 2";
+                RedrawOverlaySafe();
+                AttachAdornerForRoi(_layout.Master2Pattern);
+                AttachAdornerForRoi(_layout.Master2Search);
+            }
+            else
+            {
+                RemoveAdornersForRoi(_layout.Master2Pattern);
+                RemoveAdornersForRoi(_layout.Master2Search);
+                MasterLayoutManager.Save(_preset, _layout);
+                _editingM2 = false;
+                BtnEditM2.Content = "Editar Master 2";
+                RedrawOverlaySafe();
+                Snack("Master 2 válido.");
+            }
+        }
 
         private async void BtnLoadModel_Click(object sender, RoutedEventArgs e)
         {
@@ -11767,12 +11922,20 @@ namespace BrakeDiscInspector_GUI_ROI
             try
             {
                 var modelDir = GetInspectionModelFolder(index);
+                var settings = Properties.Settings.Default;
+                string modelKey = $"LastModelDirROI{index}";
+                string? lastModelDir = settings[modelKey] as string;
+
+                string initialDirectory = !string.IsNullOrWhiteSpace(lastModelDir) && Directory.Exists(lastModelDir)
+                    ? lastModelDir
+                    : Directory.Exists(modelDir)
+                        ? modelDir
+                        : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
                 var dialog = new OpenFileDialog
                 {
                     Title = $"Selecciona un modelo para Inspection {index}",
-                    InitialDirectory = Directory.Exists(modelDir)
-                        ? modelDir
-                        : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                    InitialDirectory = initialDirectory,
                     Filter = "Model files|*.json;*.onnx;*.bin;*.npz;*.faiss|All files|*.*",
                     Multiselect = false
                 };
@@ -11799,6 +11962,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (!loaded)
                 {
                     return;
+                }
+
+                var selectedDir = Path.GetDirectoryName(dialog.FileName);
+                if (!string.IsNullOrWhiteSpace(selectedDir))
+                {
+                    settings[modelKey] = selectedDir;
+                    settings.Save();
                 }
 
                 AppendLog($"[model] Modelo cargado en Inspection {index}: {dialog.FileName}");
@@ -11851,6 +12021,8 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 return;
             }
+
+            CancelMasterEditing(redraw: false);
 
             // CODEX: string interpolation compatibility.
             AppendLog($"[align] Reset solicitado por el usuario (Borrar Canvas).");

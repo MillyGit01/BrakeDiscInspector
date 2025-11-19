@@ -25,6 +25,7 @@ using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Imaging;
 using BrakeDiscInspector_GUI_ROI.Models;
+using BrakeDiscInspector_GUI_ROI.Properties;
 using OpenCvSharp;
 using Point = System.Windows.Point;
 using Rect = System.Windows.Rect;
@@ -2965,6 +2966,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
+            int datasetIndex = Math.Max(1, Math.Min(4, roi.Index));
+            string datasetKey = $"LastDatasetPathROI{datasetIndex}";
+            var settings = Settings.Default;
+            string? lastDatasetPath = settings[datasetKey] as string;
+
             var choice = await Application.Current.Dispatcher.InvokeAsync(() =>
                 MessageBox.Show(
                     "Choose Yes to browse a dataset folder (requires ok/ko).\nChoose No to load a CSV (filename,label).",
@@ -2988,7 +2994,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         UseDescriptionForTitle = true,
                     };
 
-                    if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && Directory.Exists(roi.DatasetPath))
+                    if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
+                    {
+                        dialog.SelectedPath = lastDatasetPath;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && Directory.Exists(roi.DatasetPath))
                     {
                         dialog.SelectedPath = roi.DatasetPath;
                     }
@@ -2996,6 +3006,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     if (dialog.ShowDialog() == Forms.DialogResult.OK)
                     {
                         roi.DatasetPath = DatasetPathHelper.NormalizeDatasetPath(dialog.SelectedPath);
+                        settings[datasetKey] = dialog.SelectedPath;
+                        settings.Save();
                     }
                 });
                 return;
@@ -3011,7 +3023,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     Multiselect = false
                 };
 
-                if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && File.Exists(roi.DatasetPath))
+                if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
+                {
+                    dialog.InitialDirectory = lastDatasetPath;
+                }
+                else if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && File.Exists(roi.DatasetPath))
                 {
                     dialog.InitialDirectory = Path.GetDirectoryName(roi.DatasetPath);
                     dialog.FileName = Path.GetFileName(roi.DatasetPath);
@@ -3020,6 +3036,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (dialog.ShowDialog() == true)
                 {
                     roi.DatasetPath = DatasetPathHelper.NormalizeDatasetPath(dialog.FileName);
+                    var selectedDir = Path.GetDirectoryName(dialog.FileName);
+                    if (!string.IsNullOrWhiteSpace(selectedDir))
+                    {
+                        settings[datasetKey] = selectedDir;
+                        settings.Save();
+                    }
                 }
             });
         }

@@ -194,6 +194,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private int _batchAnchorM1Score;
         private int _batchAnchorM2Score;
         private bool _batchAnchorsOk;
+        private readonly RoiModel?[] _batchBaselineRois = new RoiModel?[4];
 
         // CODEX: batch reposition flags
         private CancellationToken _currentBatchCt = CancellationToken.None;
@@ -544,7 +545,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var distO = Math.Sqrt(dxO * dxO + dyO * dyO);
             var distN = Math.Sqrt(dxN * dxN + dyN * dyN);
-            var scale = (distO > 1e-6) ? distN / distO : 1.0;
+            _ = (distO > 1e-6) ? distN / distO : 1.0; // measured scale (ignored to keep ROI radii fixed)
+            const double scale = 1.0;
 
             var angO = Math.Atan2(dyO, dxO);
             var angN = Math.Atan2(dyN, dxN);
@@ -1314,6 +1316,58 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private void InitializeBatchBaselineRois()
+        {
+            for (int idx = 1; idx <= _batchBaselineRois.Length; idx++)
+            {
+                var roi = GetInspectionRoiModelByIndex(idx);
+                _batchBaselineRois[idx - 1] = roi?.DeepClone();
+            }
+
+            try
+            {
+                var snapshot = string.Join(", ", Enumerable.Range(1, _batchBaselineRois.Length)
+                    .Select(i =>
+                    {
+                        var roi = _batchBaselineRois[i - 1];
+                        if (roi == null)
+                        {
+                            return FormattableString.Invariant($"{i}=null");
+                        }
+
+                        double cx = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus ? roi.CX : roi.X;
+                        double cy = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus ? roi.CY : roi.Y;
+                        double r = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus ? roi.R : Math.Max(roi.Width, roi.Height) * 0.5;
+                        double rin = roi.Shape == RoiShape.Annulus ? roi.RInner : 0.0;
+                        return FormattableString.Invariant($"{i}=(cx={cx:0.###},cy={cy:0.###},r={r:0.###},rin={rin:0.###})");
+                    }));
+
+                TraceBatch($"[batch] baseline-roi snapshot: {snapshot}");
+            }
+            catch
+            {
+                // logging must never break batch start
+            }
+        }
+
+        private void ClearBatchBaselineRois()
+        {
+            for (int i = 0; i < _batchBaselineRois.Length; i++)
+            {
+                _batchBaselineRois[i] = null;
+            }
+        }
+
+        private RoiModel? GetBatchBaselineRoi(int index)
+        {
+            if (index < 1 || index > _batchBaselineRois.Length)
+            {
+                return null;
+            }
+
+            return _batchBaselineRois[index - 1];
+        }
+
         public void SetInspectionAutoRepositionEnabled(string? roiId, bool enable)
         {
             // Hook for future auto-reposition toggles. No-op by default.
@@ -1399,9 +1453,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var roiModel = GetInspectionRoiModelByIndex(roiIndex);
             if (roiModel != null)
             {
-                Rect imgRect = roiModel.Shape == RoiShape.Circle || roiModel.Shape == RoiShape.Annulus
-                    ? new Rect(roiModel.CX - roiModel.R, roiModel.CY - roiModel.R, roiModel.R * 2.0, roiModel.R * 2.0)
-                    : new Rect(roiModel.Left, roiModel.Top, roiModel.Width, roiModel.Height);
+                var roiForCanvas = _isBatchRunning ? GetBatchTransformedRoi(roiModel) : roiModel;
+                Rect imgRect = roiForCanvas.Shape == RoiShape.Circle || roiForCanvas.Shape == RoiShape.Annulus
+                    ? new Rect(roiForCanvas.CX - roiForCanvas.R, roiForCanvas.CY - roiForCanvas.R, roiForCanvas.R * 2.0, roiForCanvas.R * 2.0)
+                    : new Rect(roiForCanvas.Left, roiForCanvas.Top, roiForCanvas.Width, roiForCanvas.Height);
 
                 return RectImgToCanvas(imgRect, t);
             }
@@ -1498,7 +1553,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private RoiBaseline EnsureBaselineForRoi(InspectionRoiConfig? config, RoiModel roi, string reason)
         {
             var key = ResolveBaselineKey(config, roi);
-            return TryGetBaseline(key) ?? SeedBaselineForRoi(config, roi, reason);
+            var cached = TryGetBaseline(key);
+            if (cached != null)
+            {
+                return cached;
+            }
+
+            RoiModel? source = roi;
+            if (_isBatchRunning && config != null)
+            {
+                source = GetBatchBaselineRoi(config.Index) ?? roi;
+            }
+
+            return SeedBaselineForRoi(config, source ?? roi, reason);
         }
 
         private void SeedInspectionBaselines(string reason)
@@ -1510,7 +1577,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             foreach (var rcfg in _inspectionRois.Where(r => r.Enabled))
             {
-                var roi = GetInspectionRoiModelByIndex(rcfg.Index);
+                RoiModel? roi = null;
+                if (_isBatchRunning)
+                {
+                    roi = GetBatchBaselineRoi(rcfg.Index) ?? GetInspectionRoiModelByIndex(rcfg.Index);
+                }
+                else
+                {
+                    roi = GetInspectionRoiModelByIndex(rcfg.Index);
+                }
+
                 if (roi == null)
                 {
                     continue;
@@ -1735,6 +1811,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     var tRect = ApplyXformToRect(baseline.BaseRect, xf);
 
                     ApplyTransformedRectToRoi(roi, baseline, tRect, xf.s, xf.rot);
+
+                    TraceBatch(FormattableString.Invariant(
+                        $"[batch-roi] step={BatchStepId} file='{_currentBatchFile ?? "<none>"}' roiIndex={rcfg.Index} " +
+                        $"base=(cx={baseline.Center.X:0.###},cy={baseline.Center.Y:0.###},r={baseline.R:0.###},rin={baseline.Rin:0.###}) " +
+                        $"aligned=(cx={roi.CX:0.###},cy={roi.CY:0.###},r={roi.R:0.###}) angΔ={xf.rot:0.###} " +
+                        $"d=(dx={xf.dx:0.##},dy={xf.dy:0.##})"));
 
                     GuiLog.Info(FormattableString.Invariant(
                         $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}"));
@@ -4333,6 +4415,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             BatchRowOk = null;
             CurrentRowIndex = 0;
             CurrentImagePath = null;
+            ClearBatchBaselineRois();
         }
 
         private async Task RunBatchAsync(CancellationToken ct)
@@ -4340,6 +4423,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             EnsureRoleRoi();
 
             InitializeBatchSession();
+            InitializeBatchBaselineRois();
 
             var rows = GetBatchRowsSnapshot();
             int total = rows.Count;
@@ -4422,6 +4506,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 InvokeOnUi(ClearBatchHeatmap);
                                 _clearHeatmap();
                                 _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
+                                continue;
+                            }
+
+                            if (!_batchAnchorsOk)
+                            {
+                                var fileName = row.FileName;
+                                var message = FormattableString.Invariant($"[batch] skip ROI={config.Index} for file='{fileName}' because master fit failed (fit_ok=false)");
+                                _log(message);
+                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
                                 continue;
                             }
 
@@ -4565,6 +4658,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 BatchRowOk = null;
                 CurrentRowIndex = 0;
                 CurrentImagePath = null;
+                ClearBatchBaselineRois();
             }
         }
 

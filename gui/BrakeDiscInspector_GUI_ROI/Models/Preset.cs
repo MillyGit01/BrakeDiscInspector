@@ -98,7 +98,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         public RoiModel Clone()
         {
-            return new RoiModel
+            var clone = new RoiModel
             {
                 Id = Id,
                 Label = Label,
@@ -116,6 +116,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 BaseImgW = BaseImgW,
                 BaseImgH = BaseImgH
             };
+
+            clone._isFrozen = _isFrozen;
+            return clone;
+        }
+
+        public RoiModel DeepClone()
+        {
+            var clone = Clone();
+            return clone;
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

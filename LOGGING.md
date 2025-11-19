@@ -1,62 +1,27 @@
-# Política de logging — Octubre 2025
+# Logging guide
 
-La trazabilidad es clave para auditar decisiones de inspección. Este documento describe cómo la GUI y el backend registran eventos, cómo se correlacionan y qué metadatos se incluyen.
+The repository already contains concrete logging utilities. This page summarises what they write so you can troubleshoot issues quickly.
 
-## 1. Principios
-- Todos los eventos relevantes deben incluir `role_id`, `roi_id`, `request_id` (cuando aplique) y `operator_id`.
-- Logs estructurados en formato JSON para backend; texto estructurado para GUI.
-- Niveles consistentes (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
+## GUI logs (`GuiLog`)
+- File location: `%LocalAppData%/BrakeDiscInspector/logs/`.
+- Files produced:
+  - `gui.log`: all general messages routed through `GuiLog.Info/Warn/Error` (dataset saves, batch progress, backend calls).
+  - `gui_heatmap.log`: heatmap placement diagnostics from `MainWindow` (transform parameters, cutoff, opacity).
+  - `roi_load_coords.log`: emitted when the UI loads/saves ROI coordinates.
+  - `roi_analyze_master.log`: master-anchor analysis traces.
+- Format: `yyyy-MM-dd HH:mm:ss.fff [LEVEL] message`. Messages are plain text composed inside the GUI code (`WorkflowViewModel`, `MainWindow`, `DatasetManager`, etc.). There is no request-id, so correlate entries by timestamp and ROI name.
+- Usage tips:
+  - Search for `[eval]`, `[batch]`, `[dataset]` prefixes when investigating inference/batch/dataset flows.
+  - Heatmap alignment issues always write a `[heatmap:tag] ...` line into `gui_heatmap.log` before showing the overlay.
 
-## 2. GUI
-- Ubicación: `logs/gui/<yyyy-mm-dd>.log`.
-- Formato:
-```
-2025-10-07T10:18:07.123Z [INFO] [request_id=af23c9] fit_ok role=master roi=inspection-1 n_embeddings=512 coreset=128 elapsed_ms=6421
-```
-- Eventos clave:
-  - Inicio/final de `fit_ok`, `calibrate_ng`, `infer`.
-  - Resultado (`score`, `threshold`, `decision`).
-  - Errores HTTP (incluye `status_code`, `detail`).
-- La GUI propaga `request_id` devuelto por el backend (header `X-Request-Id`).
+## Backend logs (`backend/app.py`)
+- Implemented through the helper `slog(event, **kw)` which simply prints `json.dumps` to stdout/stderr.
+- Typical events: `fit_ok.request`, `fit_ok.response`, `calibrate_ng.request`, `infer.response`, `infer.error`.
+- Fields always include `ts` (epoch seconds) and whatever keyword arguments were passed (e.g. `role_id`, `roi_id`, `elapsed_ms`, `score`).
+- There is no log rotation; use your process supervisor (systemd, Docker) to capture stdout if you need persistence.
 
-## 3. Backend
-- Salida estándar en JSON (configurable para volcar a archivo).
-- Ejemplo:
-```json
-{
-  "ts": "2025-10-07T10:18:07.114Z",
-  "level": "info",
-  "route": "infer",
-  "request_id": "af23c9",
-  "role_id": "master",
-  "roi_id": "inspection-1",
-  "elapsed_ms": 87.4,
-  "score": 0.38,
-  "threshold": 0.61,
-  "decision": "ok"
-}
-```
-- Integración con `structlog` para añadir campos dinámicos.
-
-## 4. Correlación
-1. Backend genera `request_id` (UUID base62) y lo devuelve vía header.
-2. GUI registra el mismo `request_id` en su log.
-3. Para auditorías se cruzan ambos archivos filtrando por `request_id`.
-
-## 5. Alertas
-- `WARNING`: tiempo de inferencia > 250 ms, `coreset_size` inesperadamente bajo, `mm_per_px` divergente.
-- `ERROR`: excepciones no recuperables, fallo de lectura de dataset, faltan pesos.
-- `CRITICAL`: imposibilidad de cargar modelo (detiene servicio).
-
-## 6. Retención
-- GUI: rotación diaria, mantener 30 días.
-- Backend: rotación semanal, retener 90 días o según normativa del cliente.
-
-## 7. Integraciones externas
-- Exportar logs backend a Splunk/ELK mediante Fluent Bit.
-- Alerting via Grafana/Prometheus usando métricas derivadas.
-
-## 8. Checklist
-- [ ] GUI incluye `request_id` en todos los mensajes relacionados con backend.
-- [ ] Backend añade `role_id`, `roi_id`, `mm_per_px` a logs de negocio.
-- [ ] Se revisan logs tras actualizaciones (`DEPLOYMENT.md`).
+## Troubleshooting workflow
+1. Check `gui.log` for obvious frontend validation errors (dataset missing, ROI export failed). These are emitted before sending any HTTP request.
+2. Look at backend stdout for the matching `event`/`role_id` combination. If `fit_ok` failed you will see the exception in `fit_ok.error`.
+3. If heatmaps look misaligned or blank, inspect `gui_heatmap.log` to verify the calculated transform (`sx`, `sy`, `offX`, `offY`) matches the current canvas size.
+4. For dataset issues, `DatasetManager` logs every file it writes plus the reason when validation fails (e.g. missing `/ok` directory).

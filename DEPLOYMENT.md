@@ -1,79 +1,36 @@
-# Guía de despliegue — Octubre 2025
+# Deployment guide
 
-Este documento describe cómo desplegar el backend y la GUI en distintos escenarios (standalone, célula, servidor GPU). Incluye la integración del contrato frontend ↔ backend.
+The goal of this document is to explain how to run the checked-in backend in realistic environments. Only features present in the repository are covered.
 
-## 1. Modos de despliegue
+## Modes of operation
+### Standalone (PC with GUI + backend)
+1. Install Python 3.11+, CUDA/cuDNN if you plan to use GPU acceleration.
+2. Follow the *Launch the backend* steps in `README.md` (run `uvicorn backend.app:app --host 0.0.0.0 --port 8000`).
+3. Start the GUI from Visual Studio or publish it. Configure `Backend.BaseUrl` to `http://127.0.0.1:8000` or set `BDI_BACKEND_BASEURL`.
 
-### 1.1 Standalone (PC único)
-- GUI y backend en la misma máquina Windows con GPU.
-- Backend ejecutado vía `uvicorn` o Docker Desktop.
-- Comunicación `http://127.0.0.1:8000`.
+### Separate backend server
+1. Provision a Linux host with NVIDIA drivers if GPU is needed.
+2. Clone this repository and run the backend in a virtual environment **or** build the provided Docker image:
+   ```bash
+   docker build -t brakedisc-backend -f docker/Dockerfile .
+   docker run --gpus all -p 8000:8000 -v /data/brakedisc/models:/app/models brakedisc-backend
+   ```
+3. Point each GUI workstation to `http://<server-ip>:8000` by editing `appsettings.json` or the environment variable `BDI_BACKEND_BASEURL`.
 
-Pasos rápidos:
-```powershell
-# Ventana PowerShell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn backend.app:app --host 0.0.0.0 --port 8000
-```
-- Configurar GUI con `Backend Base URL = http://localhost:8000`.
+## Environment variables
+The backend honours the variables defined in `backend/app.py` and `backend/config.py`:
+- `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT` – only relevant when running `uvicorn` programmatically.
+- `BDI_MODELS_DIR` – where `.npz`/`.faiss`/`_calib.json` files are stored.
+- `BDI_CORESET_RATE`, `BDI_SCORE_PERCENTILE`, `BDI_AREA_MM2_THR` – inference defaults.
+There is no API-key enforcement or TLS termination inside the app; use a reverse proxy if you need those features.
 
-### 1.2 Célula de inspección (GUI → servidor GPU)
-- GUI en estación Windows, backend en servidor Linux con GPU.
-- Recomendado: Docker + NVIDIA Container Toolkit.
-- Comunicación cifrada mediante reverse proxy (Traefik/Nginx) y API Key.
+## GUI configuration
+- The executable reads `config/appsettings.json` first, then `appsettings.json`, then environment overrides (see `AppConfigLoader`).
+- Dataset root defaults to `<exe>/data`; set `BDI_DATASET_ROOT` if you want to point to a network share.
+- The GUI sends HTTP requests asynchronously; no additional services are required.
 
-Pasos:
-```bash
-# Servidor Linux (root)
-sudo docker compose -f docker/docker-compose.gpu.yml up -d
-# expone backend en 0.0.0.0:8000
-```
-- Configurar `GUI → Ajustes → Backend URL` con `http://server-ip:8000`.
-- Asegurar latencia < 10 ms y ancho de banda ≥ 100 Mbps.
-
-### 1.3 Multi-ROI / Multi-cámara
-- Escalar backend con varios workers (`UVICORN_WORKERS=4`).
-- Usa colas (opcional) si múltiples GUI comparten backend.
-
-## 2. Variables de entorno backend
-- `BACKEND_DEVICE=cuda:0` (o `cpu`).
-- `BACKEND_DATA_ROOT=/data/brakedisc` (datasets + models).
-- `BACKEND_API_KEY=<token>` para exigir header `X-API-Key`.
-- `BACKEND_ALLOW_ORIGINS=*` para CORS cuando se exponen dashboards.
-- `PATCHCORE_CORES` (opcional) para limitar hilos.
-
-## 3. Seguridad
-- Reverse proxy con TLS (Let's Encrypt / certificados planta).
-- Autenticación: header `X-API-Key`, rotado periódicamente.
-- Logs auditables: montar volumen persistente `logs/`.
-- Backups diarios de `datasets/` y `models/`.
-
-## 4. Monitorización
-- Exportar métricas Prometheus (`/metrics`).
-- Integrar con Grafana para visualizar `latencia_infer_ms`, `n_embeddings`, `gpu_mem_mb`.
-- Alertas: `score > threshold` repetido → notificación.
-
-## 5. Actualización de versiones
-1. Notificar a operaciones y congelar entrenamiento.
-2. Crear backup `tar.gz` de `datasets/` y `models/`.
-3. Actualizar código (Git pull + `pip install -r requirements.txt`).
-4. Validar `/health` y realizar `infer` de prueba.
-5. Actualizar GUI si hay cambios en `model_version`.
-
-## 6. Integración con GUI
-- Confirmar que la GUI usa URLs correctas y envía API Key.
-- Validar handshake `/health` al arrancar (se muestra en barra de estado).
-- La GUI reintenta llamadas con backoff (ver `docs/GUI.md`).
-
-## 7. Troubleshooting rápido
-- `503` en `/health`: verificar que el modelo haya cargado (logs backend).
-- `409` en `/fit_ok`: mezcla de `mm_per_px`. Revisar calibración cámara.
-- `428` en `/infer`: falta calibración. Ejecutar `POST /calibrate_ng`.
-
-## 8. Referencias
-- `docker/README.md`: instrucciones detalladas de contenedores.
-- `docs/SETUP.md`: configuración local (CUDA, drivers, .NET).
-- `docs/TROUBLESHOOTING.md`: casos avanzados.
+## Verification checklist
+1. Start the backend and run `curl http://<host>:8000/health`.
+2. From the GUI, open **Tools → Health** (or whichever control is bound to `RefreshHealthCommand`). The status bar shows the backend model and device.
+3. Run a manual inference on a known OK sample and confirm `gui.log` contains `[eval] done ... OK`.
+4. Optional: run a small batch folder to confirm anchor alignment and dataset counters behave as expected.

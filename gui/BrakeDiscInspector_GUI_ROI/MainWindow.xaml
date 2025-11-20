@@ -25,6 +25,16 @@
       <Setter Property="Margin" Value="8,0,0,0"/>
       <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
     </Style>
+    <Style TargetType="GroupBox">
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="#2A2A2E"/>
+      <Setter Property="Background" Value="#121214"/>
+      <Setter Property="Padding" Value="8"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
   </Window.Resources>
 
   <Grid x:Name="RootGrid">
@@ -37,9 +47,9 @@
       <ColumnDefinition x:Name="SidePanelColumn" Width="840" MinWidth="840" />
     </Grid.ColumnDefinitions>
 
-    <!-- ===== Tabs (left) ===== -->
-    <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Left">
-      <TabItem x:Name="TabSetupInspect" Header="Preparación &amp; Inspección">
+    <!-- ===== Tabs (top) ===== -->
+    <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
+      <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
@@ -47,7 +57,7 @@
                       Content="Load Picture"
                       Margin="0,0,8,0"
                       MinWidth="120"
-                      ToolTip="Abrir una imagen"
+                      ToolTip="Open an image"
                       Click="BtnLoadImage_Click"/>
               <Button x:Name="BtnLoadLayout"
                       Content="Load Layout"
@@ -60,150 +70,159 @@
                       Click="BtnSaveLayout_Click"/>
             </StackPanel>
 
-            <GroupBox x:Name="Master1EditorGroup" Header="Master 1">
-              <StackPanel Margin="0,8,0,0">
-                <Grid Margin="0,0,0,8">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Text="Tipo:" Grid.Column="0" VerticalAlignment="Center"/>
-                  <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" Margin="0,4,0,0"/>
-                </Grid>
+            <Grid Margin="0,0,0,12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
 
-                <Grid Margin="0,0,0,8">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Text="Forma:" Grid.Column="0" VerticalAlignment="Center"/>
-                  <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Margin="0,4,0,0">
-                    <ComboBoxItem Content="Rectángulo"/>
-                    <ComboBoxItem Content="Círculo"/>
-                    <ComboBoxItem Content="Annulus"/>
-                  </ComboBox>
-                </Grid>
+              <GroupBox x:Name="Master1EditorGroup" Header="Master 1" Grid.Column="0" Margin="0,0,10,0">
+                <StackPanel Margin="0,8,0,0">
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="110"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Type:" Grid.Column="0" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" Margin="0,4,0,0"/>
+                  </Grid>
 
-                <WrapPanel>
-                  <Button x:Name="BtnSaveMaster"
-                          Content="Save Master 1"
-                          Margin="0,0,8,0"
-                          MinWidth="120"
-                          Click="BtnSaveMaster_Click"/>
-                  <Button x:Name="BtnEditM1"
-                          Content="Editar Master 1"
-                          MinWidth="120"
-                          Click="BtnEditM1_Click"/>
-                </WrapPanel>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="110"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Shape:" Grid.Column="0" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Margin="0,4,0,0">
+                      <ComboBoxItem Content="Rectangle"/>
+                      <ComboBoxItem Content="Circle"/>
+                      <ComboBoxItem Content="Annulus"/>
+                    </ComboBox>
+                  </Grid>
 
-                <Border Margin="0,12,0,0" Background="#11000000" Padding="8">
-                  <TextBlock x:Name="TxtMasterHints" TextWrapping="Wrap"/>
-                </Border>
-              </StackPanel>
-            </GroupBox>
+                  <WrapPanel>
+                    <Button x:Name="BtnSaveMaster"
+                            Content="Save Master 1"
+                            Margin="0,0,8,0"
+                            Click="BtnSaveMaster_Click"/>
+                    <Button x:Name="BtnEditM1"
+                            Content="Edit Master 1"
+                            Click="BtnEditM1_Click"/>
+                  </WrapPanel>
 
-            <GroupBox Header="Master 2" Margin="0,10,0,0">
-              <StackPanel Margin="0,8,0,0">
-                <Grid Margin="0,0,0,8">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Text="Tipo:" Grid.Column="0" VerticalAlignment="Center"/>
-                  <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="0,4,0,0"/>
-                </Grid>
+                  <Border Margin="0,12,0,0" Background="#11000000" Padding="8">
+                    <TextBlock x:Name="TxtMasterHints" TextWrapping="Wrap"/>
+                  </Border>
+                </StackPanel>
+              </GroupBox>
 
-                <Grid Margin="0,0,0,8">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="120"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Text="Forma:" Grid.Column="0" VerticalAlignment="Center"/>
-                  <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Margin="0,4,0,0">
-                    <ComboBoxItem Content="Rectángulo"/>
-                    <ComboBoxItem Content="Círculo"/>
-                    <ComboBoxItem Content="Annulus"/>
-                  </ComboBox>
-                </Grid>
+              <GroupBox Header="Master 2" Grid.Column="1">
+                <StackPanel Margin="0,8,0,0">
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="110"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Type:" Grid.Column="0" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="0,4,0,0"/>
+                  </Grid>
 
-                <WrapPanel>
-                  <Button Content="Save Master 2"
-                          Margin="0,0,8,0"
-                          MinWidth="120"
-                          Click="BtnSaveMaster_Click"/>
-                  <Button x:Name="BtnEditM2"
-                          Content="Editar Master 2"
-                          MinWidth="120"
-                          Click="BtnEditM2_Click"/>
-                </WrapPanel>
-              </StackPanel>
-            </GroupBox>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="110"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Shape:" Grid.Column="0" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Margin="0,4,0,0">
+                      <ComboBoxItem Content="Rectangle"/>
+                      <ComboBoxItem Content="Circle"/>
+                      <ComboBoxItem Content="Annulus"/>
+                    </ComboBox>
+                  </Grid>
+
+                  <WrapPanel>
+                    <Button Content="Save Master 2"
+                            Margin="0,0,8,0"
+                            Click="BtnSaveMaster_Click"/>
+                    <Button x:Name="BtnEditM2"
+                            Content="Edit Master 2"
+                            Click="BtnEditM2_Click"/>
+                  </WrapPanel>
+                </StackPanel>
+              </GroupBox>
+            </Grid>
 
             <WrapPanel Margin="0,12,0,12">
               <Button x:Name="BtnClearCanvas"
-                      Content="Borrar Canvas"
-                      MinWidth="150"
+                      Content="Clear Canvas"
                       Click="BtnClearCanvas_Click"/>
             </WrapPanel>
 
-            <GroupBox Header="Analyze options" Margin="0,0,0,12">
-              <StackPanel Margin="8,4,0,0">
-                <StackPanel Orientation="Horizontal">
-                  <CheckBox x:Name="ChkScaleLock"
-                            Content="Lock scale"
-                            IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
-                  <CheckBox x:Name="ChkUseLocalMatcher"
-                            Content="Use local matcher"
-                            Margin="16,0,0,0"
-                            ToolTip="Forzar matcher local"
-                            IsChecked="True"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+              <GroupBox Header="Analyze Options" Margin="0,0,10,0" Width="410">
+                <StackPanel Margin="8,4,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <CheckBox x:Name="ChkScaleLock"
+                              Content="Lock scale"
+                              IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
+                    <CheckBox x:Name="ChkUseLocalMatcher"
+                              Content="Use local matcher"
+                              Margin="16,0,0,0"
+                              ToolTip="Force local matcher"
+                              IsChecked="True"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Text="Position tolerance (px)"
+                               Width="170"
+                               VerticalAlignment="Center"/>
+                    <TextBox Width="80"
+                             Margin="0,0,8,0"
+                             Text="{Binding AnalyzePosTolerancePx, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <TextBlock Text="Angle tolerance (deg)"
+                               Width="170"
+                               VerticalAlignment="Center"/>
+                    <TextBox Width="80"
+                             Text="{Binding AnalyzeAngToleranceDeg, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"/>
+                  </StackPanel>
+                  <Button x:Name="BtnAnalyzeMaster"
+                          Content="Force Analyze Master"
+                          Margin="0,12,0,0"
+                          Click="BtnAnalyzeMaster_Click"/>
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                  <TextBlock Text="Position tolerance (px)"
-                             Width="180"
-                             VerticalAlignment="Center"/>
-                  <TextBox Width="80"
-                           Margin="0,0,8,0"
-                           Text="{Binding AnalyzePosTolerancePx, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                  <TextBlock Text="Angle tolerance (deg)"
-                             Width="180"
-                             VerticalAlignment="Center"/>
-                  <TextBox Width="80"
-                           Text="{Binding AnalyzeAngToleranceDeg, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"/>
-                </StackPanel>
-                <Button x:Name="BtnAnalyzeMaster"
-                        Content="Force Analyze Master"
-                        Margin="0,12,0,0"
-                        MinWidth="160"
-                        Click="BtnAnalyzeMaster_Click"/>
-              </StackPanel>
-            </GroupBox>
+              </GroupBox>
 
-            <TextBlock Text="Feature (sin geom):"/>
-            <ComboBox x:Name="ComboFeature" Margin="0,4,0,8">
-              <ComboBoxItem Content="auto"/>
-              <ComboBoxItem Content="sift"/>
-              <ComboBoxItem Content="orb"/>
-              <ComboBoxItem Content="tm_rot"/>
-            </ComboBox>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-              <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-              <TextBox x:Name="TxtThr" Width="60" Margin="6,0,16,0" Text="85"/>
-              <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
-              <TextBox x:Name="TxtRot" Width="60" Margin="6,0,16,0" Text="10"/>
-              <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
-              <TextBox x:Name="TxtSMin" Width="60" Margin="6,0,16,0" Text="0.95"/>
-              <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
-              <TextBox x:Name="TxtSMax" Width="60" Margin="6,0,0,0" Text="1.05"/>
+              <GroupBox Header="Feature Options" Width="410">
+                <StackPanel Margin="8,4,0,0">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="ComboFeature" Width="140">
+                      <ComboBoxItem Content="auto"/>
+                      <ComboBoxItem Content="sift"/>
+                      <ComboBoxItem Content="orb"/>
+                      <ComboBoxItem Content="tm_rot"/>
+                    </ComboBox>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
+                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtThr" Width="60" Margin="6,0,16,0" Text="85"/>
+                    <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtRot" Width="60" Margin="6,0,16,0" Text="10"/>
+                    <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtSMin" Width="60" Margin="6,0,16,0" Text="0.95"/>
+                    <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
+                    <TextBox x:Name="TxtSMax" Width="60" Margin="6,0,0,0" Text="1.05"/>
+                  </StackPanel>
+                  <WrapPanel>
+                    <Button x:Name="BtnSavePreset" Content="Save Preset" Click="BtnSavePreset_Click" Margin="0,0,8,0"/>
+                  </WrapPanel>
+                </StackPanel>
+              </GroupBox>
             </StackPanel>
-            <WrapPanel>
-              <Button x:Name="BtnSavePreset" Content="Guardar Preset" Click="BtnSavePreset_Click" Margin="0,0,8,0"/>
-            </WrapPanel>
 
             <TextBlock x:Name="ResultLabel"
-                       Text="Sin resultado"
+                       Text="No result"
                        FontSize="16"
                        FontWeight="Bold"
                        Foreground="#ddd"
@@ -211,34 +230,33 @@
 
             <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
               <StackPanel Margin="8,4,0,0">
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                  <TextBlock Text="Inspection 1" Width="120" VerticalAlignment="Center"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,0,0,4">
+                  <TextBlock Text="Inspection 1" Width="100" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection1"
-                            Width="130"
+                            Width="100"
                             Tag="1"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[0].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection1"
                           Margin="8,0,0,0"
-                          MinWidth="90"
                           MinHeight="28"
                           Tag="1"
                           Click="BtnCreateInspection_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                        <TextBlock Text="Create ROI 1" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
                   <Button x:Name="BtnSaveInspection1"
                           Margin="8,0,0,0"
-                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection1_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Inspection 1" FontWeight="SemiBold"/>
+                        <TextBlock Text="Save 1" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
@@ -267,36 +285,35 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                </StackPanel>
+                </WrapPanel>
 
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
-                  <TextBlock Text="Inspection 2" Width="120" VerticalAlignment="Center"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,4,0,4">
+                  <TextBlock Text="Inspection 2" Width="100" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection2"
-                            Width="130"
+                            Width="100"
                             Tag="2"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[1].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection2"
                           Margin="8,0,0,0"
-                          MinWidth="90"
                           MinHeight="28"
                           Tag="2"
                           Click="BtnCreateInspection_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                        <TextBlock Text="Create ROI 2" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
                   <Button x:Name="BtnSaveInspection2"
                           Margin="8,0,0,0"
-                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection2_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Inspection 2" FontWeight="SemiBold"/>
+                        <TextBlock Text="Save 2" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
@@ -325,36 +342,35 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                </StackPanel>
+                </WrapPanel>
 
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
-                  <TextBlock Text="Inspection 3" Width="120" VerticalAlignment="Center"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,4,0,4">
+                  <TextBlock Text="Inspection 3" Width="100" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection3"
-                            Width="130"
+                            Width="100"
                             Tag="3"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[2].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection3"
                           Margin="8,0,0,0"
-                          MinWidth="90"
                           MinHeight="28"
                           Tag="3"
                           Click="BtnCreateInspection_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                        <TextBlock Text="Create ROI 3" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
                   <Button x:Name="BtnSaveInspection3"
                           Margin="8,0,0,0"
-                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection3_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Inspection 3" FontWeight="SemiBold"/>
+                        <TextBlock Text="Save 3" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
@@ -383,36 +399,35 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                </StackPanel>
+                </WrapPanel>
 
-                <StackPanel Orientation="Horizontal" Margin="0,4,0,12">
-                  <TextBlock Text="Inspection 4" Width="120" VerticalAlignment="Center"/>
+                <WrapPanel Orientation="Horizontal" Margin="0,4,0,12">
+                  <TextBlock Text="Inspection 4" Width="100" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection4"
-                            Width="130"
+                            Width="100"
                             Tag="4"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[3].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection4"
                           Margin="8,0,0,0"
-                          MinWidth="90"
                           MinHeight="28"
                           Tag="4"
                           Click="BtnCreateInspection_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Create ROI" FontWeight="SemiBold"/>
+                        <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
+                        <TextBlock Text="Create ROI 4" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
                   <Button x:Name="BtnSaveInspection4"
                           Margin="8,0,0,0"
-                          MinWidth="110"
                           MinHeight="28"
                           Click="BtnSaveInspection4_Click">
                     <Button.Content>
                       <StackPanel Orientation="Horizontal" Style="{StaticResource ForegroundWhiteStyle}">
-                        <TextBlock Text="Inspection 4" FontWeight="SemiBold"/>
+                        <TextBlock Text="Save 4" FontWeight="SemiBold"/>
                       </StackPanel>
                     </Button.Content>
                   </Button>
@@ -441,50 +456,12 @@
                       </Style>
                     </Button.Style>
                   </Button>
-                </StackPanel>
+                </WrapPanel>
 
                 <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
               </StackPanel>
             </GroupBox>
 
-            <GroupBox Header="Backend" Margin="0,12,0,0" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
-              <Grid Margin="8">
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto"/>
-                  <ColumnDefinition Width="*"/>
-                  <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Text="Role" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Margin="8,0" Width="160"
-                         Text="{Binding RoleId, UpdateSourceTrigger=PropertyChanged}"/>
-
-                <TextBlock Grid.Row="1" Text="ROI" VerticalAlignment="Center"/>
-                <TextBox Grid.Row="1" Grid.Column="1" Margin="8,4,8,0" Width="160"
-                         Text="{Binding RoiId, UpdateSourceTrigger=PropertyChanged}"/>
-
-                <TextBlock Grid.Row="2" Text="mm/px" VerticalAlignment="Center"/>
-                <TextBox Grid.Row="2" Grid.Column="1" Margin="8,4,8,0" Width="120"
-                         Text="{Binding MmPerPx, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F4}}"/>
-
-                <TextBlock Grid.Row="3" Text="Backend" VerticalAlignment="Center"/>
-                <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="8,4,8,0">
-                  <TextBox Width="260" Margin="0,0,8,0"
-                           Text="{Binding BackendBaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
-                  <Button Content="Health" Padding="12,4"
-                          Command="{Binding RefreshHealthCommand}"/>
-                </StackPanel>
-
-                <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,4,0,0"
-                           Text="{Binding HealthSummary}" TextWrapping="Wrap" Width="200"/>
-              </Grid>
-            </GroupBox>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
@@ -501,10 +478,14 @@
             <TextBox Width="420"
                      IsReadOnly="True"
                      Text="{Binding BatchFolder, UpdateSourceTrigger=PropertyChanged}"/>
-            <Button Content="Browse..."
-                    Margin="8,0,0,0"
+            <Button Margin="8,0,0,0"
                     Padding="12,4"
-                    Command="{Binding BrowseBatchFolderCommand}"/>
+                    Command="{Binding BrowseBatchFolderCommand}">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" Margin="0,0,6,0"/>
+                <TextBlock Text="Browse"/>
+              </StackPanel>
+            </Button>
 
             <!-- ▶ Play = Start/Resume -->
             <Button Style="{StaticResource IconOnlyButton}"
@@ -542,7 +523,7 @@
             <TextBlock Margin="0,8,0,8"
                        Text="{Binding HeatmapInfo}"/>
 
-            <TextBlock Text="Delay por ROI (segundos)"/>
+            <TextBlock Text="Delay per ROI (seconds)"/>
             <Slider Minimum="0"
                     Maximum="10"
                     TickFrequency="0.5"

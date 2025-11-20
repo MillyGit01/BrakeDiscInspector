@@ -80,20 +80,20 @@
                 <StackPanel Margin="0,8,0,0">
                   <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="90"/>
+                      <ColumnDefinition Width="80"/>
                       <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="Type:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" Margin="0,4,0,0" Width="170"/>
+                    <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" Margin="0,4,0,0" Width="150"/>
                   </Grid>
 
                   <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="90"/>
+                      <ColumnDefinition Width="80"/>
                       <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="Shape:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Margin="0,4,0,0" Width="170">
+                    <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Margin="0,4,0,0" Width="150">
                       <ComboBoxItem Content="Rectangle"/>
                       <ComboBoxItem Content="Circle"/>
                       <ComboBoxItem Content="Annulus"/>
@@ -103,7 +103,7 @@
                   <WrapPanel>
                     <Button x:Name="BtnSaveMaster"
                             Content="Save Master 1"
-                            Margin="0,0,6,0"
+                            Margin="0,0,4,0"
                             Click="BtnSaveMaster_Click"/>
                     <Button x:Name="BtnEditM1"
                             Content="Edit Master 1"
@@ -120,20 +120,20 @@
                 <StackPanel Margin="0,8,0,0">
                   <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="90"/>
+                      <ColumnDefinition Width="80"/>
                       <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="Type:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="0,4,0,0" Width="170"/>
+                    <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="0,4,0,0" Width="150"/>
                   </Grid>
 
                   <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="90"/>
+                      <ColumnDefinition Width="80"/>
                       <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="Shape:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Margin="0,4,0,0" Width="170">
+                    <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Margin="0,4,0,0" Width="150">
                       <ComboBoxItem Content="Rectangle"/>
                       <ComboBoxItem Content="Circle"/>
                       <ComboBoxItem Content="Annulus"/>
@@ -142,7 +142,7 @@
 
                   <WrapPanel>
                     <Button Content="Save Master 2"
-                            Margin="0,0,6,0"
+                            Margin="0,0,4,0"
                             Click="BtnSaveMaster_Click"/>
                     <Button x:Name="BtnEditM2"
                             Content="Edit Master 2"
@@ -159,7 +159,7 @@
             </WrapPanel>
 
             <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-              <GroupBox Header="Analyze Options" Margin="0,0,10,0" Width="270">
+              <GroupBox Header="Analyze Options" Margin="0,0,8,0" Width="260">
                 <StackPanel Margin="8,4,0,0">
                   <StackPanel Orientation="Horizontal">
                     <CheckBox x:Name="ChkScaleLock"
@@ -167,13 +167,13 @@
                               IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
                     <CheckBox x:Name="ChkUseLocalMatcher"
                               Content="Use local matcher"
-                              Margin="12,0,0,0"
+                              Margin="8,0,0,0"
                               ToolTip="Force local matcher"
                               IsChecked="True"/>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                     <TextBlock Text="Position tolerance (px)"
-                               Width="140"
+                               Width="120"
                                VerticalAlignment="Center"/>
                     <TextBox Width="70"
                              Margin="0,0,8,0"
@@ -181,7 +181,7 @@
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                     <TextBlock Text="Angle tolerance (deg)"
-                               Width="140"
+                               Width="120"
                                VerticalAlignment="Center"/>
                     <TextBox Width="70"
                              Text="{Binding AnalyzeAngToleranceDeg, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F2}}"/>
@@ -193,11 +193,11 @@
                 </StackPanel>
               </GroupBox>
 
-              <GroupBox Header="Feature Options" Width="270">
+              <GroupBox Header="Feature Options" Width="260">
                 <StackPanel Margin="8,4,0,0">
                   <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="ComboFeature" Width="120">
+                    <ComboBox x:Name="ComboFeature" Width="110">
                       <ComboBoxItem Content="auto"/>
                       <ComboBoxItem Content="sift"/>
                       <ComboBoxItem Content="orb"/>
@@ -206,13 +206,13 @@
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
                     <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtThr" Width="60" Margin="6,0,10,0" Text="85"/>
+                    <TextBox x:Name="TxtThr" Width="60" Margin="4,0,8,0" Text="85"/>
                     <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtRot" Width="60" Margin="6,0,10,0" Text="10"/>
+                    <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
                     <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtSMin" Width="60" Margin="6,0,10,0" Text="0.95"/>
+                    <TextBox x:Name="TxtSMin" Width="60" Margin="4,0,8,0" Text="0.95"/>
                     <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtSMax" Width="60" Margin="6,0,0,0" Text="1.05"/>
+                    <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
                   </StackPanel>
                   <WrapPanel>
                     <Button x:Name="BtnSavePreset" Content="Save Preset" Click="BtnSavePreset_Click" Margin="0,0,8,0"/>
@@ -233,32 +233,32 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection1"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Tag="1"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 1"/>
                   <Button x:Name="BtnSaveInspection1"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Click="BtnSaveInspection1_Click"
                           Content="Save 1"/>
                   <Button x:Name="BtnAddOkInspection1"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection1}"/>
                   <Button x:Name="BtnAddNgInspection1"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection1}"/>
                   <Button x:Name="BtnRemoveInspection1"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Remove 1"
                           Click="BtnRemoveInspection1_Click">
                     <Button.Style>
@@ -284,32 +284,32 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection2"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Tag="2"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 2"/>
                   <Button x:Name="BtnSaveInspection2"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Click="BtnSaveInspection2_Click"
                           Content="Save 2"/>
                   <Button x:Name="BtnAddOkInspection2"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection2}"/>
                   <Button x:Name="BtnAddNgInspection2"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection2}"/>
                   <Button x:Name="BtnRemoveInspection2"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Remove 2"
                           Click="BtnRemoveInspection2_Click">
                     <Button.Style>
@@ -335,32 +335,32 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection3"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Tag="3"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 3"/>
                   <Button x:Name="BtnSaveInspection3"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Click="BtnSaveInspection3_Click"
                           Content="Save 3"/>
                   <Button x:Name="BtnAddOkInspection3"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection3}"/>
                   <Button x:Name="BtnAddNgInspection3"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection3}"/>
                   <Button x:Name="BtnRemoveInspection3"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Remove 3"
                           Click="BtnRemoveInspection3_Click">
                     <Button.Style>
@@ -386,32 +386,32 @@
                             SelectionChanged="InspectionShape_SelectionChanged"/>
                   <Button x:Name="BtnCreateInspection4"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Tag="4"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 4"/>
                   <Button x:Name="BtnSaveInspection4"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           MinHeight="26"
                           Click="BtnSaveInspection4_Click"
                           Content="Save 4"/>
                   <Button x:Name="BtnAddOkInspection4"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection4}"/>
                   <Button x:Name="BtnAddNgInspection4"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                           CommandParameter="{Binding Inspection4}"/>
                   <Button x:Name="BtnRemoveInspection4"
                           Margin="4,0,0,0"
-                          Padding="6,2"
+                          Padding="4,2"
                           Content="Remove 4"
                           Click="BtnRemoveInspection4_Click">
                     <Button.Style>

@@ -887,6 +887,12 @@
                         Content="Heatmap"
                         IsChecked="True"
                         Margin="0,0,8,0"/>
+              <TextBlock x:Name="ResultLabel"
+                         Text="Result: --"
+                         Foreground="LightGreen"
+                         FontFamily="Segoe UI"
+                         FontWeight="SemiBold"
+                         Margin="0,0,8,0"/>
               <TextBlock x:Name="HeatmapScaleLabel"
                          Text="Heatmap Scale: 1.00"
                          Foreground="#39FF14"

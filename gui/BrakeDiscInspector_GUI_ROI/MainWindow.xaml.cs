@@ -6730,6 +6730,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Error($"[BOOT] MainWindow_Loaded: RefreshHealthCommand FAILED", ex); // CODEX: string interpolation compatibility.
             }
 
+            InitComms();
+
             RefreshCreateButtonsEnabled();
             GuiLog.Info($"[BOOT] MainWindow_Loaded EXIT"); // CODEX: string interpolation compatibility.
         }

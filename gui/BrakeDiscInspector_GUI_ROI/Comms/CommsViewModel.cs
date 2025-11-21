@@ -54,20 +54,27 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
     public sealed class CommsViewModel : INotifyPropertyChanged, IDisposable
     {
-        private readonly IPlcClient _client;
+        private readonly Func<PlcConfig, IPlcClient> _clientFactory;
+        private IPlcClient _client;
         private readonly SynchronizationContext? _uiContext;
         private CancellationTokenSource? _pollingCts;
         private Task? _pollingTask;
         private string _plcIpAddress;
         private string _connectionStatus = "Disconnected";
 
-        public CommsViewModel(IPlcClient client)
+        public CommsViewModel(PlcConfig config, Func<PlcConfig, IPlcClient> clientFactory)
         {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+
+            _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
+            _client = _clientFactory(config);
             _uiContext = SynchronizationContext.Current;
-            _plcIpAddress = client.Config.IpAddress;
-            Rack = client.Config.Rack;
-            Slot = client.Config.Slot;
+            _plcIpAddress = config.IpAddress;
+            Rack = config.Rack;
+            Slot = config.Slot;
 
             Inputs = new ObservableCollection<PlcIoPointViewModel>();
             Outputs = new ObservableCollection<PlcIoPointViewModel>();
@@ -137,6 +144,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
         public async Task ConnectAsync()
         {
+            EnsureClientMatchesConfig();
+
             if (_client.IsConnected)
             {
                 ConnectionStatus = "Connected";
@@ -334,6 +343,22 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             {
                 Apply();
             }
+        }
+
+        private void EnsureClientMatchesConfig()
+        {
+            var desired = new PlcConfig(PlcIpAddress, Rack, Slot);
+
+            if (_client.Config.IpAddress == desired.IpAddress &&
+                _client.Config.Rack == desired.Rack &&
+                _client.Config.Slot == desired.Slot)
+            {
+                return;
+            }
+
+            StopPolling();
+            _client.Dispose();
+            _client = _clientFactory(desired);
         }
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

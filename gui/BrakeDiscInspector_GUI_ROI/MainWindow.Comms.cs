@@ -13,8 +13,7 @@ namespace BrakeDiscInspector_GUI_ROI
             try
             {
                 var config = new PlcConfig("192.168.0.10", 0, 1);
-                var client = new S7PlcClient(config);
-                _commsVm = new CommsViewModel(client);
+                _commsVm = new CommsViewModel(config, cfg => new S7PlcClient(cfg));
 
                 CommsRoot.DataContext = _commsVm;
             }

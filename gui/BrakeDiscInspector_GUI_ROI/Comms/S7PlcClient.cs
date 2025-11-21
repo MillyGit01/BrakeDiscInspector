@@ -156,7 +156,10 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 try
                 {
                     _plc.Close();
-                    _plc.Dispose();
+                    if (_plc is IDisposable disposablePlc)
+                    {
+                        disposablePlc.Dispose();
+                    }
                 }
                 catch
                 {

@@ -2,6 +2,7 @@
 using Microsoft.Win32;
 using OpenCvSharp;
 using OpenCvSharp.WpfExtensions;
+using BrakeDiscInspector_GUI_ROI.LayoutManagement;
 using BrakeDiscInspector_GUI_ROI.Workflow;
 using BrakeDiscInspector_GUI_ROI.Overlay;
 using BrakeDiscInspector_GUI_ROI.Util;
@@ -66,7 +67,7 @@ using WInt32Rect = System.Windows.Int32Rect; // CODEX: alias for WPF Int32Rect.
 
 namespace BrakeDiscInspector_GUI_ROI
 {
-    public partial class MainWindow : System.Windows.Window, INotifyPropertyChanged
+    public partial class MainWindow : System.Windows.Window, INotifyPropertyChanged, ILayoutHost
     {
         static MainWindow()
         {
@@ -91,6 +92,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _isFirstImageForCurrentKey = true;
         private bool _inspectionBaselineRestorePending;
         private volatile bool _suspendManualOverlayInvalidations;
+        private bool _layoutAutosaveEnabled;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
@@ -635,6 +637,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private Preset _preset = new();
         private MasterLayout _layout = new();     // inicio en blanco
 
+        public MasterLayout? CurrentLayout => _layout;
+
         // RESULTADO PLAN 12: La GUI canoniza el ROI (G1).
         private readonly AppConfig _appConfig = AppConfigLoader.Load();
         private bool _isInitializingOptions;
@@ -672,6 +676,21 @@ namespace BrakeDiscInspector_GUI_ROI
 
         // Expose layout to XAML bindings (ItemsControl -> Layout.InspectionRois)
         public MasterLayout Layout => _layout;
+
+        public LayoutProfilesViewModel? LayoutProfiles { get; private set; }
+
+        public bool LayoutAutosaveEnabled
+        {
+            get => _layoutAutosaveEnabled;
+            set
+            {
+                if (_layoutAutosaveEnabled != value)
+                {
+                    _layoutAutosaveEnabled = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         // Available model keys (stub: will be replaced by ModelRegistry keys)
         public System.Collections.Generic.IReadOnlyList<string> AvailableModels { get; }
@@ -920,6 +939,33 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private bool TryAutosaveLayout(string context)
             => TrySaveLayoutGuarded("[autosave]", context, requireMasters: true, out _);
+
+        public void ApplyLayout(MasterLayout? layout, string sourceContext)
+        {
+            ApplyLayoutSnapshot(layout, sourceContext);
+        }
+
+        private void ApplyLayoutSnapshot(MasterLayout? layout, string sourceContext)
+        {
+            if (layout == null)
+            {
+                AppendLog($"[layout] ApplyLayout skipped ({sourceContext}): layout is null");
+                return;
+            }
+
+            CancelMasterEditing(redraw: false);
+
+            _layout = layout;
+
+            InitializeOptionsFromConfig();
+            _workflowViewModel?.SetMasterLayout(_layout);
+            _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
+
+            UpdateWizardState();
+            RequestRoiVisibilityRefresh();
+            RedrawOverlaySafe();
+            UpdateRoiHud();
+        }
 
         private void RescaleInspectionRoisToNewImageSize(double newW, double newH)
         {
@@ -2634,6 +2680,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 var (layout, _) = MasterLayoutManager.LoadOrNew(_preset);
                 _layout = layout;
+
+                var layoutStore = new FileLayoutProfileStore(_preset);
+                LayoutProfiles = new LayoutProfilesViewModel(layoutStore, this);
+                OnPropertyChanged(nameof(LayoutProfiles));
+                LayoutProfiles.RefreshCommand.Execute(null);
                 ApplyInspectionPresetToUI(_preset);
                 InitializeOptionsFromConfig();
 
@@ -7738,7 +7789,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[drag] end");
                 CanvasROI.ReleaseMouseCapture();
                 _dragShape = null;
-                TryAutosaveLayout("drag end");
+                if (LayoutAutosaveEnabled)
+                {
+                    TryAutosaveLayout("drag end");
+                }
                 e.Handled = true;
                 return;
             }
@@ -7751,7 +7805,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 EndDraw(_currentShape, _p0, p1);
                 CanvasROI.ReleaseMouseCapture();
                 AppendLog($"[mouse] Up   @ {p1.X:0},{p1.Y:0}");
-                TryAutosaveLayout("draw end");
+                if (LayoutAutosaveEnabled)
+                {
+                    TryAutosaveLayout("draw end");
+                }
                 e.Handled = true;
                 return;
             }
@@ -10056,7 +10113,10 @@ namespace BrakeDiscInspector_GUI_ROI
         // ====== Overlay persistente + Adorner ======
         private void OnRoiChanged(Shape shape, RoiModel roi)
         {
-            TryAutosaveLayout("adorner change");
+            if (LayoutAutosaveEnabled)
+            {
+                TryAutosaveLayout("adorner change");
+            }
             AppendLog($"[adorner] ROI actualizado: {roi.Role} => {DescribeRoi(roi)}");
         }
 
@@ -10491,12 +10551,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 using var layoutIo = ViewModel?.BeginLayoutIo("load-layout");
 
                 var loaded = MasterLayoutManager.LoadFromFile(dlg.FileName);
-                _layout = loaded ?? new MasterLayout();
-
-                // minimal refresh path (do not touch resize/heatmap logic)
-                UpdateWizardState();
-                RequestRoiVisibilityRefresh();
-                RedrawOverlaySafe();
+                ApplyLayout(loaded ?? new MasterLayout(), "manual-load");
                 Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
             }
             catch (Exception ex)

@@ -7690,10 +7690,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void Canvas_MouseLeftButtonDownEx(object sender, MouseButtonEventArgs e)
         {
+            if (CanvasROI == null)
+            {
+                return;
+            }
+
             var pos = e.GetPosition(CanvasROI);
             var fe = e.OriginalSource as FrameworkElement;
             var tagType = fe?.Tag?.GetType().Name ?? "null";
-            AppendLog($"[mouse-down] srcType={fe?.GetType().Name ?? "null"} tagType={tagType} state={_state} pos=({pos.X:F1},{pos.Y:F1})");
+            AppendLog($"[mouse-down] srcType={fe?.GetType().Name ?? "null"} tagType={tagType} handled={e.Handled} pos=({pos.X:F1},{pos.Y:F1})");
 
             var over = System.Windows.Input.Mouse.DirectlyOver;
             var handledBefore = e.Handled;
@@ -7718,21 +7723,10 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // 2) Arrastre de ROI existente
-            var hitShape = FindRoiShapeFromOriginalSource(e.OriginalSource);
-            if (hitShape != null)
+            var roiElement = FindRoiElementFromSource(e.OriginalSource);
+            if (roiElement is Shape hitShape)
             {
-                AppendLog("[mouse-down] hit RoiModel shape -> start drag candidate");
-
-                _dragShape = hitShape;
-                _dragStart = pos;
-                _dragOrigX = Canvas.GetLeft(hitShape);
-                _dragOrigY = Canvas.GetTop(hitShape);
-                if (double.IsNaN(_dragOrigX)) _dragOrigX = 0;
-                if (double.IsNaN(_dragOrigY)) _dragOrigY = 0;
-
-                CanvasROI.CaptureMouse();
-                AppendLog($"[drag] start shapeType={hitShape.GetType().Name} pos=({_dragOrigX:F1},{_dragOrigY:F1}) state={_state}");
-                e.Handled = true;
+                StartRoiDrag(hitShape, pos, e);
                 return;
             }
 
@@ -7771,7 +7765,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void Canvas_MouseMoveEx(object sender, System.Windows.Input.MouseEventArgs e)
         {
             // ARRASTRE activo
-            if (_dragShape != null)
+            if (_dragShape != null && CanvasROI != null)
             {
                 var p = e.GetPosition(CanvasROI);
                 var dx = p.X - _dragStart.X;
@@ -7809,7 +7803,7 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog($"[canvas+] Up   HB={handledBefore} src={e.OriginalSource?.GetType().Name}, over={over?.GetType().Name}");
 
             // FIN ARRASTRE
-            if (_dragShape != null)
+            if (_dragShape != null && CanvasROI != null)
             {
                 var left = Canvas.GetLeft(_dragShape);
                 var top = Canvas.GetTop(_dragShape);
@@ -7819,6 +7813,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (LayoutAutosaveEnabled)
                 {
                     TryAutosaveLayout("drag end");
+                }
+                else
+                {
+                    TryPersistLayout();
                 }
                 e.Handled = true;
                 return;
@@ -7852,7 +7850,26 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog($"[mouse-up] no drag; isDrawing={_isDrawing} state={_state}");
         }
 
-        private Shape? FindRoiShapeFromOriginalSource(object? original)
+        private void StartRoiDrag(Shape roiElement, System.Windows.Point posCanvas, MouseButtonEventArgs e)
+        {
+            if (CanvasROI == null)
+            {
+                return;
+            }
+
+            _dragShape = roiElement;
+            _dragStart = posCanvas;
+            _dragOrigX = Canvas.GetLeft(roiElement);
+            _dragOrigY = Canvas.GetTop(roiElement);
+            if (double.IsNaN(_dragOrigX)) _dragOrigX = 0;
+            if (double.IsNaN(_dragOrigY)) _dragOrigY = 0;
+
+            CanvasROI.CaptureMouse();
+            AppendLog($"[drag] start elemType={roiElement.GetType().Name} pos=({_dragOrigX:F1},{_dragOrigY:F1}) state={_state}");
+            e.Handled = true;
+        }
+
+        private FrameworkElement? FindRoiElementFromSource(object? original)
         {
             if (original is not DependencyObject dep)
             {
@@ -7861,9 +7878,29 @@ namespace BrakeDiscInspector_GUI_ROI
 
             while (dep != null)
             {
-                if (dep is Shape shape && shape.Tag is RoiModel)
+                if (dep is FrameworkElement fe)
                 {
-                    return shape;
+                    if (fe.Tag is RoiModel || fe.DataContext is RoiModel)
+                    {
+                        if (fe is Shape)
+                        {
+                            return fe;
+                        }
+
+                        // Busca un ancestro que sea Shape para moverlo.
+                        var ancestor = VisualTreeHelper.GetParent(fe);
+                        while (ancestor != null)
+                        {
+                            if (ancestor is Shape ancestorShape && (ancestorShape.Tag is RoiModel || ancestorShape.DataContext is RoiModel))
+                            {
+                                return ancestorShape;
+                            }
+
+                            ancestor = VisualTreeHelper.GetParent(ancestor);
+                        }
+
+                        return fe;
+                    }
                 }
 
                 dep = VisualTreeHelper.GetParent(dep);

@@ -100,9 +100,9 @@
                   <Button Content="Load Selected"
                           Command="{Binding LayoutProfiles.LoadSelectedCommand}"
                           Margin="0,0,4,0"/>
-                  <Button Content="Save Current as New"
-                          Command="{Binding LayoutProfiles.SaveCurrentAsNewCommand}"
-                          Margin="0,0,4,0"/>
+                  <Button Content="Save Current as"
+                          Margin="0,0,4,0"
+                          Click="SaveCurrentLayoutAs_Click"/>
                   <Button Content="Delete Selected"
                           Command="{Binding LayoutProfiles.DeleteSelectedCommand}"/>
                 </StackPanel>

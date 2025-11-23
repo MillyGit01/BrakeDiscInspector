@@ -10408,6 +10408,65 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private void SaveCurrentLayoutAs_Click(object sender, RoutedEventArgs e)
+        {
+            if (_layout == null)
+                return;
+
+            try
+            {
+                // 1) First, save using the standard mechanism so that last.layout.json and the
+                //    usual timestamped snapshot are updated.
+                MasterLayoutManager.Save(_preset, _layout);
+
+                // 2) Ask the user where to save this layout as a .layout file.
+                var dlg = new SaveFileDialog
+                {
+                    Title = "Save layout as",
+                    Filter = "Layout files (*.layout)|*.layout",
+                    DefaultExt = ".layout",
+                    AddExtension = true,
+                    FileName = "layout"
+                };
+
+                if (dlg.ShowDialog(this) == true)
+                {
+                    var chosenPath = dlg.FileName;
+
+                    // Force the .layout extension even if the user typed something else.
+                    var directory = Path.GetDirectoryName(chosenPath) ?? string.Empty;
+                    var nameWithoutExt = Path.GetFileNameWithoutExtension(chosenPath);
+                    var finalPath = Path.Combine(directory, nameWithoutExt + ".layout");
+
+                    // 3) Copy from the default layout file that MasterLayoutManager.Save just created.
+                    var defaultPath = MasterLayoutManager.GetDefaultPath(_preset);
+                    if (!File.Exists(defaultPath))
+                    {
+                        MessageBox.Show(this,
+                            "Default layout file not found. Save the layout first.",
+                            "Save layout",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    File.Copy(defaultPath, finalPath, overwrite: true);
+
+                    // Use the existing logging mechanism if available.
+                    AppendLog($"[layout] Saved as '{finalPath}'");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[layout] Save-as failed: {ex}");
+                MessageBox.Show(this,
+                    "Failed to save layout.\n" + ex.Message,
+                    "Save layout",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
         private MasterLayout BuildLayoutSnapshotForSave()
         {
             var source = _layout ?? new MasterLayout();

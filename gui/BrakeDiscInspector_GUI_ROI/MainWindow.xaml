@@ -71,6 +71,45 @@
                       Click="BtnSaveLayout_Click"/>
             </StackPanel>
 
+            <CheckBox Content="Layout Autosave"
+                      IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay}"
+                      Margin="0,4,0,8"/>
+
+            <GroupBox Header="Layouts" Margin="0,0,0,12">
+              <StackPanel>
+
+                <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
+                         SelectedItem="{Binding LayoutProfiles.SelectedProfile}"
+                         Height="120">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding DisplayName}" Width="160"/>
+                        <TextBlock Text="{Binding CreatedUtc, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
+                                   Opacity="0.6"
+                                   Margin="8,0,0,0"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                  <Button Content="Refresh"
+                          Command="{Binding LayoutProfiles.RefreshCommand}"
+                          Margin="0,0,4,0"/>
+                  <Button Content="Load Selected"
+                          Command="{Binding LayoutProfiles.LoadSelectedCommand}"
+                          Margin="0,0,4,0"/>
+                  <Button Content="Save Current as New"
+                          Command="{Binding LayoutProfiles.SaveCurrentAsNewCommand}"
+                          Margin="0,0,4,0"/>
+                  <Button Content="Delete Selected"
+                          Command="{Binding LayoutProfiles.DeleteSelectedCommand}"/>
+                </StackPanel>
+
+              </StackPanel>
+            </GroupBox>
+
             <Grid Margin="0,0,0,12">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>

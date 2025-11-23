@@ -7713,7 +7713,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // 2) Arrastre de ROI existente
-            if (e.OriginalSource is Shape sShape && sShape.Tag is RoiModel roiHit && ShouldEnableRoiEditing(roiHit.Role, roiHit))
+            if (e.OriginalSource is Shape sShape && sShape.Tag is RoiModel)
             {
                 _dragShape = sShape;
                 _dragStart = e.GetPosition(CanvasROI);

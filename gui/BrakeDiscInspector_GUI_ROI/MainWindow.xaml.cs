@@ -7731,6 +7731,13 @@ namespace BrakeDiscInspector_GUI_ROI
             // 3) Dibujo nuevo ROI en canvas vacío
             if (e.OriginalSource is Canvas)
             {
+                if (_editingM1 || _editingM2)
+                {
+                    AppendLog("[canvas+] Down ignorado (modo edición master)");
+                    e.Handled = true;
+                    return;
+                }
+
                 if (_globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
                 {
                     // CODEX: string interpolation compatibility.
@@ -7809,6 +7816,15 @@ namespace BrakeDiscInspector_GUI_ROI
             // FIN DIBUJO
             if (_isDrawing)
             {
+                if (_editingM1 || _editingM2)
+                {
+                    _isDrawing = false;
+                    CanvasROI.ReleaseMouseCapture();
+                    AppendLog("[mouse] Up ignorado (modo edición master)");
+                    e.Handled = true;
+                    return;
+                }
+
                 _isDrawing = false;
                 var p1 = e.GetPosition(CanvasROI);
                 EndDraw(_currentShape, _p0, p1);
@@ -11977,6 +11993,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                _state = MasterState.Ready;
+                _isDrawing = false;
                 _editingM1 = true;
                 BtnEditM1.Content = "Guardar Master 1";
                 RedrawOverlaySafe();
@@ -12015,6 +12033,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                _state = MasterState.Ready;
+                _isDrawing = false;
                 _editingM2 = true;
                 BtnEditM2.Content = "Guardar Master 2";
                 RedrawOverlaySafe();

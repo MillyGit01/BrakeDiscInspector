@@ -7690,6 +7690,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void Canvas_MouseLeftButtonDownEx(object sender, MouseButtonEventArgs e)
         {
+            var pos = e.GetPosition(CanvasROI);
+            var fe = e.OriginalSource as FrameworkElement;
+            var tagType = fe?.Tag?.GetType().Name ?? "null";
+            AppendLog($"[mouse-down] srcType={fe?.GetType().Name ?? "null"} tagType={tagType} state={_state} pos=({pos.X:F1},{pos.Y:F1})");
+
             var over = System.Windows.Input.Mouse.DirectlyOver;
             var handledBefore = e.Handled;
             AppendLog($"[canvas+] Down HB={handledBefore} src={e.OriginalSource?.GetType().Name}, over={over?.GetType().Name}");
@@ -7713,17 +7718,20 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // 2) Arrastre de ROI existente
-            if (e.OriginalSource is Shape sShape && sShape.Tag is RoiModel)
+            var hitShape = FindRoiShapeFromOriginalSource(e.OriginalSource);
+            if (hitShape != null)
             {
-                _dragShape = sShape;
-                _dragStart = e.GetPosition(CanvasROI);
-                _dragOrigX = Canvas.GetLeft(sShape);
-                _dragOrigY = Canvas.GetTop(sShape);
+                AppendLog("[mouse-down] hit RoiModel shape -> start drag candidate");
+
+                _dragShape = hitShape;
+                _dragStart = pos;
+                _dragOrigX = Canvas.GetLeft(hitShape);
+                _dragOrigY = Canvas.GetTop(hitShape);
                 if (double.IsNaN(_dragOrigX)) _dragOrigX = 0;
                 if (double.IsNaN(_dragOrigY)) _dragOrigY = 0;
 
                 CanvasROI.CaptureMouse();
-                AppendLog($"[drag] start HB={handledBefore} on {sShape.GetType().Name} at {_dragStart.X:0},{_dragStart.Y:0} orig=({_dragOrigX:0},{_dragOrigY:0})");
+                AppendLog($"[drag] start shapeType={hitShape.GetType().Name} pos=({_dragOrigX:F1},{_dragOrigY:F1}) state={_state}");
                 e.Handled = true;
                 return;
             }
@@ -7747,7 +7755,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 _isDrawing = true;
-                _p0 = e.GetPosition(CanvasROI);
+                _p0 = pos;
                 _currentShape = ReadShapeForCurrentStep();
                 BeginDraw(_currentShape, _p0);
                 CanvasROI.CaptureMouse();
@@ -7768,6 +7776,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 var p = e.GetPosition(CanvasROI);
                 var dx = p.X - _dragStart.X;
                 var dy = p.Y - _dragStart.Y;
+
+                AppendLog($"[drag] move dx={dx:F1} dy={dy:F1} state={_state}");
 
                 var nx = _dragOrigX + dx;
                 var ny = _dragOrigY + dy;
@@ -7801,8 +7811,9 @@ namespace BrakeDiscInspector_GUI_ROI
             // FIN ARRASTRE
             if (_dragShape != null)
             {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[drag] end");
+                var left = Canvas.GetLeft(_dragShape);
+                var top = Canvas.GetTop(_dragShape);
+                AppendLog($"[drag] end finalPos=({left:F1},{top:F1}) state={_state}");
                 CanvasROI.ReleaseMouseCapture();
                 _dragShape = null;
                 if (LayoutAutosaveEnabled)
@@ -7837,6 +7848,28 @@ namespace BrakeDiscInspector_GUI_ROI
                 e.Handled = true;
                 return;
             }
+
+            AppendLog($"[mouse-up] no drag; isDrawing={_isDrawing} state={_state}");
+        }
+
+        private Shape? FindRoiShapeFromOriginalSource(object? original)
+        {
+            if (original is not DependencyObject dep)
+            {
+                return null;
+            }
+
+            while (dep != null)
+            {
+                if (dep is Shape shape && shape.Tag is RoiModel)
+                {
+                    return shape;
+                }
+
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+
+            return null;
         }
 
         protected override void OnPreviewKeyDown(KeyEventArgs e)

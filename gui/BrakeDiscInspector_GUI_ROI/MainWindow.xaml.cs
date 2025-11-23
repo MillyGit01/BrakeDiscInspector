@@ -5513,37 +5513,46 @@ namespace BrakeDiscInspector_GUI_ROI
 
             double half = size;
 
+            var container = new Canvas
+            {
+                Width = half * 2,
+                Height = half * 2,
+                IsHitTestVisible = false,
+                Tag = ANALYSIS_TAG
+            };
+
             var lineH = new WLine
             {
-                X1 = x - half,
-                Y1 = y,
-                X2 = x + half,
-                Y2 = y,
+                X1 = 0,
+                Y1 = half,
+                X2 = half * 2,
+                Y2 = half,
                 Stroke = brush,
                 StrokeThickness = thickness,
                 SnapsToDevicePixels = true,
-                IsHitTestVisible = false,
-                Tag = ANALYSIS_TAG
+                IsHitTestVisible = false
             };
 
             var lineV = new WLine
             {
-                X1 = x,
-                Y1 = y - half,
-                X2 = x,
-                Y2 = y + half,
+                X1 = half,
+                Y1 = 0,
+                X2 = half,
+                Y2 = half * 2,
                 Stroke = brush,
                 StrokeThickness = thickness,
                 SnapsToDevicePixels = true,
-                IsHitTestVisible = false,
-                Tag = ANALYSIS_TAG
+                IsHitTestVisible = false
             };
 
-            Panel.SetZIndex(lineH, 2000);
-            Panel.SetZIndex(lineV, 2000);
+            container.Children.Add(lineH);
+            container.Children.Add(lineV);
 
-            CanvasROI.Children.Add(lineH);
-            CanvasROI.Children.Add(lineV);
+            Canvas.SetLeft(container, x - half);
+            Canvas.SetTop(container, y - half);
+            Panel.SetZIndex(container, 2000);
+
+            CanvasROI.Children.Add(container);
         }
 
         private void DrawLabeledCross(double x, double y, string label, Brush crossColor, Brush labelBg, Brush labelFg, int crossSize, double thickness)

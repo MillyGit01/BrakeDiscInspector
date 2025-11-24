@@ -12063,6 +12063,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                _layout.Master1Pattern.IsFrozen = false;
+                _layout.Master1Search.IsFrozen = false;
+
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM1 = true;
@@ -12073,6 +12076,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             else
             {
+                _layout.Master1Pattern.IsFrozen = true;
+                _layout.Master1Search.IsFrozen = true;
+
                 RemoveAdornersForRoi(_layout.Master1Pattern);
                 RemoveAdornersForRoi(_layout.Master1Search);
                 MasterLayoutManager.Save(_preset, _layout);
@@ -12103,6 +12109,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                _layout.Master2Pattern.IsFrozen = false;
+                _layout.Master2Search.IsFrozen = false;
+
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM2 = true;
@@ -12113,6 +12122,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             else
             {
+                _layout.Master2Pattern.IsFrozen = true;
+                _layout.Master2Search.IsFrozen = true;
+
                 RemoveAdornersForRoi(_layout.Master2Pattern);
                 RemoveAdornersForRoi(_layout.Master2Search);
                 MasterLayoutManager.Save(_preset, _layout);

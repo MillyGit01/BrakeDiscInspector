@@ -116,6 +116,9 @@ namespace BrakeDiscInspector_GUI_ROI
             DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
         };
 
+        // NOTE (for user): Layout files (.layout/.layout.json) are stored under the
+        // "Layouts" folder inside the preset home directory (preset.Home). With the
+        // default preset this resolves to \\wsl$\Ubuntu\home\millylinux\BrakeDiscDefect_BACKEND\Layouts.
         public static string GetLayoutsFolder(Preset preset)
             => System.IO.Path.Combine(preset.Home, "Layouts");
 

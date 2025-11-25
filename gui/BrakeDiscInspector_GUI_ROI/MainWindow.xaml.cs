@@ -866,9 +866,11 @@ namespace BrakeDiscInspector_GUI_ROI
             TryPersistLayout();
         }
 
+        private bool IsLayoutAutosaveEnabled() => LayoutAutosaveEnabled;
+
         private void TryPersistLayout()
         {
-            if (_layout == null || _preset == null || _isInitializingOptions)
+            if (_layout == null || _preset == null || _isInitializingOptions || !IsLayoutAutosaveEnabled())
             {
                 return;
             }
@@ -938,7 +940,14 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private bool TryAutosaveLayout(string context)
-            => TrySaveLayoutGuarded("[autosave]", context, requireMasters: true, out _);
+        {
+            if (!IsLayoutAutosaveEnabled())
+            {
+                return false;
+            }
+
+            return TrySaveLayoutGuarded("[autosave]", context, requireMasters: true, out _);
+        }
 
         public void ApplyLayout(MasterLayout? layout, string sourceContext)
         {
@@ -7813,10 +7822,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (LayoutAutosaveEnabled)
                 {
                     TryAutosaveLayout("drag end");
-                }
-                else
-                {
-                    TryPersistLayout();
                 }
                 e.Handled = true;
                 return;

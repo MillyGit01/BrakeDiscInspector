@@ -2687,8 +2687,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 // SizeChanged += (_, __) => RoiOverlay.InvalidateOverlay();
                 _preset = PresetManager.LoadOrDefault(_preset);
 
-                var (layout, _) = MasterLayoutManager.LoadOrNew(_preset);
-                _layout = layout;
+                // Start with an empty in-memory layout; users can load a specific layout
+                // explicitly via the "Load Selected" action in the Layouts panel.
+                _layout = new MasterLayout();
 
                 var layoutStore = new FileLayoutProfileStore(_preset);
                 LayoutProfiles = new LayoutProfilesViewModel(layoutStore, this);

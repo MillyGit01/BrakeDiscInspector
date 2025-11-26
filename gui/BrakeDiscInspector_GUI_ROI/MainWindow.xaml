@@ -141,10 +141,6 @@
                   </Grid>
 
                   <WrapPanel>
-                    <Button x:Name="BtnSaveMaster"
-                            Content="Save Master 1"
-                            Margin="0,0,4,0"
-                            Click="BtnSaveMaster_Click"/>
                     <Button x:Name="BtnEditM1"
                             Content="Edit Master 1"
                             Click="BtnEditM1_Click"/>

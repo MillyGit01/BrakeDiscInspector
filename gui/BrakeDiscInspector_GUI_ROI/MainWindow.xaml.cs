@@ -1035,6 +1035,14 @@ namespace BrakeDiscInspector_GUI_ROI
             for (int index = 1; index <= 4; index++)
             {
                 var roi = GetInspectionSlotModel(index) ?? FindInspectionBaselineForIndex(index);
+                if (roi == null && _layout?.InspectionRois != null)
+                {
+                    var cfg = _layout.InspectionRois.FirstOrDefault(r => r != null && r.Index == index);
+                    if (cfg?.Enabled == true && !string.IsNullOrWhiteSpace(cfg.Id))
+                    {
+                        roi = FindInspectionBaselineById(cfg.Id);
+                    }
+                }
                 if (roi != null)
                 {
                     roi.IsFrozen = true;
@@ -1054,6 +1062,29 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var id = $"Inspection_{index}";
+
+            foreach (var kv in _layout.InspectionBaselinesByImage)
+            {
+                var match = kv.Value?
+                    .FirstOrDefault(r => r != null && string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase));
+
+                if (match != null)
+                {
+                    var clone = match.Clone();
+                    clone.IsFrozen = true;
+                    return clone;
+                }
+            }
+
+            return null;
+        }
+
+        private RoiModel? FindInspectionBaselineById(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id) || _layout?.InspectionBaselinesByImage == null)
+            {
+                return null;
+            }
 
             foreach (var kv in _layout.InspectionBaselinesByImage)
             {
@@ -3220,7 +3251,15 @@ namespace BrakeDiscInspector_GUI_ROI
                         label.Visibility = Visibility.Visible;
                     }
 
-                    AttachRoiAdorner(shape);
+                    bool allowEditing = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role, roi);
+                    if (allowEditing)
+                    {
+                        AttachRoiAdorner(shape);
+                    }
+                    else
+                    {
+                        RemoveRoiAdorners(shape);
+                    }
                 }
                 else
                 {

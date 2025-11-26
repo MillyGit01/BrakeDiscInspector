@@ -966,6 +966,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _layout = layout;
 
+            FreezeAllRois(_layout);
+            RemoveAllRoiAdorners();
+
             InitializeOptionsFromConfig();
             _workflowViewModel?.SetMasterLayout(_layout);
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
@@ -974,6 +977,36 @@ namespace BrakeDiscInspector_GUI_ROI
             RequestRoiVisibilityRefresh();
             RedrawOverlaySafe();
             UpdateRoiHud();
+        }
+
+        private void FreezeAllRois(MasterLayout? layout)
+        {
+            if (layout == null)
+            {
+                return;
+            }
+
+            foreach (var roi in EnumerateLayoutRois(layout))
+            {
+                if (roi != null)
+                {
+                    roi.IsFrozen = true;
+                }
+            }
+        }
+
+        private static IEnumerable<RoiModel?> EnumerateLayoutRois(MasterLayout layout)
+        {
+            yield return layout.Master1Pattern;
+            yield return layout.Master1Search;
+            yield return layout.Master2Pattern;
+            yield return layout.Master2Search;
+            yield return layout.Inspection;
+            yield return layout.InspectionBaseline;
+            yield return layout.Inspection1;
+            yield return layout.Inspection2;
+            yield return layout.Inspection3;
+            yield return layout.Inspection4;
         }
 
         private void RescaleInspectionRoisToNewImageSize(double newW, double newH)
@@ -6469,7 +6502,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _editingM1 = false;
                 if (BtnEditM1 != null)
                 {
-                    BtnEditM1.Content = "Editar Master 1";
+                    BtnEditM1.Content = "Edit Master 1";
                 }
                 RemoveAdornersForRoi(_layout?.Master1Pattern);
                 RemoveAdornersForRoi(_layout?.Master1Search);
@@ -7863,6 +7896,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (roiElement.Tag is RoiModel frozenRoi && frozenRoi.IsFrozen)
+            {
+                e.Handled = true;
+                return;
+            }
+
             _dragShape = roiElement;
             _dragStart = posCanvas;
             _dragOrigX = Canvas.GetLeft(roiElement);
@@ -8271,6 +8310,11 @@ namespace BrakeDiscInspector_GUI_ROI
         // ====== Guardar pasos del wizard ======
         // ====== Guardar pasos del wizard ======
         private void BtnSaveMaster_Click(object sender, RoutedEventArgs e)
+        {
+            SaveMasterWizardFlow();
+        }
+
+        private void SaveMasterWizardFlow()
         {
 
             var layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
@@ -12075,21 +12119,22 @@ namespace BrakeDiscInspector_GUI_ROI
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM1 = true;
-                BtnEditM1.Content = "Guardar Master 1";
+                BtnEditM1.Content = "Save Master 1";
                 RedrawOverlaySafe();
                 AttachAdornerForRoi(_layout.Master1Pattern);
                 AttachAdornerForRoi(_layout.Master1Search);
             }
             else
             {
+                SaveMasterWizardFlow();
+
                 _layout.Master1Pattern.IsFrozen = true;
                 _layout.Master1Search.IsFrozen = true;
 
                 RemoveAdornersForRoi(_layout.Master1Pattern);
                 RemoveAdornersForRoi(_layout.Master1Search);
-                MasterLayoutManager.Save(_preset, _layout);
                 _editingM1 = false;
-                BtnEditM1.Content = "Editar Master 1";
+                BtnEditM1.Content = "Edit Master 1";
                 RedrawOverlaySafe();
                 Snack("Master 1 válido.");
             }

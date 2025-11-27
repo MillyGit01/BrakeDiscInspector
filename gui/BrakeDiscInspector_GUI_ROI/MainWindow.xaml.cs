@@ -8933,8 +8933,63 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (c1 is null || c2 is null)
             {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] Matcher local no encontró alguno de los masters; sin fallback al backend (/infer desactivado)");
+                if (ChkUseLocalMatcher.IsChecked != true)
+                {
+                    AppendLog($"[FLOW] Matcher local deshabilitado; uso backend para detectar masters");
+
+                    if (c1 is null)
+                    {
+                        var inferM1 = await BackendAPI
+                            .InferAsync(_currentImagePathWin, _layout.Master1Pattern!, _preset, AppendLog)
+                            .ConfigureAwait(false);
+
+                        if (inferM1.ok && inferM1.result != null)
+                        {
+                            var result = inferM1.result;
+                            var (cx, cy) = _layout.Master1Pattern!.GetCenter();
+                            c1 = new SWPoint(cx, cy);
+                            s1 = 100;
+                            string thrText = result.threshold.HasValue
+                                ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                                : "n/a";
+                            bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
+                            AppendLog($"[FLOW] backend M1 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
+                        }
+                        else
+                        {
+                            AppendLog($"[FLOW] backend M1 failed: {inferM1.error ?? "unknown"}");
+                        }
+                    }
+
+                    if (c2 is null)
+                    {
+                        var inferM2 = await BackendAPI
+                            .InferAsync(_currentImagePathWin, _layout.Master2Pattern!, _preset, AppendLog)
+                            .ConfigureAwait(false);
+
+                        if (inferM2.ok && inferM2.result != null)
+                        {
+                            var result = inferM2.result;
+                            var (cx, cy) = _layout.Master2Pattern!.GetCenter();
+                            c2 = new SWPoint(cx, cy);
+                            s2 = 100;
+                            string thrText = result.threshold.HasValue
+                                ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
+                                : "n/a";
+                            bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
+                            AppendLog($"[FLOW] backend M2 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
+                        }
+                        else
+                        {
+                            AppendLog($"[FLOW] backend M2 failed: {inferM2.error ?? "unknown"}");
+                        }
+                    }
+                }
+                else
+                {
+                    // CODEX: string interpolation compatibility.
+                    AppendLog($"[FLOW] Matcher local no encontró alguno de los masters; sin fallback al backend (/infer desactivado)");
+                }
             }
 
 

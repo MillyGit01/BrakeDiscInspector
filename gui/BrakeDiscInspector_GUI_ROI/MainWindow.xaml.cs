@@ -8894,7 +8894,7 @@ namespace BrakeDiscInspector_GUI_ROI
                             var res1 = LocalMatcher.MatchInSearchROI(img, _layout.Master1Pattern, _layout.Master1Search,
                                 _preset.Feature, _preset.MatchThr, _preset.RotRange, _preset.ScaleMin, _preset.ScaleMax, m1Override,
                                 LogToFileAndUI);
-                            if (res1.center.HasValue) { c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y); s1 = res1.score; }
+                            if (res1.center.HasValue) { c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y); s1 = res1.score; AppendLog($"[LOCAL] M1 hit score={res1.score:0.###}"); }
                             else
                             {
                                 // CODEX: string interpolation compatibility.
@@ -8904,7 +8904,7 @@ namespace BrakeDiscInspector_GUI_ROI
                             var res2 = LocalMatcher.MatchInSearchROI(img, _layout.Master2Pattern, _layout.Master2Search,
                                 _preset.Feature, _preset.MatchThr, _preset.RotRange, _preset.ScaleMin, _preset.ScaleMax, m2Override,
                                 LogToFileAndUI);
-                            if (res2.center.HasValue) { c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y); s2 = res2.score; }
+                            if (res2.center.HasValue) { c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y); s2 = res2.score; AppendLog($"[LOCAL] M2 hit score={res2.score:0.###}"); }
                             else
                             {
                                 // CODEX: string interpolation compatibility.
@@ -8931,51 +8931,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            // 2) Backend si falta alguno
             if (c1 is null || c2 is null)
             {
                 // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] Usando backend /infer para los masters");
-
-                if (c1 is null)
-                {
-                    var inferM1 = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Master1Pattern!, _preset, AppendLog);
-                    if (inferM1.ok && inferM1.result != null)
-                    {
-                        var result = inferM1.result;
-                        var (cx, cy) = _layout.Master1Pattern!.GetCenter();
-                        c1 = new SWPoint(cx, cy);
-                        s1 = result.score;
-                        string thrText = result.threshold.HasValue ? result.threshold.Value.ToString("0.###") : "n/a";
-                        bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
-                        AppendLog($"[BACKEND] M1 infer score={result.score:0.###} thr={thrText} regions={(result.regions?.Length ?? 0)} status={(pass ? "OK" : "NG")}");
-                    }
-                    else
-                    {
-                        // CODEX: string interpolation compatibility.
-                        AppendLog($"[BACKEND] M1 FAIL :: {inferM1.error ?? "unknown"}");
-                    }
-                }
-
-                if (c2 is null)
-                {
-                    var inferM2 = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Master2Pattern!, _preset, AppendLog);
-                    if (inferM2.ok && inferM2.result != null)
-                    {
-                        var result = inferM2.result;
-                        var (cx, cy) = _layout.Master2Pattern!.GetCenter();
-                        c2 = new SWPoint(cx, cy);
-                        s2 = result.score;
-                        string thrText = result.threshold.HasValue ? result.threshold.Value.ToString("0.###") : "n/a";
-                        bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
-                        AppendLog($"[BACKEND] M2 infer score={result.score:0.###} thr={thrText} regions={(result.regions?.Length ?? 0)} status={(pass ? "OK" : "NG")}");
-                    }
-                    else
-                    {
-                        // CODEX: string interpolation compatibility.
-                        AppendLog($"[BACKEND] M2 FAIL :: {inferM2.error ?? "unknown"}");
-                    }
-                }
+                AppendLog($"[FLOW] Matcher local no encontró alguno de los masters; sin fallback al backend (/infer desactivado)");
             }
 
 

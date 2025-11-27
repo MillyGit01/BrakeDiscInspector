@@ -87,6 +87,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _globalUnlocked = false;
         private bool _editingM1;
         private bool _editingM2;
+        private bool _editModeActive = false;
         private string? _activeEditableRoiId = null;
         private bool _hasInspectionAnalysisTransform;
         private bool _isFirstImageForCurrentKey = true;
@@ -3450,6 +3451,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 CaptureCurrentUiShapeIntoSlot(exitingId);
             }
 
+            _editModeActive = false;
             ResetEditState();
             RemoveAllRoiAdorners();
             ApplyInspectionInteractionPolicy(reason);
@@ -3493,6 +3495,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _activeEditableRoiId = roiId;
             _globalUnlocked = true;
+            _editModeActive = true;
             UpdateEditableConfigState();
 
             GoToInspectionTab();
@@ -6631,6 +6634,11 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RedrawOverlaySafe();
             }
+
+            if (changed)
+            {
+                _editModeActive = false;
+            }
         }
 
         private int CountRoiAdornersForShape(Shape shape)
@@ -7844,6 +7852,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (!_editModeActive)
+            {
+                e.Handled = true;
+                return;
+            }
+
             var pos = e.GetPosition(CanvasROI);
             var fe = e.OriginalSource as FrameworkElement;
             var tagType = fe?.Tag?.GetType().Name ?? "null";
@@ -7913,6 +7927,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void Canvas_MouseMoveEx(object sender, System.Windows.Input.MouseEventArgs e)
         {
+            if (!_editModeActive)
+            {
+                return;
+            }
+
             // ARRASTRE activo
             if (_dragShape != null && CanvasROI != null)
             {
@@ -7947,6 +7966,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void Canvas_MouseLeftButtonUpEx(object sender, MouseButtonEventArgs e)
         {
+            if (!_editModeActive)
+            {
+                return;
+            }
+
             var over = System.Windows.Input.Mouse.DirectlyOver;
             var handledBefore = e.Handled;
             AppendLog($"[canvas+] Up   HB={handledBefore} src={e.OriginalSource?.GetType().Name}, over={over?.GetType().Name}");
@@ -8661,6 +8685,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var savedSummary = savedRoi != null
                 ? $"{savedRole}: {DescribeRoi(savedRoi)}"
                 : "<sin ROI>";
+            _editModeActive = false;
             Snack($"Guardado. {savedSummary}");
         }
 
@@ -10862,6 +10887,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 var loaded = MasterLayoutManager.LoadFromFile(dlg.FileName);
                 ApplyLayout(loaded ?? new MasterLayout(), "manual-load");
+                _editModeActive = false;
                 Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
             }
             catch (Exception ex)
@@ -12150,6 +12176,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void StartDrawingFor(MasterState state, ComboBox shapeCombo)
         {
+            _editModeActive = true;
             _state = state;
             var shape = ReadShapeFrom(shapeCombo);
             SetDrawToolFromShape(shape);
@@ -12281,6 +12308,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM1 = true;
+                _editModeActive = true;
                 BtnEditM1.Content = "Save Master 1";
                 RedrawOverlaySafe();
                 AttachAdornersForMaster(1);
@@ -12293,6 +12321,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 RemoveAdornersForMaster(1);
                 _editingM1 = false;
+                _editModeActive = false;
                 BtnEditM1.Content = "Edit Master 1";
                 RedrawOverlaySafe();
                 Snack("Master 1 válido.");
@@ -12324,6 +12353,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM2 = true;
+                _editModeActive = true;
                 BtnEditM2.Content = "Save Master 2";
                 RedrawOverlaySafe();
                 AttachAdornersForMaster(2);
@@ -12336,6 +12366,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 RemoveAdornersForMaster(2);
                 _editingM2 = false;
+                _editModeActive = false;
                 BtnEditM2.Content = "Edit Master 2";
                 RedrawOverlaySafe();
                 Snack("Master 2 válido.");

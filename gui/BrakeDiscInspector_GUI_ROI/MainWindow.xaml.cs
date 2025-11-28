@@ -952,6 +952,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (!IsLayoutAutosaveEnabled())
             {
+                AppendLog($"[autosave] skipped ({context}) LayoutAutosaveEnabled=false");
                 return false;
             }
 
@@ -6424,9 +6425,33 @@ namespace BrakeDiscInspector_GUI_ROI
             ToggleInspectionEdit(config);
         }
 
+        private void ApplyInspectionToggleEdit(string? roiId, int index)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                var vm = ViewModel;
+                if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
+                {
+                    GuiLog.Warn($"[workflow-edit] ToggleEdit ignored: InspectionRois empty roi='{roiId}' index={index}");
+                    return;
+                }
+
+                var cfg = vm.InspectionRois.FirstOrDefault(r => string.Equals(r.Id, roiId, StringComparison.OrdinalIgnoreCase))
+                          ?? vm.InspectionRois.FirstOrDefault(r => r.Index == index);
+
+                if (cfg == null)
+                {
+                    GuiLog.Warn($"[workflow-edit] ToggleEdit unknown ROI roi='{roiId}' index={index}");
+                    return;
+                }
+
+                ToggleInspectionEdit(cfg);
+            });
+        }
+
         private void ToggleInspectionEditFromButton(int index)
         {
-            var vm = ViewModel;
+            var vm = WorkflowHost?.DataContext as WorkflowViewModel ?? ViewModel;
             if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
             {
                 GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton ignored: InspectionRois empty index={index}");
@@ -6440,7 +6465,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            ToggleInspectionEdit(config);
+            if (!config.Enabled)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton aborted: roi='{config.Id}' index={index} disabled");
+                return;
+            }
+
+            ApplyInspectionToggleEdit(config.Id, config.Index);
         }
 
         private void ToggleInspectionEdit(InspectionRoiConfig config)
@@ -8229,10 +8260,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[drag] end finalPos=({left:F1},{top:F1}) state={_state}");
                 CanvasROI.ReleaseMouseCapture();
                 _dragShape = null;
-                if (LayoutAutosaveEnabled)
-                {
-                    TryAutosaveLayout("drag end");
-                }
+                TryAutosaveLayout("drag end");
                 e.Handled = true;
                 return;
             }
@@ -8254,10 +8282,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 EndDraw(_currentShape, _p0, p1);
                 CanvasROI.ReleaseMouseCapture();
                 AppendLog($"[mouse] Up   @ {p1.X:0},{p1.Y:0}");
-                if (LayoutAutosaveEnabled)
-                {
-                    TryAutosaveLayout("draw end");
-                }
+                TryAutosaveLayout("draw end");
                 e.Handled = true;
                 return;
             }
@@ -10649,10 +10674,7 @@ namespace BrakeDiscInspector_GUI_ROI
         // ====== Overlay persistente + Adorner ======
         private void OnRoiChanged(Shape shape, RoiModel roi)
         {
-            if (LayoutAutosaveEnabled)
-            {
-                TryAutosaveLayout("adorner change");
-            }
+            TryAutosaveLayout("adorner change");
             AppendLog($"[adorner] ROI actualizado: {roi.Role} => {DescribeRoi(roi)}");
         }
 
@@ -12792,26 +12814,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            Dispatcher.Invoke(() =>
-            {
-                var vm = ViewModel;
-                if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
-                {
-                    GuiLog.Warn($"[workflow-edit] ToggleEditRequested ignored: InspectionRois empty roi='{e.RoiId}' index={e.Index}");
-                    return;
-                }
-
-                var cfg = vm.InspectionRois.FirstOrDefault(r => string.Equals(r.Id, e.RoiId, StringComparison.OrdinalIgnoreCase))
-                          ?? vm.InspectionRois.FirstOrDefault(r => r.Index == e.Index);
-
-                if (cfg == null)
-                {
-                    GuiLog.Warn($"[workflow-edit] ToggleEditRequested unknown ROI roi='{e.RoiId}' index={e.Index}");
-                    return;
-                }
-
-                ToggleInspectionEdit(cfg);
-            });
+            ApplyInspectionToggleEdit(e.RoiId, e.Index);
         }
 
         private async void WorkflowHostOnLoadModelRequested(object? sender, LoadModelRequestedEventArgs e)

@@ -276,7 +276,21 @@
                           Padding="4,2"
                           MinHeight="26"
                           Click="BtnEditInspection1_Click"
-                          Content="Edit ROI 1"/>
+                          Content="Edit ROI 1">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnSaveInspection1"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -288,13 +302,41 @@
                           Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection1}"/>
+                          CommandParameter="{Binding Inspection1}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnAddNgInspection1"
                           Margin="4,0,0,0"
                           Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection1}"/>
+                          CommandParameter="{Binding Inspection1}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnRemoveInspection1"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -333,7 +375,21 @@
                           Padding="4,2"
                           MinHeight="26"
                           Click="BtnEditInspection2_Click"
-                          Content="Edit ROI 2"/>
+                          Content="Edit ROI 2">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnSaveInspection2"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -345,13 +401,41 @@
                           Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection2}"/>
+                          CommandParameter="{Binding Inspection2}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnAddNgInspection2"
                           Margin="4,0,0,0"
                           Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection2}"/>
+                          CommandParameter="{Binding Inspection2}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnRemoveInspection2"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -390,7 +474,21 @@
                           Padding="4,2"
                           MinHeight="26"
                           Click="BtnEditInspection3_Click"
-                          Content="Edit ROI 3"/>
+                          Content="Edit ROI 3">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnSaveInspection3"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -402,13 +500,41 @@
                           Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection3}"/>
+                          CommandParameter="{Binding Inspection3}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnAddNgInspection3"
                           Margin="4,0,0,0"
                           Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection3}"/>
+                          CommandParameter="{Binding Inspection3}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnRemoveInspection3"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -447,7 +573,21 @@
                           Padding="4,2"
                           MinHeight="26"
                           Click="BtnEditInspection4_Click"
-                          Content="Edit ROI 4"/>
+                          Content="Edit ROI 4">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnSaveInspection4"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -459,13 +599,41 @@
                           Padding="4,2"
                           Content="Add to OK"
                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection4}"/>
+                          CommandParameter="{Binding Inspection4}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnAddNgInspection4"
                           Margin="4,0,0,0"
                           Padding="4,2"
                           Content="Add to NG"
                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
-                          CommandParameter="{Binding Inspection4}"/>
+                          CommandParameter="{Binding Inspection4}">
+                    <Button.Style>
+                      <Style TargetType="Button">
+                        <Setter Property="IsEnabled" Value="True"/>
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
+                            <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </Button.Style>
+                  </Button>
                   <Button x:Name="BtnRemoveInspection4"
                           Margin="4,0,0,0"
                           Padding="4,2"

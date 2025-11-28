@@ -169,7 +169,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         public static (MasterLayout layout, bool loadedFromFile) LoadOrNew(Preset preset)
         {
-            var path = GetDefaultPath(preset);
+            var path = EnsureLayoutJsonExtension(GetDefaultPath(preset));
             MasterLayout layout;
             bool loadedFromFile = File.Exists(path);
 
@@ -226,7 +226,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // === Sanitizar antes de serializar ===
             SanitizeForSave(layout);
 
-            var path = GetDefaultPath(preset);
+            var path = EnsureLayoutJsonExtension(GetDefaultPath(preset));
             System.Diagnostics.Debug.WriteLine(
                 $"[layout:save] path={path} " +
                 $"M1P={(layout.Master1Pattern != null)} M1S={(layout.Master1Search != null)} " +
@@ -236,7 +236,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             File.WriteAllText(path, json);
 
-            var snapshot = GetTimestampedPath(preset);
+            var snapshot = EnsureLayoutJsonExtension(GetTimestampedPath(preset));
             File.WriteAllText(snapshot, json);
         }
 

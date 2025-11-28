@@ -6471,6 +6471,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            GuiLog.Info($"[workflow-edit] top-btn toggle request roi='{config.Id}' index={config.Index} enabled={config.Enabled} isEditable={config.IsEditable}");
+
             ApplyInspectionToggleEdit(config.Id, config.Index);
         }
 
@@ -6523,10 +6525,14 @@ namespace BrakeDiscInspector_GUI_ROI
             if (makeEditable)
             {
                 EnterInspectionEditMode(index, roiId);
+
+                roiModel.IsFrozen = false;
             }
             else
             {
                 ExitInspectionEditMode(saveChanges: true);
+
+                roiModel.IsFrozen = true;
             }
 
             config.IsEditable = makeEditable;

@@ -6453,33 +6453,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void ToggleInspectionEditFromButton(int index)
         {
-            if (WorkflowHost?.DataContext is not WorkflowViewModel vm)
+            // Delegamos en el WorkflowControl para que el botón superior
+            // use EXACTAMENTE el mismo flujo que el botón "Edit" del tab.
+            if (WorkflowHost == null)
             {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton ignored: WorkflowHost is null index={index}");
                 return;
             }
 
-            if (vm.InspectionRois == null || vm.InspectionRois.Count == 0)
-            {
-                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton ignored: InspectionRois empty index={index}");
-                return;
-            }
-
-            var config = vm.InspectionRois.FirstOrDefault(r => r.Index == index);
-            if (config == null)
-            {
-                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton unknown ROI index={index}");
-                return;
-            }
-
-            if (!config.Enabled)
-            {
-                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton aborted: roi='{config.Id}' index={index} disabled");
-                return;
-            }
-
-            GuiLog.Info($"[workflow-edit] top-btn toggle request roi='{config.Id}' index={config.Index} enabled={config.Enabled} isEditable={config.IsEditable}");
-
-            WorkflowHostOnToggleEditRequested(this, new ToggleEditRequestedEventArgs(config.Id, config.Index));
+            WorkflowHost.ToggleInspectionEditFromExternal(index);
         }
 
         private void ToggleInspectionEdit(InspectionRoiConfig config)

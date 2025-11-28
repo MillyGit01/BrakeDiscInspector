@@ -91,6 +91,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _editingInspection2;
         private bool _editingInspection3;
         private bool _editingInspection4;
+        private int? _editingInspectionSlot;
+        private bool IsEditingInspection => _editingInspectionSlot.HasValue;
         private bool _editModeActive = false;
         private string? _activeEditableRoiId = null;
         private bool _hasInspectionAnalysisTransform;
@@ -968,6 +970,11 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             CancelMasterEditing(redraw: false);
+
+            ResetInspectionEditingFlags();
+            ResetEditState();
+            _editModeActive = false;
+            UpdateInspectionEditButtons();
 
             _layout = layout;
 
@@ -3486,6 +3493,7 @@ namespace BrakeDiscInspector_GUI_ROI
             ApplyInspectionInteractionPolicy(reason);
             RedrawOverlaySafe();
             UpdateRoiHud();
+            UpdateInspectionEditButtons();
         }
 
         private void ResetEditState()
@@ -3501,6 +3509,30 @@ namespace BrakeDiscInspector_GUI_ROI
             _editingInspection2 = false;
             _editingInspection3 = false;
             _editingInspection4 = false;
+            _editingInspectionSlot = null;
+        }
+
+        private void UpdateInspectionEditButtons()
+        {
+            if (BtnEditInspection1 != null)
+            {
+                BtnEditInspection1.Content = _editingInspectionSlot == 1 ? "Save ROI 1" : "Edit ROI 1";
+            }
+
+            if (BtnEditInspection2 != null)
+            {
+                BtnEditInspection2.Content = _editingInspectionSlot == 2 ? "Save ROI 2" : "Edit ROI 2";
+            }
+
+            if (BtnEditInspection3 != null)
+            {
+                BtnEditInspection3.Content = _editingInspectionSlot == 3 ? "Save ROI 3" : "Edit ROI 3";
+            }
+
+            if (BtnEditInspection4 != null)
+            {
+                BtnEditInspection4.Content = _editingInspectionSlot == 4 ? "Save ROI 4" : "Edit ROI 4";
+            }
         }
 
         private void SetInspectionEditingFlag(int index, bool editing)
@@ -3529,20 +3561,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(_activeEditableRoiId)
-                && string.Equals(_activeEditableRoiId, roiId, StringComparison.OrdinalIgnoreCase))
-            {
-                ExitEditMode("toggle-off");
-                SetInspectionEditingFlag(inspectionIndex, false);
-                return;
-            }
-
-            if (_globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
-            {
-                ExitEditMode("toggle-switch");
-                ResetInspectionEditingFlags();
-            }
-
             var slotRoi = GetInspectionSlotModel(inspectionIndex);
             if (slotRoi == null || string.IsNullOrWhiteSpace(slotRoi.Id) ||
                 !string.Equals(slotRoi.Id, roiId, StringComparison.OrdinalIgnoreCase))
@@ -3551,18 +3569,60 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (_editingInspectionSlot == inspectionIndex)
+            {
+                ExitInspectionEditMode(saveChanges: true);
+                return;
+            }
+
+            EnterInspectionEditMode(inspectionIndex, roiId);
+        }
+
+        private void EnterInspectionEditMode(int inspectionIndex, string roiId)
+        {
+            if (_editingInspectionSlot.HasValue && _editingInspectionSlot.Value != inspectionIndex)
+            {
+                ExitInspectionEditMode(saveChanges: true);
+            }
+
             ResetInspectionEditingFlags();
             _activeEditableRoiId = roiId;
             _globalUnlocked = true;
             _editModeActive = true;
+            _editingInspectionSlot = inspectionIndex;
             SetInspectionEditingFlag(inspectionIndex, true);
             UpdateEditableConfigState();
+            UpdateInspectionEditButtons();
 
             GoToInspectionTab();
             SetActiveInspectionIndex(inspectionIndex);
 
             RemoveAllRoiAdorners();
             ApplyInspectionInteractionPolicy($"toggle-on:{roiId}");
+            RedrawOverlaySafe();
+            UpdateRoiHud();
+        }
+
+        private void ExitInspectionEditMode(bool saveChanges)
+        {
+            if (!_editingInspectionSlot.HasValue)
+            {
+                return;
+            }
+
+            var slot = _editingInspectionSlot.Value;
+            if (saveChanges)
+            {
+                SaveCurrentInspectionToSlot(slot);
+            }
+
+            ResetInspectionEditingFlags();
+            ResetEditState();
+            _editModeActive = _editingM1 || _editingM2;
+            UpdateInspectionEditButtons();
+
+            RemoveAllRoiAdorners();
+            ApplyInspectionInteractionPolicy("inspection-edit-exit");
             RedrawOverlaySafe();
             UpdateRoiHud();
         }
@@ -10794,36 +10854,18 @@ namespace BrakeDiscInspector_GUI_ROI
                 var dlg = new SaveFileDialog
                 {
                     Title = "Save layout as",
-                    Filter = "Layout files (*.layout)|*.layout",
-                    DefaultExt = ".layout",
+                    Filter = "Layout files (*.layout.json)|*.layout.json",
+                    DefaultExt = ".layout.json",
                     AddExtension = true,
-                    FileName = "layout"
+                    FileName = "layout.layout.json"
                 };
 
                 if (dlg.ShowDialog(this) == true)
                 {
-                    var chosenPath = dlg.FileName;
+                    var finalPath = MasterLayoutManager.EnsureLayoutJsonExtension(dlg.FileName);
 
-                    // Force the .layout extension even if the user typed something else.
-                    var directory = Path.GetDirectoryName(chosenPath) ?? string.Empty;
-                    var nameWithoutExt = Path.GetFileNameWithoutExtension(chosenPath);
-                    var finalPath = Path.Combine(directory, nameWithoutExt + ".layout");
+                    MasterLayoutManager.SaveAs(_preset, _layout, finalPath);
 
-                    // 3) Copy from the default layout file that MasterLayoutManager.Save just created.
-                    var defaultPath = MasterLayoutManager.GetDefaultPath(_preset);
-                    if (!File.Exists(defaultPath))
-                    {
-                        MessageBox.Show(this,
-                            "Default layout file not found. Save the layout first.",
-                            "Save layout",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
-                        return;
-                    }
-
-                    File.Copy(defaultPath, finalPath, overwrite: true);
-
-                    // Use the existing logging mechanism if available.
                     AppendLog($"[layout] Saved as '{finalPath}'");
                 }
             }

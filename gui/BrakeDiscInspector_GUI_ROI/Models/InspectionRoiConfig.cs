@@ -38,6 +38,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         public InspectionRoiConfig(int index)
         {
             Index = index;
+            _enabled = index <= 2;
             _name = $"Inspection {index}";
             _modelKey = $"inspection-{index}";
             _id = $"Inspection_{index}";

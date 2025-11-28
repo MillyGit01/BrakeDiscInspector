@@ -6404,14 +6404,6 @@ namespace BrakeDiscInspector_GUI_ROI
             };
         }
 
-        private void BtnSaveInspection1_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(1);
-
-        private void BtnSaveInspection2_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(2);
-
-        private void BtnSaveInspection3_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(3);
-
-        private void BtnSaveInspection4_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(4);
-
         private void ToggleInspectionEdit(int index)
         {
             var config = GetInspectionConfigByIndex(index);
@@ -6451,8 +6443,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void ToggleInspectionEditFromButton(int index)
         {
-            var vm = WorkflowHost?.DataContext as WorkflowViewModel ?? ViewModel;
-            if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
+            if (WorkflowHost?.DataContext is not WorkflowViewModel vm)
+            {
+                return;
+            }
+
+            if (vm.InspectionRois == null || vm.InspectionRois.Count == 0)
             {
                 GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton ignored: InspectionRois empty index={index}");
                 return;
@@ -6473,7 +6469,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             GuiLog.Info($"[workflow-edit] top-btn toggle request roi='{config.Id}' index={config.Index} enabled={config.Enabled} isEditable={config.IsEditable}");
 
-            ApplyInspectionToggleEdit(config.Id, config.Index);
+            WorkflowHostOnToggleEditRequested(this, new ToggleEditRequestedEventArgs(config.Id, config.Index));
         }
 
         private void ToggleInspectionEdit(InspectionRoiConfig config)

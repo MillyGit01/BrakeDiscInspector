@@ -6408,11 +6408,46 @@ namespace BrakeDiscInspector_GUI_ROI
         private void ToggleInspectionEdit(int index)
         {
             var config = GetInspectionConfigByIndex(index);
-            var roiId = $"Inspection_{index}";
-            var roiModel = FindInspectionRoiModel(roiId) ?? GetInspectionSlotModel(index);
-
-            if (config == null || !config.Enabled || roiModel == null)
+            if (config == null)
             {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEdit ignored: missing config for index={index}");
+                Snack($"Inspection {index} no tiene un ROI para editar.");
+                return;
+            }
+
+            ToggleInspectionEdit(config);
+        }
+
+        private void ToggleInspectionEdit(InspectionRoiConfig config)
+        {
+            var index = config.Index;
+            var roiId = config.Id;
+
+            GuiLog.Info($"[workflow-edit] toggle request roi='{roiId}' index={index} enabled={config.Enabled} isEditable={config.IsEditable}");
+
+            if (!config.Enabled)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEdit aborted: roi='{roiId}' index={index} disabled");
+                Snack($"Inspection {index} está deshabilitado.");
+                return;
+            }
+
+            var roiModel = FindInspectionRoiModel(roiId) ?? GetInspectionSlotModel(index);
+            if (roiModel == null)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEdit: no RoiModel for roi='{roiId}' index={index}");
+                Snack($"Inspection {index} no tiene un ROI para editar.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(roiId))
+            {
+                roiId = roiModel.Id;
+            }
+
+            if (string.IsNullOrWhiteSpace(roiId))
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEdit: missing roiId for index={index}");
                 Snack($"Inspection {index} no tiene un ROI para editar.");
                 return;
             }
@@ -6420,7 +6455,27 @@ namespace BrakeDiscInspector_GUI_ROI
             // Make sure the shape exists so the adorner can attach immediately on the first click.
             EnsureShapeForRoi(roiModel);
 
-            ToggleEditByRoiId(roiId, index);
+            if (ViewModel != null)
+            {
+                ViewModel.SelectedInspectionRoi = config;
+            }
+
+            SetActiveInspectionIndex(index);
+
+            bool makeEditable = !config.IsEditable;
+
+            if (makeEditable)
+            {
+                EnterInspectionEditMode(index, roiId);
+            }
+            else
+            {
+                ExitInspectionEditMode(saveChanges: true);
+            }
+
+            config.IsEditable = makeEditable;
+
+            GuiLog.Info($"[workflow-edit] applied roi='{roiId}' index={index} isEditable={config.IsEditable} frozen={roiModel.IsFrozen}");
         }
 
         private void BtnEditInspection1_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(1);
@@ -6467,8 +6522,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SetActiveInspectionIndex(index);
 
-            var targetId = stored?.Id ?? roi.Id;
-            ToggleEditByRoiId(targetId, index);
+            var config = GetInspectionConfigByIndex(index);
+            if (config != null)
+            {
+                ToggleInspectionEdit(config);
+            }
+            else
+            {
+                GuiLog.Warn($"[workflow-edit] Toggle after create failed: missing config for index={index}");
+            }
             UpdateRoiHud();
         }
 
@@ -12701,10 +12763,30 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (e == null)
             {
+                GuiLog.Warn("[workflow-edit] ToggleEditRequested ignored: event args null");
                 return;
             }
 
-            Dispatcher.Invoke(() => ToggleEditByRoiId(e.RoiId, e.Index));
+            Dispatcher.Invoke(() =>
+            {
+                var vm = ViewModel;
+                if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
+                {
+                    GuiLog.Warn($"[workflow-edit] ToggleEditRequested ignored: InspectionRois empty roi='{e.RoiId}' index={e.Index}");
+                    return;
+                }
+
+                var cfg = vm.InspectionRois.FirstOrDefault(r => string.Equals(r.Id, e.RoiId, StringComparison.OrdinalIgnoreCase))
+                          ?? vm.InspectionRois.FirstOrDefault(r => r.Index == e.Index);
+
+                if (cfg == null)
+                {
+                    GuiLog.Warn($"[workflow-edit] ToggleEditRequested unknown ROI roi='{e.RoiId}' index={e.Index}");
+                    return;
+                }
+
+                ToggleInspectionEdit(cfg);
+            });
         }
 
         private async void WorkflowHostOnLoadModelRequested(object? sender, LoadModelRequestedEventArgs e)

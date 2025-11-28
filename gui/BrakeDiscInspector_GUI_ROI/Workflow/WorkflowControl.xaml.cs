@@ -56,7 +56,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             if (sender is Button button && button.DataContext is InspectionRoiConfig cfg)
             {
+                GuiLog.Info($"[workflow-edit] ToggleEditRequested roi='{cfg.Id}' index={cfg.Index} enabled={cfg.Enabled} isEditable={cfg.IsEditable}");
+
                 ToggleEditRequested?.Invoke(this, new ToggleEditRequestedEventArgs(cfg.Id, cfg.Index));
+            }
+            else
+            {
+                GuiLog.Warn("[workflow-edit] BtnToggleEdit_Click ignored: invalid sender/DataContext");
             }
         }
 

@@ -66,6 +66,32 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public void ToggleInspectionEditFromExternal(int index)
+        {
+            if (DataContext is not WorkflowViewModel vm)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleEditRequested (external) ignored: DataContext not WorkflowViewModel index={index}");
+                return;
+            }
+
+            if (vm.InspectionRois == null || vm.InspectionRois.Count == 0)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleEditRequested (external) ignored: InspectionRois empty index={index}");
+                return;
+            }
+
+            var cfg = vm.InspectionRois.FirstOrDefault(r => r.Index == index);
+            if (cfg == null)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleEditRequested (external) unknown ROI index={index}");
+                return;
+            }
+
+            GuiLog.Info($"[workflow-edit] ToggleEditRequested (external) roi='{cfg.Id}' index={cfg.Index} enabled={cfg.Enabled} isEditable={cfg.IsEditable}");
+
+            ToggleEditRequested?.Invoke(this, new ToggleEditRequestedEventArgs(cfg.Id, cfg.Index));
+        }
+
         private void DatasetImage_Click(object sender, MouseButtonEventArgs e)
         {
             if (sender is Image image && image.DataContext is DatasetPreviewItem item && File.Exists(item.Path))

@@ -6516,7 +6516,13 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SetActiveInspectionIndex(index);
 
-            bool makeEditable = !config.IsEditable;
+            bool isActiveEditable =
+                _globalUnlocked &&
+                !string.IsNullOrWhiteSpace(_activeEditableRoiId) &&
+                !string.IsNullOrWhiteSpace(roiId) &&
+                string.Equals(_activeEditableRoiId, roiId, StringComparison.OrdinalIgnoreCase);
+
+            bool makeEditable = !isActiveEditable;
 
             if (makeEditable)
             {

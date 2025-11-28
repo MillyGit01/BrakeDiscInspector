@@ -87,6 +87,10 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _globalUnlocked = false;
         private bool _editingM1;
         private bool _editingM2;
+        private bool _editingInspection1;
+        private bool _editingInspection2;
+        private bool _editingInspection3;
+        private bool _editingInspection4;
         private bool _editModeActive = false;
         private string? _activeEditableRoiId = null;
         private bool _hasInspectionAnalysisTransform;
@@ -2040,6 +2044,30 @@ namespace BrakeDiscInspector_GUI_ROI
             return null;
         }
 
+        private RoiModel? FindInspectionRoiModel(string roiId)
+        {
+            if (string.IsNullOrWhiteSpace(roiId))
+            {
+                return null;
+            }
+
+            for (int index = 1; index <= 4; index++)
+            {
+                var roi = GetInspectionSlotModel(index);
+                if (roi != null && string.Equals(roi.Id, roiId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return roi;
+                }
+            }
+
+            return null;
+        }
+
+        private Shape? FindInspectionShape(string roiId)
+        {
+            return FindInspectionShapeById(roiId) as Shape;
+        }
+
         private void DumpUiShapesMap(string stageTag)
         {
             var canvas = CanvasROI;
@@ -3452,6 +3480,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             _editModeActive = false;
+            ResetInspectionEditingFlags();
             ResetEditState();
             RemoveAllRoiAdorners();
             ApplyInspectionInteractionPolicy(reason);
@@ -3466,6 +3495,33 @@ namespace BrakeDiscInspector_GUI_ROI
             UpdateEditableConfigState();
         }
 
+        private void ResetInspectionEditingFlags()
+        {
+            _editingInspection1 = false;
+            _editingInspection2 = false;
+            _editingInspection3 = false;
+            _editingInspection4 = false;
+        }
+
+        private void SetInspectionEditingFlag(int index, bool editing)
+        {
+            switch (index)
+            {
+                case 1:
+                    _editingInspection1 = editing;
+                    break;
+                case 2:
+                    _editingInspection2 = editing;
+                    break;
+                case 3:
+                    _editingInspection3 = editing;
+                    break;
+                case 4:
+                    _editingInspection4 = editing;
+                    break;
+            }
+        }
+
         private void ToggleEditByRoiId(string roiId, int inspectionIndex)
         {
             if (string.IsNullOrWhiteSpace(roiId))
@@ -3477,12 +3533,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 && string.Equals(_activeEditableRoiId, roiId, StringComparison.OrdinalIgnoreCase))
             {
                 ExitEditMode("toggle-off");
+                SetInspectionEditingFlag(inspectionIndex, false);
                 return;
             }
 
             if (_globalUnlocked && !string.IsNullOrWhiteSpace(_activeEditableRoiId))
             {
                 ExitEditMode("toggle-switch");
+                ResetInspectionEditingFlags();
             }
 
             var slotRoi = GetInspectionSlotModel(inspectionIndex);
@@ -3493,9 +3551,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            ResetInspectionEditingFlags();
             _activeEditableRoiId = roiId;
             _globalUnlocked = true;
             _editModeActive = true;
+            SetInspectionEditingFlag(inspectionIndex, true);
             UpdateEditableConfigState();
 
             GoToInspectionTab();
@@ -6272,6 +6332,29 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnSaveInspection4_Click(object sender, RoutedEventArgs e) => SaveCurrentInspectionToSlot(4);
 
+        private void ToggleInspectionEdit(int index)
+        {
+            var roiId = $"Inspection_{index}";
+            var roiModel = FindInspectionRoiModel(roiId);
+            var shape = FindInspectionShape(roiId);
+
+            if (roiModel == null || shape == null)
+            {
+                Snack($"Inspection {index} no tiene un ROI para editar.");
+                return;
+            }
+
+            ToggleEditByRoiId(roiId, index);
+        }
+
+        private void BtnEditInspection1_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(1);
+
+        private void BtnEditInspection2_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(2);
+
+        private void BtnEditInspection3_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(3);
+
+        private void BtnEditInspection4_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(4);
+
         private void BtnCreateInspection_Click(object sender, RoutedEventArgs e)
         {
             if (sender is not Button btn || btn.Tag is not string tag ||
@@ -6704,9 +6787,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         && string.Equals(roi.Id, activeId, StringComparison.OrdinalIgnoreCase);
                     bool interactive = matchesId && index == activeIndex;
 
-                    // Freeze competing inspection ROIs only while the global edit mode is unlocked;
-                    // otherwise keep them unfrozen so automatic repositioning during analysis works.
-                    roi.IsFrozen = _globalUnlocked && !interactive;
+                    roi.IsFrozen = !(_globalUnlocked && interactive);
 
                     if (string.IsNullOrWhiteSpace(roi.Id))
                     {

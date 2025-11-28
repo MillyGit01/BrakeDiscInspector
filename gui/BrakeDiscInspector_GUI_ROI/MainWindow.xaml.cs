@@ -6424,6 +6424,25 @@ namespace BrakeDiscInspector_GUI_ROI
             ToggleInspectionEdit(config);
         }
 
+        private void ToggleInspectionEditFromButton(int index)
+        {
+            var vm = ViewModel;
+            if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton ignored: InspectionRois empty index={index}");
+                return;
+            }
+
+            var config = vm.InspectionRois.FirstOrDefault(r => r.Index == index);
+            if (config == null)
+            {
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton unknown ROI index={index}");
+                return;
+            }
+
+            ToggleInspectionEdit(config);
+        }
+
         private void ToggleInspectionEdit(InspectionRoiConfig config)
         {
             var index = config.Index;
@@ -6484,13 +6503,13 @@ namespace BrakeDiscInspector_GUI_ROI
             GuiLog.Info($"[workflow-edit] applied roi='{roiId}' index={index} isEditable={config.IsEditable} frozen={roiModel.IsFrozen}");
         }
 
-        private void BtnEditInspection1_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(1);
+        private void BtnEditInspection1_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(1);
 
-        private void BtnEditInspection2_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(2);
+        private void BtnEditInspection2_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(2);
 
-        private void BtnEditInspection3_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(3);
+        private void BtnEditInspection3_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(3);
 
-        private void BtnEditInspection4_Click(object sender, RoutedEventArgs e) => ToggleInspectionEdit(4);
+        private void BtnEditInspection4_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(4);
 
         private void BtnCreateInspection_Click(object sender, RoutedEventArgs e)
         {

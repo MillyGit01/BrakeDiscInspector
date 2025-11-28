@@ -240,6 +240,50 @@ namespace BrakeDiscInspector_GUI_ROI
             File.WriteAllText(snapshot, json);
         }
 
+        public static string EnsureLayoutJsonExtension(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return path;
+            }
+
+            if (path.EndsWith(".layout.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return path;
+            }
+
+            var withExtension = Path.ChangeExtension(path, ".layout.json");
+            if (withExtension.EndsWith(".layout.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return withExtension;
+            }
+
+            return path + ".layout.json";
+        }
+
+        public static void SaveAs(Preset preset, MasterLayout layout, string path)
+        {
+            var targetPath = EnsureLayoutJsonExtension(path);
+            var dir = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            // Reuse the same guardrails as the standard Save
+            if (layout.Master1Pattern == null || layout.Master1Search == null)
+            {
+                throw new InvalidOperationException(
+                    "No se puede guardar el Layout: falta Master 1 (Pattern y/o Search). " +
+                    "Dibuja/guarda Master 1 antes de 'Save Layout'.");
+            }
+
+            SanitizeForSave(layout);
+
+            var json = JsonSerializer.Serialize(layout, s_opts);
+            File.WriteAllText(targetPath, json);
+        }
+
         private static readonly Regex s_inspectionKeyRegex = new("inspection[\\s_\\-]?([1-4])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static string NormalizeInspectionKey(string? key)

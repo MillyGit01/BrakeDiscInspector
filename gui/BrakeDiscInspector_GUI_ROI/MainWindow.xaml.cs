@@ -3621,6 +3621,11 @@ namespace BrakeDiscInspector_GUI_ROI
             ApplyInspectionInteractionPolicy($"toggle-on:{roiId}");
             RedrawOverlaySafe();
             UpdateRoiHud();
+
+            GuiLog.Info(
+                $"[workflow-edit] EnterInspectionEditMode roi='{roiId}' slot={inspectionIndex} " +
+                $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
+                $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
 
         private void ExitInspectionEditMode(bool saveChanges)
@@ -3645,6 +3650,11 @@ namespace BrakeDiscInspector_GUI_ROI
             ApplyInspectionInteractionPolicy("inspection-edit-exit");
             RedrawOverlaySafe();
             UpdateRoiHud();
+
+            GuiLog.Info(
+                $"[workflow-edit] ExitInspectionEditMode saveChanges={saveChanges} " +
+                $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
+                $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
 
         private void UpdateEditableConfigState()
@@ -6516,30 +6526,45 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SetActiveInspectionIndex(index);
 
-            bool isActiveEditable =
-                _globalUnlocked &&
-                !string.IsNullOrWhiteSpace(_activeEditableRoiId) &&
-                !string.IsNullOrWhiteSpace(roiId) &&
-                string.Equals(_activeEditableRoiId, roiId, StringComparison.OrdinalIgnoreCase);
+            // Determine if THIS slot is currently the active inspection being edited,
+            // using the global state (_editingInspectionSlot), not only config.IsEditable.
+            bool isActiveEditing =
+                _editingInspectionSlot.HasValue &&
+                _editingInspectionSlot.Value == index;
 
-            bool makeEditable = !isActiveEditable;
+            // If this ROI is NOT currently active → we want to ENTER edit mode.
+            // If it IS the active one → we want to EXIT edit mode.
+            bool makeEditable = !isActiveEditing;
+
+            GuiLog.Info(
+                $"[workflow-edit] decision roi='{roiId}' index={index} " +
+                $"isActiveEditing={isActiveEditing} makeEditable={makeEditable} " +
+                $"config.IsEditable(before)={config.IsEditable} " +
+                $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
+                $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
 
             if (makeEditable)
             {
+                // Enter edit mode for this ROI.
+                // EnterInspectionEditMode already handles closing another ROI in edit mode if needed.
                 EnterInspectionEditMode(index, roiId);
-
                 roiModel.IsFrozen = false;
             }
             else
             {
+                // Exit edit mode of the current ROI, saving changes.
                 ExitInspectionEditMode(saveChanges: true);
-
                 roiModel.IsFrozen = true;
             }
 
+            // Keep the config flag in sync with the new state.
             config.IsEditable = makeEditable;
 
-            GuiLog.Info($"[workflow-edit] applied roi='{roiId}' index={index} isEditable={config.IsEditable} frozen={roiModel.IsFrozen}");
+            GuiLog.Info(
+                $"[workflow-edit] applied roi='{roiId}' index={index} " +
+                $"isEditable={config.IsEditable} frozen={roiModel.IsFrozen} " +
+                $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
+                $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
 
         private void BtnEditInspection1_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(1);

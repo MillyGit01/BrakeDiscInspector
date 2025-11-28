@@ -288,15 +288,9 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                      </Style>
-                    </Button.Style>
+                          </Style>
+                        </Button.Style>
                   </Button>
-                  <Button x:Name="BtnSaveInspection1"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
-                          MinHeight="26"
-                          Click="BtnSaveInspection1_Click"
-                          Content="Save 1"/>
                   <Button x:Name="BtnAddOkInspection1"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -387,15 +381,9 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                      </Style>
-                    </Button.Style>
+                          </Style>
+                        </Button.Style>
                   </Button>
-                  <Button x:Name="BtnSaveInspection2"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
-                          MinHeight="26"
-                          Click="BtnSaveInspection2_Click"
-                          Content="Save 2"/>
                   <Button x:Name="BtnAddOkInspection2"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -486,15 +474,9 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                      </Style>
-                    </Button.Style>
+                          </Style>
+                        </Button.Style>
                   </Button>
-                  <Button x:Name="BtnSaveInspection3"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
-                          MinHeight="26"
-                          Click="BtnSaveInspection3_Click"
-                          Content="Save 3"/>
                   <Button x:Name="BtnAddOkInspection3"
                           Margin="4,0,0,0"
                           Padding="4,2"
@@ -585,15 +567,9 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                      </Style>
-                    </Button.Style>
+                          </Style>
+                        </Button.Style>
                   </Button>
-                  <Button x:Name="BtnSaveInspection4"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
-                          MinHeight="26"
-                          Click="BtnSaveInspection4_Click"
-                          Content="Save 4"/>
                   <Button x:Name="BtnAddOkInspection4"
                           Margin="4,0,0,0"
                           Padding="4,2"

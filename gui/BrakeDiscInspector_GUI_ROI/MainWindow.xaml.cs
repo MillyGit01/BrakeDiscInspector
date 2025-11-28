@@ -87,6 +87,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _globalUnlocked = false;
         private bool _editingM1;
         private bool _editingM2;
+        private RoiRole? _activeMaster1Role;
+        private RoiRole? _activeMaster2Role;
         private bool _editingInspection1;
         private bool _editingInspection2;
         private bool _editingInspection3;
@@ -3391,12 +3393,14 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (_editingM1 && (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search))
             {
-                return true;
+                // Only the active Master 1 role should be editable.
+                return _activeMaster1Role.HasValue && _activeMaster1Role.Value == role;
             }
 
             if (_editingM2 && (role == RoiRole.Master2Pattern || role == RoiRole.Master2Search))
             {
-                return true;
+                // Only the active Master 2 role should be editable.
+                return _activeMaster2Role.HasValue && _activeMaster2Role.Value == role;
             }
 
             if (role == RoiRole.Inspection)
@@ -3407,6 +3411,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 if (!_globalUnlocked || string.IsNullOrWhiteSpace(_activeEditableRoiId) || roi == null)
+                {
+                    return false;
+                }
+
+                var cfgIndex = TryParseInspectionIndex(roi);
+                var cfg = cfgIndex.HasValue ? GetInspectionConfigByIndex(cfgIndex.Value) : null;
+                if (cfg != null && !cfg.Enabled)
                 {
                     return false;
                 }
@@ -3500,6 +3511,8 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             _activeEditableRoiId = null;
             _globalUnlocked = false;
+            _activeMaster1Role = null;
+            _activeMaster2Role = null;
             UpdateEditableConfigState();
         }
 
@@ -6394,15 +6407,18 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void ToggleInspectionEdit(int index)
         {
+            var config = GetInspectionConfigByIndex(index);
             var roiId = $"Inspection_{index}";
-            var roiModel = FindInspectionRoiModel(roiId);
-            var shape = FindInspectionShape(roiId);
+            var roiModel = FindInspectionRoiModel(roiId) ?? GetInspectionSlotModel(index);
 
-            if (roiModel == null || shape == null)
+            if (config == null || !config.Enabled || roiModel == null)
             {
                 Snack($"Inspection {index} no tiene un ROI para editar.");
                 return;
             }
+
+            // Make sure the shape exists so the adorner can attach immediately on the first click.
+            EnsureShapeForRoi(roiModel);
 
             ToggleEditByRoiId(roiId, index);
         }
@@ -6752,6 +6768,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_editingM1)
             {
                 _editingM1 = false;
+                _activeMaster1Role = null;
                 if (BtnEditM1 != null)
                 {
                     BtnEditM1.Content = "Edit Master 1";
@@ -6764,6 +6781,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_editingM2)
             {
                 _editingM2 = false;
+                _activeMaster2Role = null;
                 if (BtnEditM2 != null)
                 {
                     BtnEditM2.Content = "Edit Master 2";
@@ -11012,7 +11030,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var dlg = new Microsoft.Win32.OpenFileDialog
                 {
                     InitialDirectory = dir,
-                    Filter = "Layout (*.json)|*.json",
+                    Filter = "Layout (*.layout.json)|*.layout.json",
                     FileName = "last.layout.json",
                     Title = "Select layout"
                 };
@@ -11022,7 +11040,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 using var layoutIo = ViewModel?.BeginLayoutIo("load-layout");
 
-                var loaded = MasterLayoutManager.LoadFromFile(dlg.FileName);
+                var selectedPath = MasterLayoutManager.EnsureLayoutJsonExtension(dlg.FileName);
+                var loaded = MasterLayoutManager.LoadFromFile(selectedPath);
                 ApplyLayout(loaded ?? new MasterLayout(), "manual-load");
                 _editModeActive = false;
                 Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
@@ -12367,6 +12386,41 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BtnM1_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Pattern);
         private void BtnM1_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Pattern);
 
+        private RoiRole GetSelectedMasterRole(int masterIndex)
+        {
+            var combo = masterIndex == 1 ? ComboMasterRoiRole : ComboM2Role;
+            var isSearch = combo?.SelectedIndex == 1;
+            return masterIndex == 1
+                ? (isSearch ? RoiRole.Master1Search : RoiRole.Master1Pattern)
+                : (isSearch ? RoiRole.Master2Search : RoiRole.Master2Pattern);
+        }
+
+        private RoiModel? GetMasterRoiForRole(RoiRole role)
+        {
+            if (_layout == null)
+            {
+                return null;
+            }
+
+            return role switch
+            {
+                RoiRole.Master1Pattern => _layout.Master1Pattern,
+                RoiRole.Master1Search => _layout.Master1Search,
+                RoiRole.Master2Pattern => _layout.Master2Pattern,
+                RoiRole.Master2Search => _layout.Master2Search,
+                _ => null
+            };
+        }
+
+        private void SetMasterRoleFrozen(RoiRole role, bool frozen)
+        {
+            var target = GetMasterRoiForRole(role);
+            if (target != null)
+            {
+                target.IsFrozen = frozen;
+            }
+        }
+
         private void SetMasterFrozen(int masterIndex, bool frozen)
         {
             if (_layout == null)
@@ -12393,15 +12447,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (masterIndex == 1)
+            var activeRole = masterIndex == 1 ? _activeMaster1Role : _activeMaster2Role;
+            if (activeRole.HasValue)
             {
-                AttachAdornerForRoi(_layout.Master1Pattern);
-                AttachAdornerForRoi(_layout.Master1Search);
-            }
-            else
-            {
-                AttachAdornerForRoi(_layout.Master2Pattern);
-                AttachAdornerForRoi(_layout.Master2Search);
+                AttachAdornerForRoi(GetMasterRoiForRole(activeRole.Value));
             }
         }
 
@@ -12432,23 +12481,42 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (_editingInspectionSlot.HasValue)
+            {
+                ExitInspectionEditMode(saveChanges: true);
+            }
+
+            if (_editingM2)
+            {
+                CancelMasterEditing(redraw: false);
+            }
+
+            var targetRole = GetSelectedMasterRole(1);
+            var targetRoi = GetMasterRoiForRole(targetRole);
+
             if (!_editingM1)
             {
-                if (_layout.Master1Pattern == null || _layout.Master1Search == null)
+                if (targetRoi == null)
                 {
                     Snack("Faltan ROI de Master 1.");
                     return;
                 }
 
-                SetMasterFrozen(1, false);
+                // Freeze every master ROI and only unfreeze the one selected in the combobox.
+                SetMasterFrozen(1, true);
+                SetMasterFrozen(2, true);
+                SetMasterRoleFrozen(targetRole, false);
 
+                _activeMaster1Role = targetRole;
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM1 = true;
                 _editModeActive = true;
                 BtnEditM1.Content = "Save Master 1";
-                RedrawOverlaySafe();
+
+                RemoveAdornersForMaster(1);
                 AttachAdornersForMaster(1);
+                RedrawOverlaySafe();
             }
             else
             {
@@ -12458,7 +12526,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 RemoveAdornersForMaster(1);
                 _editingM1 = false;
-                _editModeActive = false;
+                _activeMaster1Role = null;
+                _editModeActive = _editingM2;
                 BtnEditM1.Content = "Edit Master 1";
                 RedrawOverlaySafe();
                 Snack("Master 1 válido.");
@@ -12477,23 +12546,41 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (_editingInspectionSlot.HasValue)
+            {
+                ExitInspectionEditMode(saveChanges: true);
+            }
+
+            if (_editingM1)
+            {
+                CancelMasterEditing(redraw: false);
+            }
+
+            var targetRole = GetSelectedMasterRole(2);
+            var targetRoi = GetMasterRoiForRole(targetRole);
+
             if (!_editingM2)
             {
-                if (_layout.Master2Pattern == null || _layout.Master2Search == null)
+                if (targetRoi == null)
                 {
                     Snack("Faltan ROI de Master 2.");
                     return;
                 }
 
-                SetMasterFrozen(2, false);
+                SetMasterFrozen(1, true);
+                SetMasterFrozen(2, true);
+                SetMasterRoleFrozen(targetRole, false);
 
+                _activeMaster2Role = targetRole;
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM2 = true;
                 _editModeActive = true;
                 BtnEditM2.Content = "Save Master 2";
-                RedrawOverlaySafe();
+
+                RemoveAdornersForMaster(2);
                 AttachAdornersForMaster(2);
+                RedrawOverlaySafe();
             }
             else
             {
@@ -12503,7 +12590,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 RemoveAdornersForMaster(2);
                 _editingM2 = false;
-                _editModeActive = false;
+                _activeMaster2Role = null;
+                _editModeActive = _editingM1;
                 BtnEditM2.Content = "Edit Master 2";
                 RedrawOverlaySafe();
                 Snack("Master 2 válido.");

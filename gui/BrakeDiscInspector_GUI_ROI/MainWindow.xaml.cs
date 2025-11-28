@@ -3593,6 +3593,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void EnterInspectionEditMode(int inspectionIndex, string roiId)
         {
+            if (_state != MasterState.DrawInspection && _state != MasterState.Ready)
+            {
+                _state = MasterState.DrawInspection;
+                UpdateWizardState();
+            }
+
             if (_editingInspectionSlot.HasValue && _editingInspectionSlot.Value != inspectionIndex)
             {
                 ExitInspectionEditMode(saveChanges: true);

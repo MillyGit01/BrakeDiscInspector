@@ -57,6 +57,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // Estilos básicos
             StyleThumb(_moveThumb, 0, 0, 0, 0, Cursors.SizeAll, 0.0, 0.0, 0.0, 0.0);
             _moveThumb.Background = Brushes.Transparent; // grande e invisible
+            _moveThumb.IsHitTestVisible = true;
 
             for (int i = 0; i < 4; i++)
             {
@@ -180,6 +181,8 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // 1) MoveThumb cubre toda el área del ROI (transparente)
+            _moveThumb.Width = w;
+            _moveThumb.Height = h;
             _moveThumb.Arrange(new Rect(0, 0, w, h));
 
             // 2) Corners y edges (posicionados alrededor)

@@ -257,9 +257,9 @@
             <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
               <StackPanel Margin="8,4,0,0">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
-                  <TextBlock Text="Inspection 1" Width="90" VerticalAlignment="Center"/>
+                  <TextBlock Text="Inspection 1" Width="80" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection1"
-                            Width="100"
+                            Width="80"
                             Tag="1"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[0].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
@@ -274,19 +274,30 @@
                   <Button Margin="4,0,0,0"
                           Padding="12,4"
                           MinHeight="26"
-                          Content="Editar"
                           DataContext="{Binding DataContext.InspectionRois[0], ElementName=WorkflowHost}"
                           Click="BtnToggleEdit_Click"
                           IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
                         <Setter Property="IsEnabled" Value="True"/>
+                        <Setter Property="Content">
+                          <Setter.Value>
+                            <Binding Path="Index" StringFormat="Edit ROI{0}"/>
+                          </Setter.Value>
+                        </Setter>
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
                             <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                            <Setter Property="Content">
+                              <Setter.Value>
+                                <Binding Path="Index" StringFormat="Save ROI{0}"/>
+                              </Setter.Value>
+                            </Setter>
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
@@ -351,9 +362,9 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
-                  <TextBlock Text="Inspection 2" Width="90" VerticalAlignment="Center"/>
+                  <TextBlock Text="Inspection 2" Width="80" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection2"
-                            Width="100"
+                            Width="80"
                             Tag="2"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[1].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
@@ -368,19 +379,30 @@
                   <Button Margin="4,0,0,0"
                           Padding="12,4"
                           MinHeight="26"
-                          Content="Editar"
                           DataContext="{Binding DataContext.InspectionRois[1], ElementName=WorkflowHost}"
                           Click="BtnToggleEdit_Click"
                           IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
                         <Setter Property="IsEnabled" Value="True"/>
+                        <Setter Property="Content">
+                          <Setter.Value>
+                            <Binding Path="Index" StringFormat="Edit ROI{0}"/>
+                          </Setter.Value>
+                        </Setter>
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
                             <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                            <Setter Property="Content">
+                              <Setter.Value>
+                                <Binding Path="Index" StringFormat="Save ROI{0}"/>
+                              </Setter.Value>
+                            </Setter>
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
@@ -445,9 +467,9 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
-                  <TextBlock Text="Inspection 3" Width="90" VerticalAlignment="Center"/>
+                  <TextBlock Text="Inspection 3" Width="80" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection3"
-                            Width="100"
+                            Width="80"
                             Tag="3"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[2].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
@@ -462,19 +484,30 @@
                   <Button Margin="4,0,0,0"
                           Padding="12,4"
                           MinHeight="26"
-                          Content="Editar"
                           DataContext="{Binding DataContext.InspectionRois[2], ElementName=WorkflowHost}"
                           Click="BtnToggleEdit_Click"
                           IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
                         <Setter Property="IsEnabled" Value="True"/>
+                        <Setter Property="Content">
+                          <Setter.Value>
+                            <Binding Path="Index" StringFormat="Edit ROI{0}"/>
+                          </Setter.Value>
+                        </Setter>
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
                             <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                            <Setter Property="Content">
+                              <Setter.Value>
+                                <Binding Path="Index" StringFormat="Save ROI{0}"/>
+                              </Setter.Value>
+                            </Setter>
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>
@@ -539,9 +572,9 @@
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Margin="0,4,0,12" VerticalAlignment="Center">
-                  <TextBlock Text="Inspection 4" Width="90" VerticalAlignment="Center"/>
+                  <TextBlock Text="Inspection 4" Width="80" VerticalAlignment="Center"/>
                   <ComboBox x:Name="CmbShapeInspection4"
-                            Width="100"
+                            Width="80"
                             Tag="4"
                             ItemsSource="{Binding AvailableShapes}"
                             SelectedItem="{Binding DataContext.InspectionRois[3].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
@@ -556,19 +589,30 @@
                   <Button Margin="4,0,0,0"
                           Padding="12,4"
                           MinHeight="26"
-                          Content="Editar"
                           DataContext="{Binding DataContext.InspectionRois[3], ElementName=WorkflowHost}"
                           Click="BtnToggleEdit_Click"
                           IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
                         <Setter Property="IsEnabled" Value="True"/>
+                        <Setter Property="Content">
+                          <Setter.Value>
+                            <Binding Path="Index" StringFormat="Edit ROI{0}"/>
+                          </Setter.Value>
+                        </Setter>
                         <Style.Triggers>
                           <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
                             <Setter Property="IsEnabled" Value="False"/>
+                          </DataTrigger>
+                          <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                            <Setter Property="Content">
+                              <Setter.Value>
+                                <Binding Path="Index" StringFormat="Save ROI{0}"/>
+                              </Setter.Value>
+                            </Setter>
                           </DataTrigger>
                         </Style.Triggers>
                       </Style>

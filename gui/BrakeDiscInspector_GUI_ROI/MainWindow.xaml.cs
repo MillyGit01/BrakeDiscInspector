@@ -3547,6 +3547,29 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 BtnEditInspection4.Content = _editingInspectionSlot == 4 ? "Save ROI 4" : "Edit ROI 4";
             }
+
+            RaiseInspectionCommandStates();
+        }
+
+        private void RaiseInspectionCommandStates()
+        {
+            if (ViewModel == null)
+            {
+                return;
+            }
+
+            if (ViewModel.AddRoiToOkCommand is AsyncCommand addOk)
+            {
+                addOk.RaiseCanExecuteChanged();
+            }
+
+            if (ViewModel.AddRoiToNgCommand is AsyncCommand addNg)
+            {
+                addNg.RaiseCanExecuteChanged();
+            }
+
+            ViewModel.AddRoiToDatasetOkCommand.RaiseCanExecuteChanged();
+            ViewModel.AddRoiToDatasetNgCommand.RaiseCanExecuteChanged();
         }
 
         private void SetInspectionEditingFlag(int index, bool editing)

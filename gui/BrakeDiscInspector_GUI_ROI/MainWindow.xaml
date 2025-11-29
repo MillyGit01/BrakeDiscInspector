@@ -275,12 +275,15 @@
                           Margin="4,0,0,0"
                           Padding="4,2"
                           MinHeight="26"
-                          Click="BtnEditInspection1_Click"
-                          Content="Edit ROI 1">
+                          Click="BtnEditInspection1_Click">
                     <Button.Style>
                       <Style TargetType="Button">
+                        <Setter Property="Content" Value="Edit ROI 1"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[0].IsEditable, ElementName=WorkflowHost}" Value="True">
+                            <Setter Property="Content" Value="Save ROI 1"/>
+                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -368,12 +371,15 @@
                           Margin="4,0,0,0"
                           Padding="4,2"
                           MinHeight="26"
-                          Click="BtnEditInspection2_Click"
-                          Content="Edit ROI 2">
+                          Click="BtnEditInspection2_Click">
                     <Button.Style>
                       <Style TargetType="Button">
+                        <Setter Property="Content" Value="Edit ROI 2"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[1].IsEditable, ElementName=WorkflowHost}" Value="True">
+                            <Setter Property="Content" Value="Save ROI 2"/>
+                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -461,12 +467,15 @@
                           Margin="4,0,0,0"
                           Padding="4,2"
                           MinHeight="26"
-                          Click="BtnEditInspection3_Click"
-                          Content="Edit ROI 3">
+                          Click="BtnEditInspection3_Click">
                     <Button.Style>
                       <Style TargetType="Button">
+                        <Setter Property="Content" Value="Edit ROI 3"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[2].IsEditable, ElementName=WorkflowHost}" Value="True">
+                            <Setter Property="Content" Value="Save ROI 3"/>
+                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -554,12 +563,15 @@
                           Margin="4,0,0,0"
                           Padding="4,2"
                           MinHeight="26"
-                          Click="BtnEditInspection4_Click"
-                          Content="Edit ROI 4">
+                          Click="BtnEditInspection4_Click">
                     <Button.Style>
                       <Style TargetType="Button">
+                        <Setter Property="Content" Value="Edit ROI 4"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
+                          <DataTrigger Binding="{Binding DataContext.InspectionRois[3].IsEditable, ElementName=WorkflowHost}" Value="True">
+                            <Setter Property="Content" Value="Save ROI 4"/>
+                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>

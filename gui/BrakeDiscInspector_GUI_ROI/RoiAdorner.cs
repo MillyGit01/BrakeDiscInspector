@@ -37,6 +37,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private readonly Thumb _rotationThumb;
         private readonly Thumb _innerRadiusThumb;
 
+        private bool _moveDragAllowed = true;
+
         private bool _isRotating;
         private double _rotationAngleAtDragStart;
         private double _rotationAccumulatedAngle;
@@ -263,6 +265,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void MoveThumb_DragDelta(object sender, DragDeltaEventArgs e)
         {
+            if (!_moveDragAllowed)
+                return;
+
             var roi = _shape.Tag as RoiModel;
             if (roi == null) return;
 
@@ -284,6 +289,18 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void OnThumbDragStarted(object? sender, DragStartedEventArgs e)
         {
+            _moveDragAllowed = true;
+
+            if (sender == _moveThumb)
+            {
+                Point p = Mouse.GetPosition(_moveThumb);
+                if (!IsPointInsideRoiGeometry(p))
+                {
+                    _moveDragAllowed = false;
+                    return;
+                }
+            }
+
             if (_shape.Tag is RoiModel roi)
             {
                 SyncModelFromShape(_shape, roi);
@@ -293,6 +310,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void OnThumbDragCompleted(object? sender, DragCompletedEventArgs e)
         {
+            if (sender == _moveThumb && !_moveDragAllowed)
+            {
+                _moveDragAllowed = true;
+                return;
+            }
+
             if (_shape.Tag is RoiModel roi)
             {
                 SyncModelFromShape(_shape, roi);
@@ -638,6 +661,52 @@ namespace BrakeDiscInspector_GUI_ROI
                 return roi.AngleDeg;
 
             return 0.0;
+        }
+
+        private bool IsPointInsideRoiGeometry(Point pLocal)
+        {
+            if (_shape.Tag is not RoiModel roi)
+                return true;
+
+            var (w, h) = GetShapeSize();
+
+            switch (roi.Shape)
+            {
+                case RoiShape.Rectangle:
+                    return pLocal.X >= 0 && pLocal.X <= w && pLocal.Y >= 0 && pLocal.Y <= h;
+
+                case RoiShape.Circle:
+                {
+                    double cx = w / 2.0;
+                    double cy = h / 2.0;
+                    double dx = pLocal.X - cx;
+                    double dy = pLocal.Y - cy;
+                    double rOuter = Math.Min(w, h) / 2.0;
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+                    return dist <= rOuter;
+                }
+
+                case RoiShape.Annulus:
+                {
+                    double cx = w / 2.0;
+                    double cy = h / 2.0;
+                    double dx = pLocal.X - cx;
+                    double dy = pLocal.Y - cy;
+                    double rOuter = Math.Min(w, h) / 2.0;
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+
+                    double rInner = ResolveInnerRadiusForLayout(
+                        roi,
+                        _shape as AnnulusShape,
+                        w,
+                        h);
+
+                    return dist >= rInner && dist <= rOuter;
+                }
+
+                default:
+                    return true;
+            }
         }
 
         private (double width, double height) GetShapeSize()

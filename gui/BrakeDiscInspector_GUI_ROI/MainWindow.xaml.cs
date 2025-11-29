@@ -6559,11 +6559,25 @@ namespace BrakeDiscInspector_GUI_ROI
                 $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
 
-        private void BtnToggleEdit_Click(object sender, RoutedEventArgs e)
+        private async void BtnToggleEdit_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.DataContext is InspectionRoiConfig cfg)
             {
                 GuiLog.Info($"[workflow-edit] BtnToggleEdit_Click(main) roi='{cfg.Id}' index={cfg.Index} enabled={cfg.Enabled} isEditable={cfg.IsEditable}");
+
+                bool requiresTabSwitch = ViewModel?.SelectedInspectionRoi?.Index != cfg.Index;
+                if (requiresTabSwitch)
+                {
+                    var previous = ViewModel?.SelectedInspectionRoi?.Index;
+                    GuiLog.Info($"[workflow-edit] side-click: switching inspection tab from {previous?.ToString() ?? "null"} to {cfg.Index}");
+
+                    // Activate the corresponding inspection tab before toggling edit mode so the adorner can attach.
+                    SetActiveInspectionIndex(cfg.Index);
+
+                    // Allow the UI to render the newly selected tab before applying the toggle logic.
+                    await Dispatcher.Yield(DispatcherPriority.Background);
+                }
+
                 ApplyInspectionToggleEdit(cfg.Id, cfg.Index, source: "side-panel");
             }
             else

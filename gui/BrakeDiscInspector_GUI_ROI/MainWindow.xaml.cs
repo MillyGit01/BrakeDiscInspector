@@ -3630,6 +3630,13 @@ namespace BrakeDiscInspector_GUI_ROI
             RedrawOverlaySafe();
             UpdateRoiHud();
 
+            var activeRoi = FindInspectionRoiModel(roiId) ?? GetInspectionSlotModel(inspectionIndex);
+            Dispatcher.InvokeAsync(() =>
+            {
+                AttachAdornerForRoi(activeRoi);
+                ApplyInspectionInteractionPolicy($"toggle-on:post-dispatch:{roiId}");
+            }, DispatcherPriority.Background);
+
             GuiLog.Info(
                 $"[workflow-edit] EnterInspectionEditMode END roi='{roiId}' slot={inspectionIndex} " +
                 $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +

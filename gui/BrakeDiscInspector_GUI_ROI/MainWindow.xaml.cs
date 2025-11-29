@@ -3597,6 +3597,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void EnterInspectionEditMode(int inspectionIndex, string roiId)
         {
+            GuiLog.Info(
+                $"[workflow-edit] EnterInspectionEditMode START roi='{roiId}' slot={inspectionIndex} " +
+                $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
+                $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
+
             if (_state != MasterState.DrawInspection && _state != MasterState.Ready)
             {
                 _state = MasterState.DrawInspection;
@@ -3626,7 +3631,7 @@ namespace BrakeDiscInspector_GUI_ROI
             UpdateRoiHud();
 
             GuiLog.Info(
-                $"[workflow-edit] EnterInspectionEditMode roi='{roiId}' slot={inspectionIndex} " +
+                $"[workflow-edit] EnterInspectionEditMode END roi='{roiId}' slot={inspectionIndex} " +
                 $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
                 $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
@@ -3639,6 +3644,12 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var slot = _editingInspectionSlot.Value;
+
+            GuiLog.Info(
+                $"[workflow-edit] ExitInspectionEditMode START saveChanges={saveChanges} " +
+                $"slot={slot} editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
+                $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
+
             if (saveChanges)
             {
                 SaveCurrentInspectionToSlot(slot);
@@ -3655,7 +3666,7 @@ namespace BrakeDiscInspector_GUI_ROI
             UpdateRoiHud();
 
             GuiLog.Info(
-                $"[workflow-edit] ExitInspectionEditMode saveChanges={saveChanges} " +
+                $"[workflow-edit] ExitInspectionEditMode END saveChanges={saveChanges} " +
                 $"editingSlot={_editingInspectionSlot?.ToString() ?? "null"} " +
                 $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
@@ -6430,14 +6441,14 @@ namespace BrakeDiscInspector_GUI_ROI
             ToggleInspectionEdit(config);
         }
 
-        private void ApplyInspectionToggleEdit(string? roiId, int index)
+        private void ApplyInspectionToggleEdit(string? roiId, int index, string source = "unknown")
         {
             Dispatcher.Invoke(() =>
             {
                 var vm = ViewModel;
                 if (vm?.InspectionRois == null || vm.InspectionRois.Count == 0)
                 {
-                    GuiLog.Warn($"[workflow-edit] ToggleEdit ignored: InspectionRois empty roi='{roiId}' index={index}");
+                    GuiLog.Warn($"[workflow-edit] ToggleEdit ignored: InspectionRois empty roi='{roiId}' index={index} source={source}");
                     return;
                 }
 
@@ -6446,9 +6457,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (cfg == null)
                 {
-                    GuiLog.Warn($"[workflow-edit] ToggleEdit unknown ROI roi='{roiId}' index={index}");
+                    GuiLog.Warn($"[workflow-edit] ToggleEdit unknown ROI roi='{roiId}' index={index} source={source}");
                     return;
                 }
+
+                GuiLog.Info($"[workflow-edit] ApplyInspectionToggleEdit source={source} roi='{cfg.Id}' index={cfg.Index} enabled={cfg.Enabled} isEditable={cfg.IsEditable} editingSlot={_editingInspectionSlot?.ToString() ?? "null"} activeEditableRoiId='{_activeEditableRoiId}'");
 
                 ToggleInspectionEdit(cfg);
             });
@@ -6459,7 +6472,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var index = config.Index;
             var roiId = config.Id;
 
-            GuiLog.Info($"[workflow-edit] toggle request roi='{roiId}' index={index} enabled={config.Enabled} isEditable={config.IsEditable}");
+            GuiLog.Info($"[workflow-edit] toggle request roi='{roiId}' index={index} enabled={config.Enabled} isEditable={config.IsEditable} editingSlot={_editingInspectionSlot?.ToString() ?? "null"} activeEditableRoiId='{_activeEditableRoiId}'");
 
             if (!config.Enabled)
             {
@@ -6486,6 +6499,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Warn($"[workflow-edit] ToggleInspectionEdit: missing roiId for index={index}");
                 Snack($"Inspection {index} no tiene un ROI para editar.");
                 return;
+            }
+
+            bool switchingRoi = _editingInspectionSlot.HasValue && _editingInspectionSlot.Value != index;
+            if (switchingRoi)
+            {
+                GuiLog.Info($"[workflow-edit] Switching edit mode from ROI='{_activeEditableRoiId}' slot={_editingInspectionSlot?.ToString() ?? "null"} to ROI='{roiId}' slot={index}");
+                ExitInspectionEditMode(saveChanges: true);
             }
 
             // Make sure the shape exists so the adorner can attach immediately on the first click.
@@ -6544,7 +6564,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is Button btn && btn.DataContext is InspectionRoiConfig cfg)
             {
                 GuiLog.Info($"[workflow-edit] BtnToggleEdit_Click(main) roi='{cfg.Id}' index={cfg.Index} enabled={cfg.Enabled} isEditable={cfg.IsEditable}");
-                ApplyInspectionToggleEdit(cfg.Id, cfg.Index);
+                ApplyInspectionToggleEdit(cfg.Id, cfg.Index, source: "side-panel");
             }
             else
             {
@@ -12824,7 +12844,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            ApplyInspectionToggleEdit(e.RoiId, e.Index);
+            ApplyInspectionToggleEdit(e.RoiId, e.Index, source: "workflow-tab");
         }
 
         private async void WorkflowHostOnLoadModelRequested(object? sender, LoadModelRequestedEventArgs e)

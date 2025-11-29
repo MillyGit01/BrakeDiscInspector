@@ -271,19 +271,17 @@
                           Tag="1"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 1"/>
-                  <Button x:Name="BtnEditInspection1"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
+                  <Button Margin="4,0,0,0"
+                          Padding="12,4"
                           MinHeight="26"
-                          Click="BtnEditInspection1_Click">
+                          Content="Editar"
+                          DataContext="{Binding DataContext.InspectionRois[0], ElementName=WorkflowHost}"
+                          Click="BtnToggleEdit_Click"
+                          IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
-                        <Setter Property="Content" Value="Edit ROI 1"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
-                          <DataTrigger Binding="{Binding DataContext.InspectionRois[0].IsEditable, ElementName=WorkflowHost}" Value="True">
-                            <Setter Property="Content" Value="Save ROI 1"/>
-                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -291,8 +289,8 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                          </Style>
-                        </Button.Style>
+                      </Style>
+                    </Button.Style>
                   </Button>
                   <Button x:Name="BtnAddOkInspection1"
                           Margin="4,0,0,0"
@@ -367,19 +365,17 @@
                           Tag="2"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 2"/>
-                  <Button x:Name="BtnEditInspection2"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
+                  <Button Margin="4,0,0,0"
+                          Padding="12,4"
                           MinHeight="26"
-                          Click="BtnEditInspection2_Click">
+                          Content="Editar"
+                          DataContext="{Binding DataContext.InspectionRois[1], ElementName=WorkflowHost}"
+                          Click="BtnToggleEdit_Click"
+                          IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
-                        <Setter Property="Content" Value="Edit ROI 2"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
-                          <DataTrigger Binding="{Binding DataContext.InspectionRois[1].IsEditable, ElementName=WorkflowHost}" Value="True">
-                            <Setter Property="Content" Value="Save ROI 2"/>
-                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -387,8 +383,8 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                          </Style>
-                        </Button.Style>
+                      </Style>
+                    </Button.Style>
                   </Button>
                   <Button x:Name="BtnAddOkInspection2"
                           Margin="4,0,0,0"
@@ -463,19 +459,17 @@
                           Tag="3"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 3"/>
-                  <Button x:Name="BtnEditInspection3"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
+                  <Button Margin="4,0,0,0"
+                          Padding="12,4"
                           MinHeight="26"
-                          Click="BtnEditInspection3_Click">
+                          Content="Editar"
+                          DataContext="{Binding DataContext.InspectionRois[2], ElementName=WorkflowHost}"
+                          Click="BtnToggleEdit_Click"
+                          IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
-                        <Setter Property="Content" Value="Edit ROI 3"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
-                          <DataTrigger Binding="{Binding DataContext.InspectionRois[2].IsEditable, ElementName=WorkflowHost}" Value="True">
-                            <Setter Property="Content" Value="Save ROI 3"/>
-                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -483,8 +477,8 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                          </Style>
-                        </Button.Style>
+                      </Style>
+                    </Button.Style>
                   </Button>
                   <Button x:Name="BtnAddOkInspection3"
                           Margin="4,0,0,0"
@@ -559,19 +553,17 @@
                           Tag="4"
                           Click="BtnCreateInspection_Click"
                           Content="Create ROI 4"/>
-                  <Button x:Name="BtnEditInspection4"
-                          Margin="4,0,0,0"
-                          Padding="4,2"
+                  <Button Margin="4,0,0,0"
+                          Padding="12,4"
                           MinHeight="26"
-                          Click="BtnEditInspection4_Click">
+                          Content="Editar"
+                          DataContext="{Binding DataContext.InspectionRois[3], ElementName=WorkflowHost}"
+                          Click="BtnToggleEdit_Click"
+                          IsEnabled="{Binding Enabled}">
                     <Button.Style>
                       <Style TargetType="Button">
-                        <Setter Property="Content" Value="Edit ROI 4"/>
                         <Setter Property="IsEnabled" Value="True"/>
                         <Style.Triggers>
-                          <DataTrigger Binding="{Binding DataContext.InspectionRois[3].IsEditable, ElementName=WorkflowHost}" Value="True">
-                            <Setter Property="Content" Value="Save ROI 4"/>
-                          </DataTrigger>
                           <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
@@ -579,8 +571,8 @@
                             <Setter Property="IsEnabled" Value="False"/>
                           </DataTrigger>
                         </Style.Triggers>
-                          </Style>
-                        </Button.Style>
+                      </Style>
+                    </Button.Style>
                   </Button>
                   <Button x:Name="BtnAddOkInspection4"
                           Margin="4,0,0,0"

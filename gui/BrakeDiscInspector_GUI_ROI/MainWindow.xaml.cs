@@ -6281,10 +6281,42 @@ namespace BrakeDiscInspector_GUI_ROI
         private void RefreshInspectionRoiSlots(IReadOnlyList<RoiModel>? rois = null)
         {
             var source = rois ?? CollectSavedInspectionRois();
+            var slots = new RoiModel?[4];
 
-            for (int i = 0; i < 4; i++)
+            if (rois == null)
             {
-                var model = source.Count > i ? source[i] : null;
+                foreach (var roi in source)
+                {
+                    if (roi == null)
+                    {
+                        continue;
+                    }
+
+                    var slotIndex = TryParseInspectionIndex(roi);
+
+                    if (!slotIndex.HasValue || slotIndex < 1 || slotIndex > 4 || slots[slotIndex.Value - 1] != null)
+                    {
+                        var nextFree = Array.FindIndex(slots, s => s == null);
+                        slotIndex = nextFree >= 0 ? nextFree + 1 : null;
+                    }
+
+                    if (slotIndex.HasValue && slotIndex.Value >= 1 && slotIndex.Value <= 4 && slots[slotIndex.Value - 1] == null)
+                    {
+                        slots[slotIndex.Value - 1] = roi;
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < slots.Length; i++)
+                {
+                    slots[i] = source.Count > i ? source[i] : null;
+                }
+            }
+
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var model = slots[i];
                 RoiDiag($"[slot-refresh] slot={i + 1} srcId={(model?.Id ?? "<null>")} shape={(model?.Shape.ToString() ?? "<none>")} base=({model?.BaseImgW?.ToString("F1", CultureInfo.InvariantCulture) ?? "-"}x{model?.BaseImgH?.ToString("F1", CultureInfo.InvariantCulture) ?? "-"})");
                 SetInspectionSlotModel(i + 1, model, updateActive: false);
             }

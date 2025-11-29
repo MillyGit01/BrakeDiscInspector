@@ -3528,26 +3528,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void UpdateInspectionEditButtons()
         {
-            if (BtnEditInspection1 != null)
-            {
-                BtnEditInspection1.Content = _editingInspectionSlot == 1 ? "Save ROI 1" : "Edit ROI 1";
-            }
-
-            if (BtnEditInspection2 != null)
-            {
-                BtnEditInspection2.Content = _editingInspectionSlot == 2 ? "Save ROI 2" : "Edit ROI 2";
-            }
-
-            if (BtnEditInspection3 != null)
-            {
-                BtnEditInspection3.Content = _editingInspectionSlot == 3 ? "Save ROI 3" : "Edit ROI 3";
-            }
-
-            if (BtnEditInspection4 != null)
-            {
-                BtnEditInspection4.Content = _editingInspectionSlot == 4 ? "Save ROI 4" : "Edit ROI 4";
-            }
-
             RaiseInspectionCommandStates();
         }
 
@@ -6474,19 +6454,6 @@ namespace BrakeDiscInspector_GUI_ROI
             });
         }
 
-        private void ToggleInspectionEditFromButton(int index)
-        {
-            // Delegamos en el WorkflowControl para que el botón superior
-            // use EXACTAMENTE el mismo flujo que el botón "Edit" del tab.
-            if (WorkflowHost == null)
-            {
-                GuiLog.Warn($"[workflow-edit] ToggleInspectionEditFromButton ignored: WorkflowHost is null index={index}");
-                return;
-            }
-
-            WorkflowHost.ToggleInspectionEditFromExternal(index);
-        }
-
         private void ToggleInspectionEdit(InspectionRoiConfig config)
         {
             var index = config.Index;
@@ -6572,13 +6539,18 @@ namespace BrakeDiscInspector_GUI_ROI
                 $"globalUnlocked={_globalUnlocked} activeEditableRoiId='{_activeEditableRoiId}'");
         }
 
-        private void BtnEditInspection1_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(1);
-
-        private void BtnEditInspection2_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(2);
-
-        private void BtnEditInspection3_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(3);
-
-        private void BtnEditInspection4_Click(object sender, RoutedEventArgs e) => ToggleInspectionEditFromButton(4);
+        private void BtnToggleEdit_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.DataContext is InspectionRoiConfig cfg)
+            {
+                GuiLog.Info($"[workflow-edit] BtnToggleEdit_Click(main) roi='{cfg.Id}' index={cfg.Index} enabled={cfg.Enabled} isEditable={cfg.IsEditable}");
+                ApplyInspectionToggleEdit(cfg.Id, cfg.Index);
+            }
+            else
+            {
+                GuiLog.Warn("[workflow-edit] BtnToggleEdit_Click(main) ignored: invalid sender/DataContext");
+            }
+        }
 
         private void BtnCreateInspection_Click(object sender, RoutedEventArgs e)
         {

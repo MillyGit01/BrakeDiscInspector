@@ -57,7 +57,7 @@ namespace BrakeDiscInspector_GUI_ROI
             IsHitTestVisible = true;
 
             // Estilos básicos
-            StyleThumb(_moveThumb, 0, 0, 0, 0, Cursors.SizeAll, 0.0, 0.0, 0.0, 0.0);
+            StyleThumb(_moveThumb, 0, 0, 0, 0, Cursors.Arrow, 0.0, 0.0, 0.0, 0.0);
             _moveThumb.Background = Brushes.Transparent; // grande e invisible
             _moveThumb.IsHitTestVisible = true;
 
@@ -86,6 +86,8 @@ namespace BrakeDiscInspector_GUI_ROI
             _moveThumb.DragStarted += OnThumbDragStarted;
             _moveThumb.DragDelta += MoveThumb_DragDelta;
             _moveThumb.DragCompleted += OnThumbDragCompleted;
+            _moveThumb.MouseMove += MoveThumb_MouseMove;
+            _moveThumb.MouseLeave += MoveThumb_MouseLeave;
 
             _corners[0].DragStarted += OnThumbDragStarted;
             _corners[0].DragDelta += (s, e) => ResizeByCorner(e.HorizontalChange, e.VerticalChange, Corner.NW);
@@ -262,6 +264,23 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         // === Interacciones ===
+
+        private void MoveThumb_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (sender != _moveThumb)
+                return;
+
+            Point p = e.GetPosition(_moveThumb);
+            bool inside = IsPointInsideRoiGeometry(p);
+
+            _moveThumb.Cursor = inside ? Cursors.SizeAll : Cursors.Arrow;
+        }
+
+        private void MoveThumb_MouseLeave(object sender, MouseEventArgs e)
+        {
+            if (sender == _moveThumb)
+                _moveThumb.Cursor = Cursors.Arrow;
+        }
 
         private void MoveThumb_DragDelta(object sender, DragDeltaEventArgs e)
         {

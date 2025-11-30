@@ -3379,6 +3379,16 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private RoiRole? GetCurrentStateRole()
         {
+            if (_editingM1 && _activeMaster1Role.HasValue)
+            {
+                return _activeMaster1Role.Value;
+            }
+
+            if (_editingM2 && _activeMaster2Role.HasValue)
+            {
+                return _activeMaster2Role.Value;
+            }
+
             return _state switch
             {
                 MasterState.DrawM1_Pattern => RoiRole.Master1Pattern,
@@ -3697,9 +3707,23 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private bool TryClearCurrentStatePersistedRoi(out RoiRole? clearedRole)
         {
-            clearedRole = GetCurrentStateRole();
+            return TryClearPersistedRoiForState(_state, out clearedRole);
+        }
 
-            switch (_state)
+        private bool TryClearPersistedRoiForState(MasterState state, out RoiRole? clearedRole)
+        {
+            clearedRole = state switch
+            {
+                MasterState.DrawM1_Pattern => RoiRole.Master1Pattern,
+                MasterState.DrawM1_Search => RoiRole.Master1Search,
+                MasterState.DrawM2_Pattern => RoiRole.Master2Pattern,
+                MasterState.DrawM2_Search => RoiRole.Master2Search,
+                MasterState.DrawInspection => RoiRole.Inspection,
+                MasterState.Ready => RoiRole.Inspection,
+                _ => GetCurrentStateRole()
+            };
+
+            switch (state)
             {
                 case MasterState.DrawM1_Pattern:
                     if (_layout.Master1Pattern != null)
@@ -4613,6 +4637,10 @@ namespace BrakeDiscInspector_GUI_ROI
             var newAdorner = new RoiAdorner(shape, RoiOverlay, (changeKind, updatedModel) =>
             {
                 var pixelModel = CanvasToImage(updatedModel);
+                if (_layout != null)
+                {
+                    UpdateLayoutFromPixel(pixelModel);
+                }
                 // Evitamos redibujar en DragStarted (click en adorner sin mover)
                 HandleAdornerChange(changeKind, updatedModel, pixelModel, "[adorner]");
                 UpdateRoiLabelPosition(shape);
@@ -8798,15 +8826,50 @@ namespace BrakeDiscInspector_GUI_ROI
             SaveMasterWizardFlow();
         }
 
+        private MasterState ResolveStateForSave()
+        {
+            if (_editingM1 && _activeMaster1Role.HasValue)
+            {
+                return _activeMaster1Role.Value == RoiRole.Master1Pattern
+                    ? MasterState.DrawM1_Pattern
+                    : MasterState.DrawM1_Search;
+            }
+
+            if (_editingM2 && _activeMaster2Role.HasValue)
+            {
+                return _activeMaster2Role.Value == RoiRole.Master2Pattern
+                    ? MasterState.DrawM2_Pattern
+                    : MasterState.DrawM2_Search;
+            }
+
+            return _state;
+        }
+
         private void SaveMasterWizardFlow()
         {
 
             var layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
+            var stateForSave = ResolveStateForSave();
+            var originalState = _state;
+            bool restoreStateAfterSave = (_editingM1 || _editingM2) && stateForSave != _state;
 
             if (_tmpBuffer is null)
             {
-                var previousState = _state;
-                var cleared = TryClearCurrentStatePersistedRoi(out var clearedRole);
+                _tmpBuffer = stateForSave switch
+                {
+                    MasterState.DrawM1_Pattern => _layout?.Master1Pattern?.Clone(),
+                    MasterState.DrawM1_Search => _layout?.Master1Search?.Clone(),
+                    MasterState.DrawM2_Pattern => _layout?.Master2Pattern?.Clone(),
+                    MasterState.DrawM2_Search => _layout?.Master2Search?.Clone(),
+                    MasterState.DrawInspection or MasterState.Ready => _layout?.Inspection?.Clone(),
+                    _ => _tmpBuffer
+                };
+            }
+
+            if (_tmpBuffer is null)
+            {
+                var previousState = stateForSave;
+                var cleared = TryClearPersistedRoiForState(stateForSave, out var clearedRole);
 
                 if (cleared)
                     AppendLog($"[wizard] cleared ROI state={previousState} role={clearedRole}");
@@ -8838,11 +8901,11 @@ namespace BrakeDiscInspector_GUI_ROI
             RoiModel? savedRoi = null;
             RoiRole? savedRole = null;
 
-            switch (_state)
+            switch (stateForSave)
             {
                 case MasterState.DrawM1_Pattern:
                     savedRole = RoiRole.Master1Pattern;
-                    AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
+                    AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
                     if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { // CODEX: string interpolation compatibility.
                         Snack($"Master: usa rectángulo, círculo o annulus"); // CODEX: string interpolation compatibility.
                         return;
@@ -8863,7 +8926,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     _layout.Master1PatternImagePath = SaveMasterPatternCanonical(_layout.Master1Pattern, "master1_pattern");
 
                     _tmpBuffer = null;
-                    _state = MasterState.DrawM1_Search;
+                    if (!restoreStateAfterSave)
+                        _state = MasterState.DrawM1_Search;
 
                     // Auto-cambiar el combo de rol a "Inspección Master 1"
                     try { ComboMasterRoiRole.SelectedIndex = 1; } catch { }
@@ -8871,7 +8935,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 case MasterState.DrawM1_Search:
                     savedRole = RoiRole.Master1Search;
-                    AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
+                    AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
                     _tmpBuffer.Role = savedRole.Value;
 
                     _layout.Master1Search = _tmpBuffer.Clone();
@@ -8880,12 +8944,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     SaveRoiCropPreview(_layout.Master1Search, "M1_search");
 
                     _tmpBuffer = null;
-                    _state = MasterState.DrawM2_Pattern;
+                    if (!restoreStateAfterSave)
+                        _state = MasterState.DrawM2_Pattern;
                     break;
 
                 case MasterState.DrawM2_Pattern:
                     savedRole = RoiRole.Master2Pattern;
-                    AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
+                    AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
                     if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { // CODEX: string interpolation compatibility.
                         Snack($"Master: usa rectángulo, círculo o annulus"); // CODEX: string interpolation compatibility.
                         return;
@@ -8901,7 +8966,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     LogHeatmap("KeepOnlyMaster2InCanvas called after saving Master2Pattern.");
 
                     _tmpBuffer = null;
-                    _state = MasterState.DrawM2_Search;
+                    if (!restoreStateAfterSave)
+                        _state = MasterState.DrawM2_Search;
 
                     // Auto-cambiar el combo de rol a "Inspección Master 2"
                     try { ComboM2Role.SelectedIndex = 1; } catch { }
@@ -8909,7 +8975,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 case MasterState.DrawM2_Search:
                     savedRole = RoiRole.Master2Search;
-                    AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
+                    AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
                     _tmpBuffer.Role = savedRole.Value;
 
                     _layout.Master2Search = _tmpBuffer.Clone();
@@ -8934,12 +9000,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     _tmpBuffer = null;
 
                     // En este punto M1+M2 podrían estar completos → permite inspección pero NO la exige
-                    _state = MasterState.DrawInspection; // Puedes seguir con inspección si quieres
+                    if (!restoreStateAfterSave)
+                        _state = MasterState.DrawInspection; // Puedes seguir con inspección si quieres
                     break;
 
                 case MasterState.DrawInspection:
                     savedRole = RoiRole.Inspection;
-                    AppendLog($"[wizard] save state={_state} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
+                    AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
                     _tmpBuffer.Role = savedRole.Value;
 
                     var savedClone = _tmpBuffer.Clone();
@@ -8958,6 +9025,11 @@ namespace BrakeDiscInspector_GUI_ROI
                     _tmpBuffer = null;
                     _state = MasterState.Ready;
                     break;
+            }
+
+            if (restoreStateAfterSave)
+            {
+                _state = originalState;
             }
 
             var savedRoiModel = savedRoi;

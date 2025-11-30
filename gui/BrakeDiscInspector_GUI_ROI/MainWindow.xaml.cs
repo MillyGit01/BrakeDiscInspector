@@ -320,8 +320,32 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (model != null)
             {
+                RoiDiag(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "[preset:inspection-layout] slot={0} id={1} layoutBase=({2}x{3}) layoutImg(L={4:0.###},T={5:0.###},W={6:0.###},H={7:0.###},Shape={8})",
+                    index,
+                    model.Id ?? "<null>",
+                    model.BaseImgW.HasValue ? model.BaseImgW.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-",
+                    model.BaseImgH.HasValue ? model.BaseImgH.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-",
+                    model.Left,
+                    model.Top,
+                    model.Width,
+                    model.Height,
+                    model.Shape));
                 NormalizeInspectionRoi(model, index);
                 assigned = model.Clone();
+                RoiDiag(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "[preset:inspection-applied] slot={0} id={1} appliedBase=({2}x{3}) appliedImg(L={4:0.###},T={5:0.###},W={6:0.###},H={7:0.###},Shape={8})",
+                    index,
+                    assigned.Id ?? "<null>",
+                    assigned.BaseImgW.HasValue ? assigned.BaseImgW.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-",
+                    assigned.BaseImgH.HasValue ? assigned.BaseImgH.Value.ToString("0.###", CultureInfo.InvariantCulture) : "-",
+                    assigned.Left,
+                    assigned.Top,
+                    assigned.Width,
+                    assigned.Height,
+                    assigned.Shape));
             }
 
             switch (index)
@@ -988,6 +1012,11 @@ namespace BrakeDiscInspector_GUI_ROI
             _workflowViewModel?.SetMasterLayout(_layout);
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
             RefreshInspectionSlotsFromLayout();
+
+            if (_hasLoadedImage)
+            {
+                ReseedInspectionBaselineFromLayout($"layout:{sourceContext}");
+            }
 
             UpdateWizardState();
             RequestRoiVisibilityRefresh();
@@ -6345,7 +6374,18 @@ namespace BrakeDiscInspector_GUI_ROI
             for (int i = 0; i < slots.Length; i++)
             {
                 var model = slots[i];
-                RoiDiag($"[slot-refresh] slot={i + 1} srcId={(model?.Id ?? "<null>")} shape={(model?.Shape.ToString() ?? "<none>")} base=({model?.BaseImgW?.ToString("F1", CultureInfo.InvariantCulture) ?? "-"}x{model?.BaseImgH?.ToString("F1", CultureInfo.InvariantCulture) ?? "-"})");
+                RoiDiag(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "[slot-refresh:inspection] slot={0} srcId={1} shape={2} base=({3}x{4}) Img(L={5:0.###},T={6:0.###},W={7:0.###},H={8:0.###})",
+                    i + 1,
+                    model?.Id ?? "<null>",
+                    model?.Shape.ToString() ?? "<none>",
+                    model?.BaseImgW?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-",
+                    model?.BaseImgH?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-",
+                    model?.Left ?? 0,
+                    model?.Top ?? 0,
+                    model?.Width ?? 0,
+                    model?.Height ?? 0));
                 SetInspectionSlotModel(i + 1, model, updateActive: false);
             }
 
@@ -9765,6 +9805,41 @@ namespace BrakeDiscInspector_GUI_ROI
             _inspectionBaselineSeededForImage = true;
             _lastImageSeedKey = seedKey;
             InspLog($"[Seed] Fixed baseline SEEDED (key='{seedKey}') from: {FInsp(_inspectionBaselineFixed)}");
+        }
+
+        private void ReseedInspectionBaselineFromLayout(string context)
+        {
+            if (!_useFixedInspectionBaseline || !_hasLoadedImage)
+            {
+                return;
+            }
+
+            var seedKey = ComputeImageSeedKey();
+            _currentImageHash = seedKey;
+            _inspectionBaselineSeededForImage = false;
+            _inspectionBaselineFixed = null;
+
+            var seedRoi = GetInspectionSlotModel(_activeInspectionIndex)
+                ?? GetFirstInspectionRoi();
+
+            if (seedRoi == null)
+            {
+                RoiDiag($"[preset:inspection-baseline] skip context={context} reason=no-seed-roi");
+                return;
+            }
+
+            SeedInspectionBaselineOnce(seedRoi, seedKey);
+            RoiDiag(string.Format(
+                CultureInfo.InvariantCulture,
+                "[preset:inspection-baseline] context={0} seedId={1} base=({2}x{3}) L={4:0.###} T={5:0.###} W={6:0.###} H={7:0.###}",
+                context,
+                seedRoi.Id ?? "<null>",
+                seedRoi.BaseImgW?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-",
+                seedRoi.BaseImgH?.ToString("0.###", CultureInfo.InvariantCulture) ?? "-",
+                seedRoi.Left,
+                seedRoi.Top,
+                seedRoi.Width,
+                seedRoi.Height));
         }
 
         private List<RoiModel> SnapshotInspectionRois()

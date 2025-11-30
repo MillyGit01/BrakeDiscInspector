@@ -1003,6 +1003,9 @@ namespace BrakeDiscInspector_GUI_ROI
             _editModeActive = false;
             UpdateInspectionEditButtons();
 
+            ClearInspectionCanvasShapes();
+            ResetInspectionSlotsUi();
+
             _layout = layout;
 
             FreezeAllRois(_layout);
@@ -1096,6 +1099,39 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             RefreshInspectionRoiSlots(sources);
+        }
+
+        private void ClearInspectionCanvasShapes()
+        {
+            if (_roiShapesById == null || _roiShapesById.Count == 0)
+            {
+                return;
+            }
+
+            var inspectionIds = _roiShapesById
+                .Where(kv => kv.Value?.Tag is RoiModel rm && rm.Role == RoiRole.Inspection)
+                .Select(kv => kv.Key)
+                .ToList();
+
+            foreach (var id in inspectionIds)
+            {
+                if (_roiShapesById.TryGetValue(id, out var shape) && shape != null)
+                {
+                    RemoveRoiShape(shape);
+                }
+
+                _roiShapesById.Remove(id);
+            }
+        }
+
+        private void ResetInspectionSlotsUi()
+        {
+            Inspection1 = null;
+            Inspection2 = null;
+            Inspection3 = null;
+            Inspection4 = null;
+
+            _workflowViewModel?.SetInspectionRoiModels(null, null, null, null);
         }
 
         private RoiModel? FindInspectionBaselineForIndex(int index)
@@ -6374,6 +6410,7 @@ namespace BrakeDiscInspector_GUI_ROI
             for (int i = 0; i < slots.Length; i++)
             {
                 var model = slots[i];
+                EnsureInspectionShapeCompatibility(model);
                 RoiDiag(string.Format(
                     CultureInfo.InvariantCulture,
                     "[slot-refresh:inspection] slot={0} srcId={1} shape={2} base=({3}x{4}) Img(L={5:0.###},T={6:0.###},W={7:0.###},H={8:0.###})",
@@ -6401,6 +6438,38 @@ namespace BrakeDiscInspector_GUI_ROI
             RefreshCreateButtonsEnabled();
             UpdateEditableConfigState();
             ApplyInspectionInteractionPolicy("slot-refresh");
+        }
+
+        private void EnsureInspectionShapeCompatibility(RoiModel? model)
+        {
+            if (model == null || string.IsNullOrWhiteSpace(model.Id))
+            {
+                return;
+            }
+
+            if (!_roiShapesById.TryGetValue(model.Id, out var shape) || shape == null)
+            {
+                return;
+            }
+
+            bool mismatch = model.Shape switch
+            {
+                RoiShape.Rectangle => shape is not System.Windows.Shapes.Rectangle,
+                RoiShape.Circle => shape is not System.Windows.Shapes.Ellipse,
+                RoiShape.Annulus => shape is not AnnulusShape,
+                _ => false
+            };
+
+            if (!mismatch && shape.Tag is RoiModel canvasModel && canvasModel.Shape != model.Shape)
+            {
+                mismatch = true;
+            }
+
+            if (mismatch)
+            {
+                RemoveRoiShape(shape);
+                _roiShapesById.Remove(model.Id);
+            }
         }
 
         private void SaveCurrentInspectionToSlot(int index)

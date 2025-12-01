@@ -3124,7 +3124,11 @@ namespace BrakeDiscInspector_GUI_ROI
                     UpdateGlobalBadge,
                     SetActiveInspectionIndex,
                     ResolveInspectionModelDirectory,
-                    RepositionBeforeBatchStepAsync);
+                    RepositionBeforeBatchStepAsync,
+                    CreateMasterRoiFromWorkflowAsync,
+                    ToggleEditSaveMasterRoiFromWorkflowAsync,
+                    RemoveMasterRoiFromWorkflowAsync,
+                    CanEditMasterRoiFromWorkflow);
 
                 _workflowViewModel.AnchorScoreMin = Math.Max(1, _appConfig.Analyze.AnchorScoreMin);
                 _sharedHeatmapGuardLogged = false;
@@ -7138,6 +7142,13 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _editModeActive = false;
             }
+
+            UpdateWorkflowMasterEditState();
+        }
+
+        private void UpdateWorkflowMasterEditState()
+        {
+            _workflowViewModel?.SetMasterEditState(_editingM1 || _editingM2);
         }
 
         private int CountRoiAdornersForShape(Shape shape)
@@ -12738,6 +12749,94 @@ namespace BrakeDiscInspector_GUI_ROI
             ApplyDrawToolSelection(shape, updateViewModel: false);
         }
 
+        private RoiRole ResolveWorkflowMasterRole()
+        {
+            var roleId = _workflowViewModel?.RoleId ?? string.Empty;
+            var roiId = _workflowViewModel?.RoiId ?? string.Empty;
+
+            bool isMaster2 = roleId.IndexOf('2') >= 0 || roleId.IndexOf("m2", StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isSearch = roiId.Contains("search", StringComparison.OrdinalIgnoreCase)
+                || roiId.Contains("inspection", StringComparison.OrdinalIgnoreCase)
+                || roiId.Contains("busqueda", StringComparison.OrdinalIgnoreCase);
+
+            return isMaster2
+                ? (isSearch ? RoiRole.Master2Search : RoiRole.Master2Pattern)
+                : (isSearch ? RoiRole.Master1Search : RoiRole.Master1Pattern);
+        }
+
+        private static MasterState ResolveMasterState(RoiRole role) => role switch
+        {
+            RoiRole.Master1Pattern => MasterState.DrawM1_Pattern,
+            RoiRole.Master1Search => MasterState.DrawM1_Search,
+            RoiRole.Master2Pattern => MasterState.DrawM2_Pattern,
+            RoiRole.Master2Search => MasterState.DrawM2_Search,
+            _ => MasterState.DrawM1_Pattern
+        };
+
+        private ComboBox? ResolveMasterShapeCombo(RoiRole role)
+        {
+            return role == RoiRole.Master1Pattern || role == RoiRole.Master1Search
+                ? ComboMasterRoiShape
+                : ComboM2Shape;
+        }
+
+        private static void SelectShapeInCombo(ComboBox? combo, RoiShape shape)
+        {
+            if (combo == null)
+            {
+                return;
+            }
+
+            combo.SelectedIndex = shape switch
+            {
+                RoiShape.Circle => 1,
+                RoiShape.Annulus => 2,
+                _ => 0
+            };
+        }
+
+        private bool CanEditMasterRoiFromWorkflow()
+        {
+            return _layout != null;
+        }
+
+        private Task CreateMasterRoiFromWorkflowAsync(RoiShape shape)
+        {
+            return Dispatcher.InvokeAsync(() =>
+            {
+                var role = ResolveWorkflowMasterRole();
+                var combo = ResolveMasterShapeCombo(role) ?? ComboMasterRoiShape;
+                SelectShapeInCombo(combo, shape);
+                StartDrawingFor(ResolveMasterState(role), combo);
+            }).Task;
+        }
+
+        private Task<bool> ToggleEditSaveMasterRoiFromWorkflowAsync()
+        {
+            return Dispatcher.InvokeAsync(() =>
+            {
+                var role = ResolveWorkflowMasterRole();
+                if (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search)
+                {
+                    BtnEditM1_Click(this, new RoutedEventArgs());
+                    return _editingM1;
+                }
+
+                BtnEditM2_Click(this, new RoutedEventArgs());
+                return _editingM2;
+            }).Task;
+        }
+
+        private Task RemoveMasterRoiFromWorkflowAsync()
+        {
+            return Dispatcher.InvokeAsync(() =>
+            {
+                var role = ResolveWorkflowMasterRole();
+                var state = ResolveMasterState(role);
+                RemoveFor(state);
+            }).Task;
+        }
+
         private void StartDrawingFor(MasterState state, ComboBox shapeCombo)
         {
             _editModeActive = true;
@@ -12940,6 +13039,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 RedrawOverlaySafe();
                 Snack("Master 1 válido.");
             }
+
+            UpdateWorkflowMasterEditState();
         }
 
         private void BtnM1S_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM1_Search, ComboMasterRoiShape);
@@ -13004,6 +13105,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 RedrawOverlaySafe();
                 Snack("Master 2 válido.");
             }
+
+            UpdateWorkflowMasterEditState();
         }
 
         private async void BtnLoadModel_Click(object sender, RoutedEventArgs e)

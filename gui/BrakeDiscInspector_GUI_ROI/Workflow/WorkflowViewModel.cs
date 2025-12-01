@@ -125,6 +125,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         }
     }
 
+    public sealed class MasterRoleOption
+    {
+        public MasterRoleOption(string label, RoiRole role)
+        {
+            Label = label ?? throw new ArgumentNullException(nameof(label));
+            Role = role;
+        }
+
+        public string Label { get; }
+
+        public RoiRole Role { get; }
+
+        public override string ToString() => Label;
+    }
+
     public sealed partial class WorkflowViewModel : INotifyPropertyChanged
     {
         private readonly BackendClient _client;
@@ -137,9 +152,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Action<bool?> _updateGlobalBadge;
         private readonly Action<int>? _activateInspectionIndex;
         private readonly Func<string, long, CancellationToken, Task>? _repositionInspectionRoisAsyncExternal;
-        private readonly Func<RoiShape, Task>? _createMasterRoiAsync;
-        private readonly Func<Task<bool>>? _toggleEditSaveMasterRoiAsync;
-        private readonly Func<Task>? _removeMasterRoiAsync;
+        private readonly Func<RoiRole, RoiShape, Task>? _createMasterRoiAsync;
+        private readonly Func<RoiRole, Task<bool>>? _toggleEditSaveMasterRoiAsync;
+        private readonly Func<RoiRole, Task>? _removeMasterRoiAsync;
         private readonly Func<bool>? _canEditMasterRoi;
 
         private ObservableCollection<InspectionRoiConfig>? _inspectionRois;
@@ -181,8 +196,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private double _heatmapOpacity = 0.6;
         private string _healthSummary = "";
         private readonly IReadOnlyList<RoiShape> _availableRoiShapes = Enum.GetValues(typeof(RoiShape)).Cast<RoiShape>().ToList();
-        private RoiShape _selectedMasterShape = RoiShape.Rectangle;
-        private bool _isMasterRoiEditing;
+        private RoiShape _selectedMaster1Shape = RoiShape.Rectangle;
+        private RoiShape _selectedMaster2Shape = RoiShape.Rectangle;
+        private bool _isMaster1Editing;
+        private bool _isMaster2Editing;
+        private MasterRoleOption? _selectedMaster1Role;
+        private MasterRoleOption? _selectedMaster2Role;
 
         private readonly Dictionary<string, RoiBaseline> _baselines = new();
         private readonly object _baselineLock = new();
@@ -302,9 +321,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Action<int>? activateInspectionIndex = null,
             Func<InspectionRoiConfig, string?>? resolveModelDirectory = null,
             Func<string, long, CancellationToken, Task>? repositionInspectionRoisAsync = null,
-            Func<RoiShape, Task>? createMasterRoiAsync = null,
-            Func<Task<bool>>? toggleEditSaveMasterRoiAsync = null,
-            Func<Task>? removeMasterRoiAsync = null,
+            Func<RoiRole, RoiShape, Task>? createMasterRoiAsync = null,
+            Func<RoiRole, Task<bool>>? toggleEditSaveMasterRoiAsync = null,
+            Func<RoiRole, Task>? removeMasterRoiAsync = null,
             Func<bool>? canEditMasterRoi = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
@@ -324,6 +343,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _canEditMasterRoi = canEditMasterRoi;
 
             _backendBaseUrl = _client.BaseUrl;
+
+            Master1RoleOptions = new List<MasterRoleOption>
+            {
+                new("Master 1 Pattern", RoiRole.Master1Pattern),
+                new("Master 1 Search", RoiRole.Master1Search)
+            };
+            Master2RoleOptions = new List<MasterRoleOption>
+            {
+                new("Master 2 Pattern", RoiRole.Master2Pattern),
+                new("Master 2 Search", RoiRole.Master2Search)
+            };
+
+            SelectedMaster1Role = Master1RoleOptions[0];
+            SelectedMaster2Role = Master2RoleOptions[0];
 
             OkSamples = new ObservableCollection<DatasetSample>();
             NgSamples = new ObservableCollection<DatasetSample>();
@@ -459,9 +492,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
             }, _ => !IsBusy);
 
-            CreateMasterRoiCommand = CreateCommand(_ => CreateMasterRoiAsync(), _ => CanEditMasterRoi());
-            ToggleEditSaveMasterRoiCommand = CreateCommand(_ => ToggleEditSaveMasterRoiAsync(), _ => CanEditMasterRoi());
-            RemoveMasterRoiCommand = CreateCommand(_ => RemoveMasterRoiAsync(), _ => CanEditMasterRoi());
+            CreateMaster1RoiCommand = CreateCommand(_ => CreateMasterRoiAsync(SelectedMaster1Role, SelectedMaster1Shape), _ => CanEditMasterRoi());
+            ToggleEditMaster1RoiCommand = CreateCommand(_ => ToggleEditSaveMasterRoiAsync(SelectedMaster1Role), _ => CanEditMasterRoi());
+            RemoveMaster1RoiCommand = CreateCommand(_ => RemoveMasterRoiAsync(SelectedMaster1Role), _ => CanEditMasterRoi());
+
+            CreateMaster2RoiCommand = CreateCommand(_ => CreateMasterRoiAsync(SelectedMaster2Role, SelectedMaster2Shape), _ => CanEditMasterRoi());
+            ToggleEditMaster2RoiCommand = CreateCommand(_ => ToggleEditSaveMasterRoiAsync(SelectedMaster2Role), _ => CanEditMasterRoi());
+            RemoveMaster2RoiCommand = CreateCommand(_ => RemoveMasterRoiAsync(SelectedMaster2Role), _ => CanEditMasterRoi());
 
             PropertyChanged += (s, e) =>
             {
@@ -1066,38 +1103,105 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public IReadOnlyList<RoiShape> AvailableRoiShapes => _availableRoiShapes;
 
-        public RoiShape SelectedMasterShape
+        public IReadOnlyList<MasterRoleOption> Master1RoleOptions { get; }
+
+        public IReadOnlyList<MasterRoleOption> Master2RoleOptions { get; }
+
+        public MasterRoleOption? SelectedMaster1Role
         {
-            get => _selectedMasterShape;
+            get => _selectedMaster1Role;
             set
             {
-                if (_selectedMasterShape == value)
+                if (_selectedMaster1Role == value)
                 {
                     return;
                 }
 
-                _selectedMasterShape = value;
+                _selectedMaster1Role = value;
                 OnPropertyChanged();
             }
         }
 
-        public bool IsMasterRoiEditing
+        public MasterRoleOption? SelectedMaster2Role
         {
-            get => _isMasterRoiEditing;
+            get => _selectedMaster2Role;
+            set
+            {
+                if (_selectedMaster2Role == value)
+                {
+                    return;
+                }
+
+                _selectedMaster2Role = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public RoiShape SelectedMaster1Shape
+        {
+            get => _selectedMaster1Shape;
+            set
+            {
+                if (_selectedMaster1Shape == value)
+                {
+                    return;
+                }
+
+                _selectedMaster1Shape = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public RoiShape SelectedMaster2Shape
+        {
+            get => _selectedMaster2Shape;
+            set
+            {
+                if (_selectedMaster2Shape == value)
+                {
+                    return;
+                }
+
+                _selectedMaster2Shape = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsMaster1Editing
+        {
+            get => _isMaster1Editing;
             private set
             {
-                if (_isMasterRoiEditing == value)
+                if (_isMaster1Editing == value)
                 {
                     return;
                 }
 
-                _isMasterRoiEditing = value;
+                _isMaster1Editing = value;
                 OnPropertyChanged();
-                OnPropertyChanged(nameof(MasterEditButtonText));
+                OnPropertyChanged(nameof(Master1EditButtonText));
             }
         }
 
-        public string MasterEditButtonText => IsMasterRoiEditing ? "Save Master ROI" : "Edit Master ROI";
+        public bool IsMaster2Editing
+        {
+            get => _isMaster2Editing;
+            private set
+            {
+                if (_isMaster2Editing == value)
+                {
+                    return;
+                }
+
+                _isMaster2Editing = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(Master2EditButtonText));
+            }
+        }
+
+        public string Master1EditButtonText => IsMaster1Editing ? "Save Master ROI" : "Edit Master ROI";
+
+        public string Master2EditButtonText => IsMaster2Editing ? "Save Master ROI" : "Edit Master ROI";
 
         public bool IsImageLoaded
         {
@@ -1361,9 +1465,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     layout.Inspection4?.Clone());
             }
 
-            CreateMasterRoiCommand.RaiseCanExecuteChanged();
-            ToggleEditSaveMasterRoiCommand.RaiseCanExecuteChanged();
-            RemoveMasterRoiCommand.RaiseCanExecuteChanged();
+            CreateMaster1RoiCommand.RaiseCanExecuteChanged();
+            ToggleEditMaster1RoiCommand.RaiseCanExecuteChanged();
+            RemoveMaster1RoiCommand.RaiseCanExecuteChanged();
+
+            CreateMaster2RoiCommand.RaiseCanExecuteChanged();
+            ToggleEditMaster2RoiCommand.RaiseCanExecuteChanged();
+            RemoveMaster2RoiCommand.RaiseCanExecuteChanged();
         }
 
         public void InitializeBatchSession()
@@ -2336,9 +2444,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand StartBatchCommand { get; }
         public AsyncCommand PauseBatchCommand { get; }
         public AsyncCommand StopBatchCommand { get; }
-        public AsyncCommand CreateMasterRoiCommand { get; }
-        public AsyncCommand ToggleEditSaveMasterRoiCommand { get; }
-        public AsyncCommand RemoveMasterRoiCommand { get; }
+        public AsyncCommand CreateMaster1RoiCommand { get; }
+        public AsyncCommand ToggleEditMaster1RoiCommand { get; }
+        public AsyncCommand RemoveMaster1RoiCommand { get; }
+
+        public AsyncCommand CreateMaster2RoiCommand { get; }
+        public AsyncCommand ToggleEditMaster2RoiCommand { get; }
+        public AsyncCommand RemoveMaster2RoiCommand { get; }
         public ICommand AddRoiToOkCommand { get; }
         public ICommand AddRoiToNgCommand { get; }
 
@@ -2584,9 +2696,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             CalibrateSelectedRoiCommand.RaiseCanExecuteChanged();
             EvaluateSelectedRoiCommand.RaiseCanExecuteChanged();
             EvaluateAllRoisCommand.RaiseCanExecuteChanged();
-            CreateMasterRoiCommand.RaiseCanExecuteChanged();
-            ToggleEditSaveMasterRoiCommand.RaiseCanExecuteChanged();
-            RemoveMasterRoiCommand.RaiseCanExecuteChanged();
+            CreateMaster1RoiCommand.RaiseCanExecuteChanged();
+            ToggleEditMaster1RoiCommand.RaiseCanExecuteChanged();
+            RemoveMaster1RoiCommand.RaiseCanExecuteChanged();
+
+            CreateMaster2RoiCommand.RaiseCanExecuteChanged();
+            ToggleEditMaster2RoiCommand.RaiseCanExecuteChanged();
+            RemoveMaster2RoiCommand.RaiseCanExecuteChanged();
             AddRoiToDatasetOkCommand.RaiseCanExecuteChanged();
             AddRoiToDatasetNgCommand.RaiseCanExecuteChanged();
             if (AddRoiToOkCommand is AsyncCommand asyncAddOk)
@@ -2601,9 +2717,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             UpdateBatchCommandStates();
         }
 
-        public void SetMasterEditState(bool isEditing)
+        public void SetMasterEditState(bool isMaster1Editing, bool isMaster2Editing)
         {
-            IsMasterRoiEditing = isEditing;
+            IsMaster1Editing = isMaster1Editing;
+            IsMaster2Editing = isMaster2Editing;
         }
 
         private bool CanEditMasterRoi()
@@ -2617,38 +2734,76 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return !IsBusy && _layout != null;
         }
 
-        private async Task CreateMasterRoiAsync()
+        private async Task CreateMasterRoiAsync(MasterRoleOption? roleOption, RoiShape shape)
         {
+            if (roleOption == null)
+            {
+                _log("[ui] CreateMasterRoiAsync ignored: no role selected");
+                return;
+            }
+
             if (_createMasterRoiAsync == null)
             {
                 _log("[ui] CreateMasterRoiAsync ignored: handler missing");
                 return;
             }
 
-            await _createMasterRoiAsync(SelectedMasterShape).ConfigureAwait(false);
+            await _createMasterRoiAsync(roleOption.Role, shape).ConfigureAwait(false);
         }
 
-        private async Task ToggleEditSaveMasterRoiAsync()
+        private async Task ToggleEditSaveMasterRoiAsync(MasterRoleOption? roleOption)
         {
-            if (_toggleEditSaveMasterRoiAsync == null)
+            if (roleOption == null)
             {
-                IsMasterRoiEditing = !IsMasterRoiEditing;
+                _log("[ui] ToggleEditSaveMasterRoiAsync ignored: no role selected");
                 return;
             }
 
-            var isEditing = await _toggleEditSaveMasterRoiAsync().ConfigureAwait(false);
-            IsMasterRoiEditing = isEditing;
+            bool isEditing;
+            var isMaster1 = roleOption.Role is RoiRole.Master1Pattern or RoiRole.Master1Search;
+            if (_toggleEditSaveMasterRoiAsync == null)
+            {
+                isEditing = isMaster1 ? !IsMaster1Editing : !IsMaster2Editing;
+            }
+            else
+            {
+                isEditing = await _toggleEditSaveMasterRoiAsync(roleOption.Role).ConfigureAwait(false);
+            }
+
+            ApplyMasterEditState(roleOption.Role, isEditing);
         }
 
-        private async Task RemoveMasterRoiAsync()
+        private async Task RemoveMasterRoiAsync(MasterRoleOption? roleOption)
         {
+            if (roleOption == null)
+            {
+                _log("[ui] RemoveMasterRoiAsync ignored: no role selected");
+                return;
+            }
+
             if (_removeMasterRoiAsync == null)
             {
                 _log("[ui] RemoveMasterRoiAsync ignored: handler missing");
                 return;
             }
 
-            await _removeMasterRoiAsync().ConfigureAwait(false);
+            await _removeMasterRoiAsync(roleOption.Role).ConfigureAwait(false);
+            ApplyMasterEditState(roleOption.Role, isEditing: false);
+        }
+
+        private void ApplyMasterEditState(RoiRole role, bool isEditing)
+        {
+            switch (role)
+            {
+                case RoiRole.Master1Pattern:
+                case RoiRole.Master1Search:
+                    IsMaster1Editing = isEditing;
+                    break;
+                case RoiRole.Master2Pattern:
+                case RoiRole.Master2Search:
+                    IsMaster2Editing = isEditing;
+                    break;
+            }
         }
 
         private void UpdateSelectedRoiState()

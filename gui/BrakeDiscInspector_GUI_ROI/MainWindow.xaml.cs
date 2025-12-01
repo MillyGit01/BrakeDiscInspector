@@ -7148,7 +7148,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void UpdateWorkflowMasterEditState()
         {
-            _workflowViewModel?.SetMasterEditState(_editingM1 || _editingM2);
+            _workflowViewModel?.SetMasterEditState(_editingM1, _editingM2);
         }
 
         private int CountRoiAdornersForShape(Shape shape)
@@ -12749,21 +12749,6 @@ namespace BrakeDiscInspector_GUI_ROI
             ApplyDrawToolSelection(shape, updateViewModel: false);
         }
 
-        private RoiRole ResolveWorkflowMasterRole()
-        {
-            var roleId = _workflowViewModel?.RoleId ?? string.Empty;
-            var roiId = _workflowViewModel?.RoiId ?? string.Empty;
-
-            bool isMaster2 = roleId.IndexOf('2') >= 0 || roleId.IndexOf("m2", StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isSearch = roiId.Contains("search", StringComparison.OrdinalIgnoreCase)
-                || roiId.Contains("inspection", StringComparison.OrdinalIgnoreCase)
-                || roiId.Contains("busqueda", StringComparison.OrdinalIgnoreCase);
-
-            return isMaster2
-                ? (isSearch ? RoiRole.Master2Search : RoiRole.Master2Pattern)
-                : (isSearch ? RoiRole.Master1Search : RoiRole.Master1Pattern);
-        }
-
         private static MasterState ResolveMasterState(RoiRole role) => role switch
         {
             RoiRole.Master1Pattern => MasterState.DrawM1_Pattern,
@@ -12800,22 +12785,20 @@ namespace BrakeDiscInspector_GUI_ROI
             return _layout != null;
         }
 
-        private Task CreateMasterRoiFromWorkflowAsync(RoiShape shape)
+        private Task CreateMasterRoiFromWorkflowAsync(RoiRole role, RoiShape shape)
         {
             return Dispatcher.InvokeAsync(() =>
             {
-                var role = ResolveWorkflowMasterRole();
                 var combo = ResolveMasterShapeCombo(role) ?? ComboMasterRoiShape;
                 SelectShapeInCombo(combo, shape);
                 StartDrawingFor(ResolveMasterState(role), combo);
             }).Task;
         }
 
-        private Task<bool> ToggleEditSaveMasterRoiFromWorkflowAsync()
+        private Task<bool> ToggleEditSaveMasterRoiFromWorkflowAsync(RoiRole role)
         {
             return Dispatcher.InvokeAsync(() =>
             {
-                var role = ResolveWorkflowMasterRole();
                 if (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search)
                 {
                     BtnEditM1_Click(this, new RoutedEventArgs());
@@ -12827,11 +12810,10 @@ namespace BrakeDiscInspector_GUI_ROI
             }).Task;
         }
 
-        private Task RemoveMasterRoiFromWorkflowAsync()
+        private Task RemoveMasterRoiFromWorkflowAsync(RoiRole role)
         {
             return Dispatcher.InvokeAsync(() =>
             {
-                var role = ResolveWorkflowMasterRole();
                 var state = ResolveMasterState(role);
                 RemoveFor(state);
             }).Task;

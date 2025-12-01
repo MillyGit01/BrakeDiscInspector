@@ -110,80 +110,77 @@
               </StackPanel>
             </GroupBox>
 
-            <Grid Margin="0,0,0,12">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
-              </Grid.ColumnDefinitions>
-
-              <GroupBox x:Name="Master1EditorGroup" Header="Master 1" Grid.Column="0" Margin="0,0,10,0">
-                <StackPanel Margin="0,8,0,0">
-                  <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="80"/>
-                      <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Type:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" Margin="0,4,0,0" Width="150"/>
-                  </Grid>
-
-                  <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="80"/>
-                      <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Shape:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Margin="0,4,0,0" Width="150">
-                      <ComboBoxItem Content="Rectangle"/>
-                      <ComboBoxItem Content="Circle"/>
-                      <ComboBoxItem Content="Annulus"/>
-                    </ComboBox>
-                  </Grid>
-
-                  <WrapPanel>
-                    <Button x:Name="BtnEditM1"
-                            Content="Edit Master 1"
-                            Click="BtnEditM1_Click"/>
-                  </WrapPanel>
-
-                  <Border Margin="0,12,0,0" Background="#F0F0F0" Padding="8" BorderBrush="#CCCCCC" BorderThickness="1">
-                    <TextBlock x:Name="TxtMasterHints" TextWrapping="Wrap"/>
-                  </Border>
+            <GroupBox x:Name="MasterRoiGroup"
+                      Header="Master ROI"
+                      Margin="0,0,0,12">
+              <StackPanel Margin="8">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                  <ComboBox x:Name="ComboMasterRoiRole"
+                            Width="120"
+                            Margin="0,0,4,0"/>
+                  <ComboBox x:Name="ComboMasterRoiShape"
+                            Width="90"
+                            Margin="0,0,4,0">
+                    <ComboBoxItem Content="Rectángulo"/>
+                    <ComboBoxItem Content="Círculo"/>
+                    <ComboBoxItem Content="Annulus"/>
+                  </ComboBox>
+                  <Button x:Name="BtnM1_Create"
+                          Content="Create"
+                          MinHeight="26"
+                          Padding="8,4"
+                          Margin="4,0,0,0"
+                          Click="BtnM1_Create_Click"/>
+                  <Button x:Name="BtnEditM1"
+                          Content="Edit Master 1"
+                          MinHeight="26"
+                          Padding="8,4"
+                          Margin="4,0,0,0"
+                          Click="BtnEditM1_Click"/>
+                  <Button x:Name="BtnM1_Remove"
+                          Content="Remove"
+                          MinHeight="26"
+                          Padding="8,4"
+                          Margin="4,0,0,0"
+                          Click="BtnM1_Remove_Click"/>
                 </StackPanel>
-              </GroupBox>
 
-              <GroupBox Header="Master 2" Grid.Column="1">
-                <StackPanel Margin="0,8,0,0">
-                  <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="80"/>
-                      <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Type:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="0,4,0,0" Width="150"/>
-                  </Grid>
-
-                  <Grid Margin="0,0,0,8">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="80"/>
-                      <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Shape:" Grid.Column="0" VerticalAlignment="Center"/>
-                    <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Margin="0,4,0,0" Width="150">
-                      <ComboBoxItem Content="Rectangle"/>
-                      <ComboBoxItem Content="Circle"/>
-                      <ComboBoxItem Content="Annulus"/>
-                    </ComboBox>
-                  </Grid>
-
-                  <WrapPanel>
-                    <Button x:Name="BtnEditM2"
-                            Content="Edit Master 2"
-                            Click="BtnEditM2_Click"/>
-                  </WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                  <ComboBox x:Name="ComboM2Role"
+                            Width="120"
+                            Margin="0,0,4,0"/>
+                  <ComboBox x:Name="ComboM2Shape"
+                            Width="90"
+                            Margin="0,0,4,0">
+                    <ComboBoxItem Content="Rectángulo"/>
+                    <ComboBoxItem Content="Círculo"/>
+                    <ComboBoxItem Content="Annulus"/>
+                  </ComboBox>
+                  <Button x:Name="BtnM2_Create"
+                          Content="Create"
+                          MinHeight="26"
+                          Padding="8,4"
+                          Margin="4,0,0,0"
+                          Click="BtnM2_Create_Click"/>
+                  <Button x:Name="BtnEditM2"
+                          Content="Edit Master 2"
+                          MinHeight="26"
+                          Padding="8,4"
+                          Margin="4,0,0,0"
+                          Click="BtnEditM2_Click"/>
+                  <Button x:Name="BtnM2_Remove"
+                          Content="Remove"
+                          MinHeight="26"
+                          Padding="8,4"
+                          Margin="4,0,0,0"
+                          Click="BtnM2_Remove_Click"/>
                 </StackPanel>
-              </GroupBox>
-            </Grid>
+
+                <Border Margin="0,6,0,0" Background="#F0F0F0" Padding="8" BorderBrush="#CCCCCC" BorderThickness="1">
+                  <TextBlock x:Name="TxtMasterHints" TextWrapping="Wrap"/>
+                </Border>
+              </StackPanel>
+            </GroupBox>
 
             <WrapPanel Margin="0,12,0,12">
               <Button x:Name="BtnClearCanvas"

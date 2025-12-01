@@ -14,6 +14,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
     {
         public event EventHandler<LoadModelRequestedEventArgs>? LoadModelRequested;
         public event EventHandler<ToggleEditRequestedEventArgs>? ToggleEditRequested;
+        public event EventHandler? ClearCanvasRequested;
 
         public WorkflowControl()
         {
@@ -106,6 +107,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     GuiLog.Warn($"[dataset] Failed to open '{item.Path}': {ex.Message}");
                 }
             }
+        }
+
+        private void ClearCanvasButton_Click(object sender, RoutedEventArgs e)
+        {
+            ClearCanvasRequested?.Invoke(this, EventArgs.Empty);
         }
     }
 

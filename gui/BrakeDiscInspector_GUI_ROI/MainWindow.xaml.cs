@@ -3146,6 +3146,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     WorkflowHost.LoadModelRequested += WorkflowHostOnLoadModelRequested;
                     WorkflowHost.ToggleEditRequested -= WorkflowHostOnToggleEditRequested;
                     WorkflowHost.ToggleEditRequested += WorkflowHostOnToggleEditRequested;
+                    WorkflowHost.ClearCanvasRequested -= WorkflowHostOnClearCanvasRequested;
+                    WorkflowHost.ClearCanvasRequested += WorkflowHostOnClearCanvasRequested;
                     WorkflowHost.DataContext = _workflowViewModel;
                 }
 
@@ -13212,6 +13214,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private async void WorkflowHostOnLoadModelRequested(object? sender, LoadModelRequestedEventArgs e)
         {
             await LoadModelForInspectionAsync(e.Index);
+        }
+
+        private void WorkflowHostOnClearCanvasRequested(object? sender, EventArgs e)
+        {
+            BtnClearCanvas_Click(this, new RoutedEventArgs());
         }
 
         private void BtnClearCanvas_Click(object sender, RoutedEventArgs e)

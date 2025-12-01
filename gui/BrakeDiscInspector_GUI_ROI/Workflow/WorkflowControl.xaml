@@ -58,60 +58,6 @@
                 </Grid>
             </GroupBox>
 
-            <GroupBox Header="Master ROIs">
-                <StackPanel Margin="8">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <ComboBox Width="150"
-                                  ItemsSource="{Binding Master1RoleOptions}"
-                                  SelectedItem="{Binding SelectedMaster1Role}"
-                                  Margin="0,0,8,0"/>
-                        <ComboBox Width="140"
-                                  ItemsSource="{Binding AvailableRoiShapes}"
-                                  SelectedItem="{Binding SelectedMaster1Shape}"
-                                  Margin="0,0,8,0"/>
-                        <Button Content="Create Master ROI"
-                                MinHeight="26"
-                                Command="{Binding CreateMaster1RoiCommand}"
-                                Padding="12,4"/>
-                        <Button Content="{Binding Master1EditButtonText}"
-                                MinHeight="26"
-                                Command="{Binding ToggleEditMaster1RoiCommand}"
-                                Padding="12,4"
-                                Margin="8,0,0,0"/>
-                        <Button Content="Remove Master ROI"
-                                MinHeight="26"
-                                Command="{Binding RemoveMaster1RoiCommand}"
-                                Padding="12,4"
-                                Margin="8,0,0,0"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal">
-                        <ComboBox Width="150"
-                                  ItemsSource="{Binding Master2RoleOptions}"
-                                  SelectedItem="{Binding SelectedMaster2Role}"
-                                  Margin="0,0,8,0"/>
-                        <ComboBox Width="140"
-                                  ItemsSource="{Binding AvailableRoiShapes}"
-                                  SelectedItem="{Binding SelectedMaster2Shape}"
-                                  Margin="0,0,8,0"/>
-                        <Button Content="Create Master ROI"
-                                MinHeight="26"
-                                Command="{Binding CreateMaster2RoiCommand}"
-                                Padding="12,4"/>
-                        <Button Content="{Binding Master2EditButtonText}"
-                                MinHeight="26"
-                                Command="{Binding ToggleEditMaster2RoiCommand}"
-                                Padding="12,4"
-                                Margin="8,0,0,0"/>
-                        <Button Content="Remove Master ROI"
-                                MinHeight="26"
-                                Command="{Binding RemoveMaster2RoiCommand}"
-                                Padding="12,4"
-                                Margin="8,0,0,0"/>
-                    </StackPanel>
-                </StackPanel>
-            </GroupBox>
-
             <GroupBox Header="Inspection ROIs">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
@@ -364,6 +310,66 @@
                     </StackPanel>
                 </StackPanel>
             </GroupBox>
+
+            <GroupBox Header="Master ROIs">
+                <StackPanel Margin="8">
+                    <WrapPanel Margin="0,0,0,6">
+                        <ComboBox Width="120"
+                                  ItemsSource="{Binding Master1RoleOptions}"
+                                  SelectedItem="{Binding SelectedMaster1Role}"
+                                  Margin="0,0,6,0"/>
+                        <ComboBox Width="120"
+                                  ItemsSource="{Binding AvailableRoiShapes}"
+                                  SelectedItem="{Binding SelectedMaster1Shape}"
+                                  Margin="0,0,6,0"/>
+                        <Button Content="Create"
+                                MinHeight="26"
+                                Command="{Binding CreateMaster1RoiCommand}"
+                                Padding="8,4"/>
+                        <Button Content="{Binding Master1EditButtonText}"
+                                MinHeight="26"
+                                Command="{Binding ToggleEditMaster1RoiCommand}"
+                                Padding="8,4"
+                                Margin="6,0,0,0"/>
+                        <Button Content="Remove"
+                                MinHeight="26"
+                                Command="{Binding RemoveMaster1RoiCommand}"
+                                Padding="8,4"
+                                Margin="6,0,0,0"/>
+                    </WrapPanel>
+
+                    <WrapPanel>
+                        <ComboBox Width="120"
+                                  ItemsSource="{Binding Master2RoleOptions}"
+                                  SelectedItem="{Binding SelectedMaster2Role}"
+                                  Margin="0,0,6,0"/>
+                        <ComboBox Width="120"
+                                  ItemsSource="{Binding AvailableRoiShapes}"
+                                  SelectedItem="{Binding SelectedMaster2Shape}"
+                                  Margin="0,0,6,0"/>
+                        <Button Content="Create"
+                                MinHeight="26"
+                                Command="{Binding CreateMaster2RoiCommand}"
+                                Padding="8,4"/>
+                        <Button Content="{Binding Master2EditButtonText}"
+                                MinHeight="26"
+                                Command="{Binding ToggleEditMaster2RoiCommand}"
+                                Padding="8,4"
+                                Margin="6,0,0,0"/>
+                        <Button Content="Remove"
+                                MinHeight="26"
+                                Command="{Binding RemoveMaster2RoiCommand}"
+                                Padding="8,4"
+                                Margin="6,0,0,0"/>
+                    </WrapPanel>
+                </StackPanel>
+            </GroupBox>
+
+            <WrapPanel Margin="0,0,0,12">
+                <Button Content="Clear Canvas"
+                        Padding="12,4"
+                        Click="ClearCanvasButton_Click"/>
+            </WrapPanel>
 
             <GroupBox Header="Regions">
                 <ListView ItemsSource="{Binding Regions}" Height="160">

@@ -137,6 +137,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Action<bool?> _updateGlobalBadge;
         private readonly Action<int>? _activateInspectionIndex;
         private readonly Func<string, long, CancellationToken, Task>? _repositionInspectionRoisAsyncExternal;
+        private readonly Func<RoiShape, Task>? _createMasterRoiAsync;
+        private readonly Func<Task<bool>>? _toggleEditSaveMasterRoiAsync;
+        private readonly Func<Task>? _removeMasterRoiAsync;
+        private readonly Func<bool>? _canEditMasterRoi;
 
         private ObservableCollection<InspectionRoiConfig>? _inspectionRois;
         private RoiModel? _inspection1;
@@ -176,6 +180,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private string _inferenceSummary = string.Empty;
         private double _heatmapOpacity = 0.6;
         private string _healthSummary = "";
+        private readonly IReadOnlyList<RoiShape> _availableRoiShapes = Enum.GetValues(typeof(RoiShape)).Cast<RoiShape>().ToList();
+        private RoiShape _selectedMasterShape = RoiShape.Rectangle;
+        private bool _isMasterRoiEditing;
 
         private readonly Dictionary<string, RoiBaseline> _baselines = new();
         private readonly object _baselineLock = new();
@@ -294,7 +301,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Action<bool?> updateGlobalBadge,
             Action<int>? activateInspectionIndex = null,
             Func<InspectionRoiConfig, string?>? resolveModelDirectory = null,
-            Func<string, long, CancellationToken, Task>? repositionInspectionRoisAsync = null)
+            Func<string, long, CancellationToken, Task>? repositionInspectionRoisAsync = null,
+            Func<RoiShape, Task>? createMasterRoiAsync = null,
+            Func<Task<bool>>? toggleEditSaveMasterRoiAsync = null,
+            Func<Task>? removeMasterRoiAsync = null,
+            Func<bool>? canEditMasterRoi = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -307,6 +318,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _activateInspectionIndex = activateInspectionIndex;
             _resolveModelDirectory = resolveModelDirectory;
             _repositionInspectionRoisAsyncExternal = repositionInspectionRoisAsync;
+            _createMasterRoiAsync = createMasterRoiAsync;
+            _toggleEditSaveMasterRoiAsync = toggleEditSaveMasterRoiAsync;
+            _removeMasterRoiAsync = removeMasterRoiAsync;
+            _canEditMasterRoi = canEditMasterRoi;
 
             _backendBaseUrl = _client.BaseUrl;
 
@@ -443,6 +458,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     await RunExclusiveAsync(() => AddRoiToDatasetAsync(roi, positive: false)).ConfigureAwait(false);
                 }
             }, _ => !IsBusy);
+
+            CreateMasterRoiCommand = CreateCommand(_ => CreateMasterRoiAsync(), _ => CanEditMasterRoi());
+            ToggleEditSaveMasterRoiCommand = CreateCommand(_ => ToggleEditSaveMasterRoiAsync(), _ => CanEditMasterRoi());
+            RemoveMasterRoiCommand = CreateCommand(_ => RemoveMasterRoiAsync(), _ => CanEditMasterRoi());
 
             PropertyChanged += (s, e) =>
             {
@@ -1045,6 +1064,41 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public IReadOnlyList<RoiShape> AvailableRoiShapes => _availableRoiShapes;
+
+        public RoiShape SelectedMasterShape
+        {
+            get => _selectedMasterShape;
+            set
+            {
+                if (_selectedMasterShape == value)
+                {
+                    return;
+                }
+
+                _selectedMasterShape = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool IsMasterRoiEditing
+        {
+            get => _isMasterRoiEditing;
+            private set
+            {
+                if (_isMasterRoiEditing == value)
+                {
+                    return;
+                }
+
+                _isMasterRoiEditing = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(MasterEditButtonText));
+            }
+        }
+
+        public string MasterEditButtonText => IsMasterRoiEditing ? "Save Master ROI" : "Edit Master ROI";
+
         public bool IsImageLoaded
         {
             get => _isImageLoaded;
@@ -1306,6 +1360,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     layout.Inspection3?.Clone(),
                     layout.Inspection4?.Clone());
             }
+
+            CreateMasterRoiCommand.RaiseCanExecuteChanged();
+            ToggleEditSaveMasterRoiCommand.RaiseCanExecuteChanged();
+            RemoveMasterRoiCommand.RaiseCanExecuteChanged();
         }
 
         public void InitializeBatchSession()
@@ -2278,6 +2336,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand StartBatchCommand { get; }
         public AsyncCommand PauseBatchCommand { get; }
         public AsyncCommand StopBatchCommand { get; }
+        public AsyncCommand CreateMasterRoiCommand { get; }
+        public AsyncCommand ToggleEditSaveMasterRoiCommand { get; }
+        public AsyncCommand RemoveMasterRoiCommand { get; }
         public ICommand AddRoiToOkCommand { get; }
         public ICommand AddRoiToNgCommand { get; }
 
@@ -2523,6 +2584,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             CalibrateSelectedRoiCommand.RaiseCanExecuteChanged();
             EvaluateSelectedRoiCommand.RaiseCanExecuteChanged();
             EvaluateAllRoisCommand.RaiseCanExecuteChanged();
+            CreateMasterRoiCommand.RaiseCanExecuteChanged();
+            ToggleEditSaveMasterRoiCommand.RaiseCanExecuteChanged();
+            RemoveMasterRoiCommand.RaiseCanExecuteChanged();
             AddRoiToDatasetOkCommand.RaiseCanExecuteChanged();
             AddRoiToDatasetNgCommand.RaiseCanExecuteChanged();
             if (AddRoiToOkCommand is AsyncCommand asyncAddOk)
@@ -2535,6 +2599,56 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             BrowseBatchFolderCommand?.RaiseCanExecuteChanged();
             UpdateBatchCommandStates();
+        }
+
+        public void SetMasterEditState(bool isEditing)
+        {
+            IsMasterRoiEditing = isEditing;
+        }
+
+        private bool CanEditMasterRoi()
+        {
+            var handlerAllows = _canEditMasterRoi?.Invoke();
+            if (handlerAllows.HasValue)
+            {
+                return !IsBusy && handlerAllows.Value;
+            }
+
+            return !IsBusy && _layout != null;
+        }
+
+        private async Task CreateMasterRoiAsync()
+        {
+            if (_createMasterRoiAsync == null)
+            {
+                _log("[ui] CreateMasterRoiAsync ignored: handler missing");
+                return;
+            }
+
+            await _createMasterRoiAsync(SelectedMasterShape).ConfigureAwait(false);
+        }
+
+        private async Task ToggleEditSaveMasterRoiAsync()
+        {
+            if (_toggleEditSaveMasterRoiAsync == null)
+            {
+                IsMasterRoiEditing = !IsMasterRoiEditing;
+                return;
+            }
+
+            var isEditing = await _toggleEditSaveMasterRoiAsync().ConfigureAwait(false);
+            IsMasterRoiEditing = isEditing;
+        }
+
+        private async Task RemoveMasterRoiAsync()
+        {
+            if (_removeMasterRoiAsync == null)
+            {
+                _log("[ui] RemoveMasterRoiAsync ignored: handler missing");
+                return;
+            }
+
+            await _removeMasterRoiAsync().ConfigureAwait(false);
         }
 
         private void UpdateSelectedRoiState()

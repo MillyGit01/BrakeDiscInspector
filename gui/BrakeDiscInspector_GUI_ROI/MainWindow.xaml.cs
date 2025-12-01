@@ -7328,9 +7328,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void TryCollapseMasterEditors()
         {
-            if (Master1EditorGroup != null)
+            if (MasterRoiGroup != null)
             {
-                Master1EditorGroup.Visibility = Visibility.Collapsed;
+                MasterRoiGroup.Visibility = Visibility.Collapsed;
             }
 
         }

@@ -185,6 +185,73 @@
               </GroupBox>
             </Grid>
 
+            <Grid Margin="0,0,0,12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                <TextBlock Text="Master 1 actions" FontWeight="Bold" Margin="0,0,0,6"/>
+                <WrapPanel Margin="0,0,0,6">
+                  <Button x:Name="BtnM1_Create"
+                          Content="Create Master 1"
+                          Margin="0,0,6,0"
+                          Click="BtnM1_Create_Click"/>
+                  <Button x:Name="BtnM1_Save"
+                          Content="Save Master 1"
+                          Margin="0,0,6,0"
+                          Click="BtnM1_Save_Click"/>
+                  <Button x:Name="BtnM1_Remove"
+                          Content="Remove Master 1"
+                          Click="BtnM1_Remove_Click"/>
+                </WrapPanel>
+                <WrapPanel>
+                  <Button x:Name="BtnM1S_Create"
+                          Content="Create M1 Search"
+                          Margin="0,0,6,0"
+                          Click="BtnM1S_Create_Click"/>
+                  <Button x:Name="BtnM1S_Save"
+                          Content="Save M1 Search"
+                          Margin="0,0,6,0"
+                          Click="BtnM1S_Save_Click"/>
+                  <Button x:Name="BtnM1S_Remove"
+                          Content="Remove M1 Search"
+                          Click="BtnM1S_Remove_Click"/>
+                </WrapPanel>
+              </StackPanel>
+
+              <StackPanel Grid.Column="1">
+                <TextBlock Text="Master 2 actions" FontWeight="Bold" Margin="0,0,0,6"/>
+                <WrapPanel Margin="0,0,0,6">
+                  <Button x:Name="BtnM2_Create"
+                          Content="Create Master 2"
+                          Margin="0,0,6,0"
+                          Click="BtnM2_Create_Click"/>
+                  <Button x:Name="BtnM2_Save"
+                          Content="Save Master 2"
+                          Margin="0,0,6,0"
+                          Click="BtnM2_Save_Click"/>
+                  <Button x:Name="BtnM2_Remove"
+                          Content="Remove Master 2"
+                          Click="BtnM2_Remove_Click"/>
+                </WrapPanel>
+                <WrapPanel>
+                  <Button x:Name="BtnM2S_Create"
+                          Content="Create M2 Search"
+                          Margin="0,0,6,0"
+                          Click="BtnM2S_Create_Click"/>
+                  <Button x:Name="BtnM2S_Save"
+                          Content="Save M2 Search"
+                          Margin="0,0,6,0"
+                          Click="BtnM2S_Save_Click"/>
+                  <Button x:Name="BtnM2S_Remove"
+                          Content="Remove M2 Search"
+                          Click="BtnM2S_Remove_Click"/>
+                </WrapPanel>
+              </StackPanel>
+            </Grid>
+
             <WrapPanel Margin="0,12,0,12">
               <Button x:Name="BtnClearCanvas"
                       Content="Clear Canvas"

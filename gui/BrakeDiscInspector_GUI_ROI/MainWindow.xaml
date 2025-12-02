@@ -1101,7 +1101,7 @@
                 <Canvas x:Name="CanvasROI"
                         Background="Transparent"
                         IsHitTestVisible="True"
-                        Panel.ZIndex="2"/>
+                       Panel.ZIndex="2"/>
                 <local:RoiOverlay x:Name="RoiOverlay"
                                   Visibility="Collapsed"
                                   IsHitTestVisible="False"
@@ -1111,6 +1111,24 @@
               </Grid>
             </Grid>
           </AdornerDecorator>
+
+          <Border x:Name="SnackPanel"
+                  Grid.Row="1"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Top"
+                  Margin="0,12,0,0"
+                  Padding="10,6"
+                  Background="#E62C2C2C"
+                  CornerRadius="6"
+                  Visibility="Collapsed"
+                  Panel.ZIndex="500"
+                  IsHitTestVisible="False">
+            <TextBlock x:Name="SnackText"
+                       Foreground="White"
+                       FontWeight="SemiBold"
+                       TextWrapping="Wrap"
+                       MaxWidth="520"/>
+          </Border>
 
           <!-- ===== HUD: ROI list (top-left) ===== -->
           <Grid x:Name="RoiHudOverlay"

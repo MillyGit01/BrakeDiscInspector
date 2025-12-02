@@ -2834,6 +2834,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _overlayNeedsRedraw;
         private bool _adornerHadDelta;
         private bool _analysisViewActive;
+        private DispatcherTimer? _snackTimer;
+        private readonly TimeSpan _snackDuration = TimeSpan.FromSeconds(3);
 
         private void AppendResizeLog(string msg)
         {
@@ -2874,6 +2876,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Info($"[BOOT] MainWindow ctor → ApplyDrawToolSelection()"); // CODEX: string interpolation compatibility.
                 ApplyDrawToolSelection(_currentDrawTool, updateViewModel: false);
                 GuiLog.Info($"[BOOT] MainWindow ctor → ApplyDrawToolSelection OK"); // CODEX: string interpolation compatibility.
+
+                _snackTimer = new DispatcherTimer { Interval = _snackDuration };
+                _snackTimer.Tick += (_, _) =>
+                {
+                    _snackTimer.Stop();
+                    HideSnackVisual();
+                };
 
                 this.SizeChanged += (s,e) =>
                 {
@@ -11512,6 +11521,50 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 // Ignore logging failures (e.g., during early boot).
             }
+
+            try
+            {
+                if (Dispatcher.CheckAccess())
+                {
+                    ShowSnackVisual(message);
+                }
+                else
+                {
+                    _ = Dispatcher.InvokeAsync(() => ShowSnackVisual(message), DispatcherPriority.Background);
+                }
+            }
+            catch
+            {
+                // Ignore UI errors during snack presentation.
+            }
+        }
+
+        private void ShowSnackVisual(string message)
+        {
+            if (SnackPanel == null || SnackText == null)
+            {
+                return;
+            }
+
+            SnackText.Text = message;
+            SnackPanel.Visibility = Visibility.Visible;
+
+            if (_snackTimer != null)
+            {
+                _snackTimer.Stop();
+                _snackTimer.Start();
+            }
+        }
+
+        private void HideSnackVisual()
+        {
+            if (SnackPanel == null || SnackText == null)
+            {
+                return;
+            }
+
+            SnackPanel.Visibility = Visibility.Collapsed;
+            SnackText.Text = string.Empty;
         }
 
         private void SyncModelFromShape(Shape shape)

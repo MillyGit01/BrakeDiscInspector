@@ -11547,7 +11547,18 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             SnackText.Text = message;
+            SnackPanel.Opacity = 1;
             SnackPanel.Visibility = Visibility.Visible;
+
+            if (_snackTimer == null)
+            {
+                _snackTimer = new DispatcherTimer { Interval = _snackDuration };
+                _snackTimer.Tick += (_, _) =>
+                {
+                    _snackTimer.Stop();
+                    HideSnackVisual();
+                };
+            }
 
             if (_snackTimer != null)
             {
@@ -11563,7 +11574,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (_snackTimer != null)
+            {
+                _snackTimer.Stop();
+            }
+
             SnackPanel.Visibility = Visibility.Collapsed;
+            SnackPanel.Opacity = 0;
             SnackText.Text = string.Empty;
         }
 
@@ -12868,6 +12885,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _editModeActive = true;
             _state = state;
             var shape = ReadShapeFrom(shapeCombo);
+            GuiLog.Info($"[master] StartDrawingFor state={state} shape={shape} combo={shapeCombo?.Name} currentRole={GetCurrentStateRole()}");
             SetDrawToolFromShape(shape);
             UpdateWizardState();
             Snack($"Dibuja el ROI en el canvas y pulsa Guardar."); // CODEX: string interpolation compatibility.
@@ -12878,6 +12896,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // Reutiliza la ruta ya probada por BtnSaveMaster_Click (usa _state actual internamente)
             var prev = _state;
             _state = state;
+            GuiLog.Info($"[master] SaveFor BEGIN state={state} prevState={prev} currentRole={GetCurrentStateRole()}");
             try
             {
                 BtnSaveMaster_Click(this, new RoutedEventArgs());
@@ -12888,12 +12907,17 @@ namespace BrakeDiscInspector_GUI_ROI
                 UpdateWizardState();
                 throw;
             }
+            finally
+            {
+                GuiLog.Info($"[master] SaveFor END state={state} prevState={prev} roleAfter={GetCurrentStateRole()}");
+            }
         }
 
         private void RemoveFor(MasterState state)
         {
             var prev = _state;
             _state = state;
+            GuiLog.Info($"[master] RemoveFor BEGIN state={state} prevState={prev} roleBefore={GetCurrentStateRole()}");
             try
             {
                 var cleared = TryClearCurrentStatePersistedRoi(out var role);
@@ -12903,29 +12927,52 @@ namespace BrakeDiscInspector_GUI_ROI
                     RedrawOverlaySafe();
                     UpdateWizardState();
                     Snack($"{role} eliminado.");
+                    GuiLog.Info($"[master] RemoveFor CLEARED role={role}");
                 }
                 else
                 {
                     Snack($"No hay ROI que eliminar para este slot."); // CODEX: string interpolation compatibility.
+                    GuiLog.Info($"[master] RemoveFor NO-ROI state={state} role={role}");
                 }
             }
             finally
             {
                 _state = prev;
+                GuiLog.Info($"[master] RemoveFor END state={state} restoredState={prev}");
             }
         }
 
-        private void BtnM1_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM1_Pattern, ComboMasterRoiShape);
-        private void BtnM1_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Pattern);
-        private void BtnM1_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Pattern);
+        private MasterState GetSelectedMasterState(int masterIndex)
+        {
+            var role = GetSelectedMasterRole(masterIndex);
+            return ResolveMasterState(role);
+        }
+
+        private ComboBox GetMasterShapeCombo(int masterIndex)
+        {
+            if (masterIndex == 1)
+            {
+                return ComboMasterRoiShape ?? ComboM2Shape ?? new ComboBox();
+            }
+
+            return ComboM2Shape ?? ComboMasterRoiShape ?? new ComboBox();
+        }
+
+        private void BtnM1_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(GetSelectedMasterState(1), GetMasterShapeCombo(1));
+        private void BtnM1_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(1));
+        private void BtnM1_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(GetSelectedMasterState(1));
 
         private RoiRole GetSelectedMasterRole(int masterIndex)
         {
             var combo = masterIndex == 1 ? ComboMasterRoiRole : ComboM2Role;
             var isSearch = combo?.SelectedIndex == 1;
-            return masterIndex == 1
+            var role = masterIndex == 1
                 ? (isSearch ? RoiRole.Master1Search : RoiRole.Master1Pattern)
                 : (isSearch ? RoiRole.Master2Search : RoiRole.Master2Pattern);
+
+            GuiLog.Info($"[master] GetSelectedMasterRole master={masterIndex} combo={combo?.Name} selectedIndex={combo?.SelectedIndex} => role={role}");
+
+            return role;
         }
 
         private RoiModel? GetMasterRoiForRole(RoiRole role)
@@ -13014,6 +13061,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            GuiLog.Info($"[master] BtnEditM1_Click ENTER editingM1={_editingM1} editingM2={_editingM2} state={_state}");
+
             if (_editingInspectionSlot.HasValue)
             {
                 ExitInspectionEditMode(saveChanges: true);
@@ -13026,6 +13075,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var targetRole = GetSelectedMasterRole(1);
             var targetRoi = GetMasterRoiForRole(targetRole);
+
+            GuiLog.Info($"[master] BtnEditM1_Click targetRole={targetRole} hasRoi={(targetRoi != null)}");
 
             if (!_editingM1)
             {
@@ -13073,9 +13124,9 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BtnM1S_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Search);
         private void BtnM1S_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Search);
 
-        private void BtnM2_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM2_Pattern, ComboM2Shape);
-        private void BtnM2_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM2_Pattern);
-        private void BtnM2_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM2_Pattern);
+        private void BtnM2_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(GetSelectedMasterState(2), GetMasterShapeCombo(2));
+        private void BtnM2_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(2));
+        private void BtnM2_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(GetSelectedMasterState(2));
 
         private void BtnM2S_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM2_Search, ComboM2Shape);
         private void BtnM2S_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM2_Search);
@@ -13089,6 +13140,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            GuiLog.Info($"[master] BtnEditM2_Click ENTER editingM1={_editingM1} editingM2={_editingM2} state={_state}");
+
             if (_editingInspectionSlot.HasValue)
             {
                 ExitInspectionEditMode(saveChanges: true);
@@ -13101,6 +13154,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var targetRole = GetSelectedMasterRole(2);
             var targetRoi = GetMasterRoiForRole(targetRole);
+
+            GuiLog.Info($"[master] BtnEditM2_Click targetRole={targetRole} hasRoi={(targetRoi != null)}");
 
             if (!_editingM2)
             {

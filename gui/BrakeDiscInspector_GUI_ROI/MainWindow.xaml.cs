@@ -3406,17 +3406,6 @@ namespace BrakeDiscInspector_GUI_ROI
             bool m2Ready = _layout.Master2Pattern != null && _layout.Master2Search != null;
             bool mastersReady = m1Ready && m2Ready;
 
-            TxtMasterHints.Text = _state switch
-            {
-                MasterState.DrawM1_Pattern => "1) Dibuja el ROI del patrón Master 1. 2) Cambia a 'ROI Inspección Master 1' para delimitar la zona de búsqueda. Usa rectángulo, círculo o annulus.",
-                MasterState.DrawM1_Search => "Dibuja la zona de búsqueda para Master 1 y pulsa Guardar.",
-                MasterState.DrawM2_Pattern => "Dibuja el ROI del patrón Master 2.",
-                MasterState.DrawM2_Search => "Dibuja la zona de búsqueda para Master 2 y pulsa Guardar.",
-                MasterState.DrawInspection => "Dibuja el ROI de Inspección (rect/círc/annulus) y pulsa Guardar.",
-                MasterState.Ready => "Pulsa 'Analizar Master' para localizar centros y reubicar el ROI de Inspección.",
-                _ => ""
-            };
-
             // Habilitación de tabs por etapas
             TabSetupInspect.IsEnabled = true;
             EnablePresetsTab(mastersReady || _hasLoadedImage);     // permite la pestaña de inspección tras cargar imagen o completar masters

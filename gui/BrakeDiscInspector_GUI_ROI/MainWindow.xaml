@@ -1114,14 +1114,15 @@
 
           <Border x:Name="SnackPanel"
                   Grid.Row="1"
+                  Grid.RowSpan="3"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Top"
                   Margin="0,12,0,0"
                   Padding="10,6"
-                  Background="#E62C2C2C"
+                  Background="#F22C2C2C"
                   CornerRadius="6"
                   Visibility="Collapsed"
-                  Panel.ZIndex="500"
+                  Panel.ZIndex="900"
                   IsHitTestVisible="False">
             <TextBlock x:Name="SnackText"
                        Foreground="White"

@@ -13161,6 +13161,16 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (targetRoi == null)
                 {
+                    var isDrawingM2 = _state == MasterState.DrawM2_Pattern || _state == MasterState.DrawM2_Search;
+
+                    // Permite guardar un ROI recién dibujado para Master 2 aunque todavía no esté persistido
+                    if (isDrawingM2 && _tmpBuffer != null)
+                    {
+                        SaveFor(_state);
+                        UpdateWorkflowMasterEditState();
+                        return;
+                    }
+
                     Snack("Faltan ROI de Master 2.");
                     return;
                 }

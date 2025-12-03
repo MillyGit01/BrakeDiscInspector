@@ -12889,6 +12889,24 @@ namespace BrakeDiscInspector_GUI_ROI
             SetDrawToolFromShape(shape);
             UpdateWizardState();
             Snack($"Dibuja el ROI en el canvas y pulsa Guardar."); // CODEX: string interpolation compatibility.
+
+            if (state != MasterState.DrawM2_Pattern && state != MasterState.DrawM2_Search && _editingM2)
+            {
+                _editingM2 = false;
+                _activeMaster2Role = null;
+                BtnEditM2.Content = "Edit Master 2";
+                UpdateWorkflowMasterEditState();
+            }
+
+            if (state == MasterState.DrawM2_Pattern || state == MasterState.DrawM2_Search)
+            {
+                _editingM2 = true;
+                _activeMaster2Role = state == MasterState.DrawM2_Pattern
+                    ? RoiRole.Master2Pattern
+                    : RoiRole.Master2Search;
+                BtnEditM2.Content = "Save Master 2";
+                UpdateWorkflowMasterEditState();
+            }
         }
 
         private void SaveFor(MasterState state)
@@ -13159,6 +13177,23 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (!_editingM2)
             {
+                var isDrawingM2 = _state == MasterState.DrawM2_Pattern || _state == MasterState.DrawM2_Search;
+
+                if (targetRoi == null && isDrawingM2)
+                {
+                    SaveFor(_state);
+                    SetMasterFrozen(2, true);
+                    RemoveAdornersForMaster(2);
+                    _editingM2 = false;
+                    _activeMaster2Role = null;
+                    _editModeActive = _editingM1;
+                    BtnEditM2.Content = "Edit Master 2";
+                    RedrawOverlaySafe();
+                    Snack("Master 2 válido.");
+                    UpdateWorkflowMasterEditState();
+                    return;
+                }
+
                 if (targetRoi == null)
                 {
                     Snack("Faltan ROI de Master 2.");

@@ -2450,49 +2450,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private void KeepOnlyMaster2InCanvas()
         {
             if (CanvasROI == null) return;
-
-            var toRemove = new System.Collections.Generic.List<System.Windows.UIElement>();
-            int kept = 0, removed = 0;
-
-            foreach (var el in CanvasROI.Children.Cast<System.Windows.UIElement>())
-            {
-                switch (el)
-                {
-                    case System.Windows.Shapes.Shape s:
-                    {
-                        // Shapes de ROI llevan Tag = RoiModel; los de análisis suelen llevar string ("analysis-mark"/"AnalysisCross") o null
-                        if (s.Tag is RoiModel rm)
-                        {
-                            bool keep = (rm.Role == RoiRole.Master2Pattern) || (rm.Role == RoiRole.Master2Search);
-                            if (!keep) { toRemove.Add(s); removed++; } else { kept++; }
-                        }
-                        else
-                        {
-                            // Cualquier shape sin RoiModel en Tag NO pertenece a ROI Master 2 (líneas/analysis/etc.) → eliminar
-                            toRemove.Add(s); removed++;
-                        }
-                        break;
-                    }
-
-                    case FrameworkElement fe when fe.Name != null && fe.Name.StartsWith("roiLabel_"):
-                    {
-                        // Las etiquetas de ROI no usan Tag; se nombran como "roiLabel_<texto_sin_espacios>"
-                        // Para "Master 2" el Name es "roiLabel_Master_2"
-                        string name = fe.Name;
-                        bool keep = name.StartsWith("roiLabel_Master_2", System.StringComparison.OrdinalIgnoreCase);
-                        if (!keep) { toRemove.Add(fe); removed++; } else { kept++; }
-                        break;
-                    }
-
-                    default:
-                        // Cualquier otro UIElement (Borders de análisis, etc.) → eliminar
-                        toRemove.Add(el); removed++;
-                        break;
-                }
-            }
-
-            foreach (var el in toRemove)
-                CanvasROI.Children.Remove(el);
+            int kept = CanvasROI.Children.Count;
+            const int removed = 0;
 
             try { LogHeatmap($"KeepOnlyMaster2InCanvas: kept={kept}, removed={removed}"); } catch {}
         }
@@ -11288,12 +11247,16 @@ namespace BrakeDiscInspector_GUI_ROI
                 MasterLayoutManager.Save(_preset, _layout);
 
                 // 2) Ask the user where to save this layout as a .layout file.
+                var layoutsDir = MasterLayoutManager.GetLayoutsFolder(_preset);
+                Directory.CreateDirectory(layoutsDir);
+
                 var dlg = new SaveFileDialog
                 {
                     Title = "Save layout as",
                     Filter = "Layout files (*.layout.json)|*.layout.json",
                     DefaultExt = ".layout.json",
                     AddExtension = true,
+                    InitialDirectory = layoutsDir,
                     FileName = "layout.layout.json"
                 };
 

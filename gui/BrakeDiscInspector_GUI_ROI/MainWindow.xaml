@@ -15,6 +15,10 @@
   <Window.Resources>
     <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
     <conv:BoolToBrushConverter x:Key="BoolToBrush" />
+    <DropShadowEffect x:Key="HudDropShadowEffect"
+                      Color="#AA000000"
+                      BlurRadius="8"
+                      ShadowDepth="0"/>
     <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
       <Setter Property="TextElement.Foreground" Value="Black"/>
     </Style>
@@ -1146,7 +1150,7 @@
                     BorderThickness="1.2"
                     CornerRadius="8"
                     Padding="10"
-                    Effect="{DynamicResource {x:Static SystemParameters.DropShadowEffectKey}}">
+                    Effect="{StaticResource HudDropShadowEffect}">
               <StackPanel x:Name="RoiHudStack" />
             </Border>
           </Grid>

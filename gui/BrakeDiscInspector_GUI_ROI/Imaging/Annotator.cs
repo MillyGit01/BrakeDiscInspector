@@ -16,11 +16,6 @@ namespace BrakeDiscInspector_GUI_ROI.Imaging
                 throw new ArgumentException("Input path is required", nameof(inputPath));
             }
 
-            if (string.IsNullOrWhiteSpace(outputPath))
-            {
-                throw new ArgumentException("Output path is required", nameof(outputPath));
-            }
-
             if (!File.Exists(inputPath))
             {
                 throw new FileNotFoundException("Source image not found", inputPath);
@@ -32,15 +27,9 @@ namespace BrakeDiscInspector_GUI_ROI.Imaging
                 throw new InvalidOperationException($"Cannot decode source image: {inputPath}");
             }
 
-            var annotated = DrawLabel(source, labelText ?? string.Empty);
-            var outDir = Path.GetDirectoryName(outputPath);
-            if (string.IsNullOrWhiteSpace(outDir))
-            {
-                throw new InvalidOperationException("Cannot resolve output directory for annotated image.");
-            }
-
-            Directory.CreateDirectory(outDir);
-            SavePng(annotated, outputPath);
+            // Persisting annotated images is no longer required; keep the rendering path intact
+            // in case callers need the bitmap for UI purposes.
+            _ = DrawLabel(source, labelText ?? string.Empty);
         }
 
         private static BitmapSource? LoadBitmap(string path)

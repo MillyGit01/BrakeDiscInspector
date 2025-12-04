@@ -1141,11 +1141,12 @@
                 IsHitTestVisible="True"
                 Visibility="Collapsed">
             <Border x:Name="RoiHudPanel"
-                    Background="#CC000000"
+                    Background="#CC1A1A1A"
                     BorderBrush="#39FF14"
-                    BorderThickness="1.5"
-                    CornerRadius="0"
-                    Padding="8">
+                    BorderThickness="1.2"
+                    CornerRadius="8"
+                    Padding="10"
+                    Effect="{DynamicResource {x:Static SystemParameters.DropShadowEffectKey}}">
               <StackPanel x:Name="RoiHudStack" />
             </Border>
           </Grid>
@@ -1154,10 +1155,10 @@
                   Grid.Row="2"
                   HorizontalAlignment="Left"
                   VerticalAlignment="Center"
-                  Margin="8,6,8,8"
-                  Padding="6"
+                  Margin="12,8,12,12"
+                  Padding="10,8"
                   Background="#CC1E1E1E"
-                  CornerRadius="0"
+                  CornerRadius="8"
                   Panel.ZIndex="1"
                   DataContext="{Binding DataContext, ElementName=WorkflowHost}">
             <StackPanel Orientation="Horizontal">
@@ -1255,9 +1256,9 @@
                   HorizontalAlignment="Right"
                   VerticalAlignment="Bottom"
                   Margin="16"
-                  Background="#CC000000"
-                  CornerRadius="0"
-                  Padding="8"
+                  Background="#CC0F0F0F"
+                  CornerRadius="8"
+                  Padding="10"
                   IsHitTestVisible="True">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
               <CheckBox x:Name="ChkHeatmap"

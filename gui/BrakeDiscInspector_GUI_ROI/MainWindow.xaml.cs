@@ -51,6 +51,7 @@ using LegacyROI = BrakeDiscInspector_GUI_ROI.ROI;
 using ROI = BrakeDiscInspector_GUI_ROI.RoiModel;
 using RoiShapeType = BrakeDiscInspector_GUI_ROI.RoiShape;
 using BrakeDiscInspector_GUI_ROI.Models;
+using BrakeDiscInspector_GUI_ROI.Helpers;
 // --- BEGIN: UI/OCV type aliases ---
 using SW = System.Windows;
 using SWM = System.Windows.Media;
@@ -669,6 +670,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private Preset _preset = new();
         private MasterLayout _layout = new();     // inicio en blanco
+        private string? _currentLayoutFilePath;
 
         public MasterLayout? CurrentLayout => _layout;
 
@@ -940,6 +942,7 @@ namespace BrakeDiscInspector_GUI_ROI
             using var layoutIo = ViewModel?.BeginLayoutIo(context);
 
             string layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
+            _currentLayoutFilePath = layoutPath;
             AppendLog($"[save] requested reason={context} path={layoutPath} suppress={_suppressSaves}");
 
             if (_suppressSaves > 0)
@@ -1007,6 +1010,8 @@ namespace BrakeDiscInspector_GUI_ROI
             ResetInspectionSlotsUi();
 
             _layout = layout;
+            _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+            EnsureInspectionDatasetStructure();
 
             FreezeAllRois(_layout);
             RemoveAllRoiAdorners();
@@ -2984,30 +2989,26 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private string EnsureDataRoot()
         {
-            string? configured = _appConfig.Dataset?.Root;
-            string root;
-            if (!string.IsNullOrWhiteSpace(configured))
+            var layoutName = GetCurrentLayoutName();
+            RecipePathHelper.EnsureRecipeFolders(layoutName);
+            return RecipePathHelper.GetLayoutFolder(layoutName);
+        }
+
+        private string GetCurrentLayoutName()
+        {
+            var path = _currentLayoutFilePath;
+            if (string.IsNullOrWhiteSpace(path))
             {
-                var trimmed = configured.Trim();
-                root = Path.IsPathRooted(trimmed)
-                    ? trimmed
-                    : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, trimmed));
+                path = MasterLayoutManager.GetDefaultPath(_preset);
             }
-            else
+
+            var name = Path.GetFileNameWithoutExtension(path);
+            if (name.EndsWith(".layout", StringComparison.OrdinalIgnoreCase))
             {
-                root = Path.Combine(AppContext.BaseDirectory, "data");
+                name = Path.GetFileNameWithoutExtension(name);
             }
 
-            Directory.CreateDirectory(root);
-
-            var imagesRoot = Path.Combine(root, "images");
-            Directory.CreateDirectory(imagesRoot);
-            Directory.CreateDirectory(Path.Combine(imagesRoot, "ok"));
-            Directory.CreateDirectory(Path.Combine(imagesRoot, "ng"));
-
-            Directory.CreateDirectory(Path.Combine(root, "rois"));
-
-            return root;
+            return string.IsNullOrWhiteSpace(name) ? "DefaultLayout" : name;
         }
 
         private void EnsureInspectionDatasetStructure()
@@ -3019,7 +3020,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _dataRoot ??= EnsureDataRoot();
 
-            var roisRoot = Path.Combine(_dataRoot, "rois");
+            var roisRoot = RecipePathHelper.GetDatasetFolder(GetCurrentLayoutName());
             Directory.CreateDirectory(roisRoot);
 
             foreach (var roi in _layout.InspectionRois)
@@ -3043,14 +3044,14 @@ namespace BrakeDiscInspector_GUI_ROI
             _dataRoot ??= EnsureDataRoot();
 
             int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
-            var roisRoot = Path.Combine(_dataRoot, "rois");
+            var roisRoot = RecipePathHelper.GetModelFolder(GetCurrentLayoutName());
             Directory.CreateDirectory(roisRoot);
 
             var folderName = $"Inspection_{clamped}";
             var roiDir = Path.Combine(roisRoot, folderName);
             Directory.CreateDirectory(roiDir);
 
-            var modelDir = Path.Combine(roiDir, "Model");
+            var modelDir = roiDir;
             Directory.CreateDirectory(modelDir);
             return modelDir;
         }
@@ -3062,6 +3063,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             try
             {
+                _currentLayoutFilePath ??= MasterLayoutManager.GetDefaultPath(_preset);
                 _dataRoot = EnsureDataRoot();
 
                 var backendClient = new Workflow.BackendClient();
@@ -3072,7 +3074,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 _backendClient = backendClient;
 
-                var datasetManager = new DatasetManager(_dataRoot);
+                var datasetManager = new DatasetManager(GetCurrentLayoutName());
                 if (_workflowViewModel != null)
                 {
                     _workflowViewModel.PropertyChanged -= WorkflowViewModelOnPropertyChanged;
@@ -3097,6 +3099,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     ToggleEditSaveMasterRoiFromWorkflowAsync,
                     RemoveMasterRoiFromWorkflowAsync,
                     CanEditMasterRoiFromWorkflow);
+
+                _workflowViewModel.SetLayoutName(GetCurrentLayoutName());
 
                 _workflowViewModel.AnchorScoreMin = Math.Max(1, _appConfig.Analyze.AnchorScoreMin);
                 _sharedHeatmapGuardLogged = false;
@@ -4263,7 +4267,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     var style = GetRoiStyle(roi.Role);
                     shape.Stroke = style.stroke;
                     shape.Fill = style.fill;
-                    shape.StrokeThickness = Math.Max(1.0, shape.StrokeThickness);
+                    shape.StrokeThickness = Math.Max(2.0, shape.StrokeThickness);
                     if (style.dash != null)
                         shape.StrokeDashArray = style.dash;
                     else
@@ -4281,7 +4285,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     // Fallback if style not available
                     shape.Stroke = Brushes.White;
                     shape.Fill = Brushes.Transparent;
-                    shape.StrokeThickness = 1.0;
+                    shape.StrokeThickness = 2.0;
                     shape.StrokeDashArray = null;
                     bool allowEditing = !roi.IsFrozen && ShouldEnableRoiEditing(roi.Role, roi);
                     shape.IsHitTestVisible = allowEditing;
@@ -4588,7 +4592,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         fill.Freeze();
                         var dash = new DoubleCollection { 4, 3 };
                         dash.Freeze();
-                        return (WBrushes.Gold, fill, 1.5, dash, 4);
+                        return (WBrushes.Gold, fill, 2.0, dash, 4);
                     }
                 case RoiRole.Master2Pattern:
                     {
@@ -4602,13 +4606,13 @@ namespace BrakeDiscInspector_GUI_ROI
                         fill.Freeze();
                         var dash = new DoubleCollection { 4, 3 };
                         dash.Freeze();
-                        return (WBrushes.IndianRed, fill, 1.5, dash, 4);
+                        return (WBrushes.IndianRed, fill, 2.0, dash, 4);
                     }
                 case RoiRole.Inspection:
                     {
                         var fill = new SolidColorBrush(WColor.FromArgb(45, 50, 205, 50));
                         fill.Freeze();
-                        return (WBrushes.Lime, fill, 2.5, null, 7);
+                        return (WBrushes.Lime, fill, 2.0, null, 7);
                     }
                 default:
                     return (WBrushes.White, transparent, 2.0, null, 5);
@@ -10400,11 +10404,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private string EnsureAndGetMasterPatternDir()
         {
-            var layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
-            var layoutDir = Path.GetDirectoryName(layoutPath);
-            if (string.IsNullOrEmpty(layoutDir))
-                layoutDir = _preset.Home;
-            var masterDir = Path.Combine(layoutDir!, "master_patterns");
+            var layoutName = GetCurrentLayoutName();
+            RecipePathHelper.EnsureRecipeFolders(layoutName);
+            var masterDir = RecipePathHelper.GetMasterFolder(layoutName);
             Directory.CreateDirectory(masterDir);
             return masterDir;
         }
@@ -10494,6 +10496,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var dir = EnsureAndGetMasterPatternDir();
                 var fileName = fileNameBase + ".png";
                 var outPath = Path.Combine(dir, fileName);
+                ObsoleteFileHelper.MoveExistingFilesToObsolete(dir, fileNameBase + "*.png");
                 Cv2.ImWrite(outPath, cropWithAlpha);
                 AppendLog($"[master] Guardado {fileName} ROI=({cropInfo.Left:0.#},{cropInfo.Top:0.#},{cropInfo.Width:0.#},{cropInfo.Height:0.#}) " +
                           $"crop=({cropRect.X},{cropRect.Y},{cropRect.Width},{cropRect.Height}) ang={roi.AngleDeg:0.##}");
@@ -11265,6 +11268,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     var finalPath = MasterLayoutManager.EnsureLayoutJsonExtension(dlg.FileName);
 
                     MasterLayoutManager.SaveAs(_preset, _layout, finalPath);
+                    _currentLayoutFilePath = finalPath;
+                    _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                    _dataRoot = EnsureDataRoot();
+                    EnsureInspectionDatasetStructure();
 
                     AppendLog($"[layout] Saved as '{finalPath}'");
                 }
@@ -11424,7 +11431,10 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 var selectedPath = MasterLayoutManager.EnsureLayoutJsonExtension(dlg.FileName);
                 var loaded = MasterLayoutManager.LoadFromFile(selectedPath);
+                _currentLayoutFilePath = selectedPath;
                 ApplyLayout(loaded ?? new MasterLayout(), "manual-load");
+                _dataRoot = EnsureDataRoot();
+                EnsureInspectionDatasetStructure();
                 _editModeActive = false;
                 Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
             }

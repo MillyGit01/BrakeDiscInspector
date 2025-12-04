@@ -88,7 +88,7 @@ namespace BrakeDiscInspector_GUI_ROI.LayoutManagement
             }
 
             var layout = _store.LoadLayout(profile);
-            _host.ApplyLayout(layout, "manual-load");
+            _host.ApplyLayout(layout, "manual-load", profile.FilePath);
             return Task.CompletedTask;
         }
 

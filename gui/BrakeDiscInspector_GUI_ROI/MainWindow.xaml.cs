@@ -986,12 +986,12 @@ namespace BrakeDiscInspector_GUI_ROI
             return TrySaveLayoutGuarded("[autosave]", context, requireMasters: true, out _);
         }
 
-        public void ApplyLayout(MasterLayout? layout, string sourceContext)
+        public void ApplyLayout(MasterLayout? layout, string sourceContext, string? layoutFilePath = null)
         {
-            ApplyLayoutSnapshot(layout, sourceContext);
+            ApplyLayoutSnapshot(layout, sourceContext, layoutFilePath);
         }
 
-        private void ApplyLayoutSnapshot(MasterLayout? layout, string sourceContext)
+        private void ApplyLayoutSnapshot(MasterLayout? layout, string sourceContext, string? layoutFilePath)
         {
             if (layout == null)
             {
@@ -1008,6 +1008,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
             ClearInspectionCanvasShapes();
             ResetInspectionSlotsUi();
+
+            if (!string.IsNullOrWhiteSpace(layoutFilePath))
+            {
+                _currentLayoutFilePath = MasterLayoutManager.EnsureLayoutJsonExtension(layoutFilePath);
+            }
+            else if (string.IsNullOrWhiteSpace(_currentLayoutFilePath))
+            {
+                _currentLayoutFilePath = MasterLayoutManager.GetDefaultPath(_preset);
+            }
 
             _layout = layout;
             _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
@@ -11431,8 +11440,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 var selectedPath = MasterLayoutManager.EnsureLayoutJsonExtension(dlg.FileName);
                 var loaded = MasterLayoutManager.LoadFromFile(selectedPath);
-                _currentLayoutFilePath = selectedPath;
-                ApplyLayout(loaded ?? new MasterLayout(), "manual-load");
+                ApplyLayout(loaded ?? new MasterLayout(), "manual-load", selectedPath);
                 _dataRoot = EnsureDataRoot();
                 EnsureInspectionDatasetStructure();
                 _editModeActive = false;

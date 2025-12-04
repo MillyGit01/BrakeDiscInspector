@@ -15,10 +15,6 @@
   <Window.Resources>
     <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
     <conv:BoolToBrushConverter x:Key="BoolToBrush" />
-    <DropShadowEffect x:Key="HudDropShadowEffect"
-                      Color="#AA000000"
-                      BlurRadius="8"
-                      ShadowDepth="0"/>
     <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
       <Setter Property="TextElement.Foreground" Value="Black"/>
     </Style>
@@ -1144,15 +1140,19 @@
                 Panel.ZIndex="400"
                 IsHitTestVisible="True"
                 Visibility="Collapsed">
-            <Border x:Name="RoiHudPanel"
-                    Background="#CC1A1A1A"
-                    BorderBrush="#39FF14"
-                    BorderThickness="1.2"
-                    CornerRadius="8"
-                    Padding="10"
-                    Effect="{StaticResource HudDropShadowEffect}">
-              <StackPanel x:Name="RoiHudStack" />
-            </Border>
+              <Border x:Name="RoiHudPanel"
+                      Background="#CC1A1A1A"
+                      BorderBrush="#39FF14"
+                      BorderThickness="1.2"
+                      CornerRadius="8"
+                      Padding="10">
+                <Border.Effect>
+                  <DropShadowEffect Color="#AA000000"
+                                    BlurRadius="8"
+                                    ShadowDepth="0" />
+                </Border.Effect>
+                <StackPanel x:Name="RoiHudStack" />
+              </Border>
           </Grid>
 
           <Border x:Name="RoiVisibilityPanel"

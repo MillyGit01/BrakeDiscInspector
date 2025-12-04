@@ -9006,7 +9006,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         AppendLog($"[save] ROI image : {savedRoi}");
                     }
                     SaveRoiCropPreview(_layout.Master1Pattern, "M1_pattern");
-                    _layout.Master1PatternImagePath = SaveMasterPatternCanonical(_layout.Master1Pattern, "master1_pattern");
+                    _layout.Master1PatternImagePath = SaveMasterPatternCanonical(_layout.Master1Pattern, masterIndex: 1);
 
                     _tmpBuffer = null;
                     if (!restoreStateAfterSave)
@@ -9043,7 +9043,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     _layout.Master2Pattern = _tmpBuffer.Clone();
                     savedRoi = _layout.Master2Pattern;
                     SaveRoiCropPreview(_layout.Master2Pattern, "M2_pattern");
-                    _layout.Master2PatternImagePath = SaveMasterPatternCanonical(_layout.Master2Pattern, "master2_pattern");
+                    _layout.Master2PatternImagePath = SaveMasterPatternCanonical(_layout.Master2Pattern, masterIndex: 2);
 
                     KeepOnlyMaster2InCanvas();
                     LogHeatmap("KeepOnlyMaster2InCanvas called after saving Master2Pattern.");
@@ -10411,6 +10411,13 @@ namespace BrakeDiscInspector_GUI_ROI
             return masterDir;
         }
 
+        private string GetMasterPatternImagePath(int masterIndex)
+        {
+            var masterDir = EnsureAndGetMasterPatternDir();
+            var fileName = $"master{masterIndex}_pattern.png";
+            return Path.Combine(masterDir, fileName);
+        }
+
         private bool TryBuildRoiCrop(RoiModel roi, string logTag, out Mat? cropWithAlpha,
             out RoiCropInfo cropInfo, out Cv.Rect cropRect)
         {
@@ -10486,16 +10493,17 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private string? SaveMasterPatternCanonical(RoiModel roi, string fileNameBase)
+        private string? SaveMasterPatternCanonical(RoiModel roi, int masterIndex)
         {
             if (!TryBuildRoiCrop(roi, "master", out var cropWithAlpha, out var cropInfo, out var cropRect))
                 return null;
 
             using (cropWithAlpha)
             {
-                var dir = EnsureAndGetMasterPatternDir();
-                var fileName = fileNameBase + ".png";
-                var outPath = Path.Combine(dir, fileName);
+                var outPath = GetMasterPatternImagePath(masterIndex);
+                var dir = Path.GetDirectoryName(outPath) ?? string.Empty;
+                var fileNameBase = $"master{masterIndex}_pattern";
+                var fileName = Path.GetFileName(outPath);
                 ObsoleteFileHelper.MoveExistingFilesToObsolete(dir, fileNameBase + "*.png");
                 Cv2.ImWrite(outPath, cropWithAlpha);
                 AppendLog($"[master] Guardado {fileName} ROI=({cropInfo.Left:0.#},{cropInfo.Top:0.#},{cropInfo.Width:0.#},{cropInfo.Height:0.#}) " +

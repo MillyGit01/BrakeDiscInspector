@@ -18,6 +18,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using BrakeDiscInspector_GUI_ROI.Helpers;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using BrakeDiscInspector_GUI_ROI;
@@ -263,6 +264,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _initialized;
         private bool _isInitializing;
         private string? _annotatedOutputDir;
+        private string _currentLayoutName = "DefaultLayout";
         private int _layoutIoDepth;
         private readonly SemaphoreSlim _captureGate = new(1, 1);
         private bool _sharedHeatmapGuardLogged;
@@ -511,6 +513,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     Application.Current?.Dispatcher.Invoke(RedrawOverlays);
                 }
             };
+        }
+
+        public void SetLayoutName(string layoutName)
+        {
+            _currentLayoutName = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
+            _datasetManager.SetLayoutName(_currentLayoutName);
         }
 
         public ObservableCollection<DatasetSample> OkSamples { get; }
@@ -3344,6 +3352,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     {
                         dialog.SelectedPath = roi.DatasetPath;
                     }
+                    else
+                    {
+                        dialog.SelectedPath = RecipePathHelper.GetDatasetFolder(_currentLayoutName);
+                    }
 
                     if (dialog.ShowDialog() == Forms.DialogResult.OK)
                     {
@@ -3373,6 +3385,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     dialog.InitialDirectory = Path.GetDirectoryName(roi.DatasetPath);
                     dialog.FileName = Path.GetFileName(roi.DatasetPath);
+                }
+                else
+                {
+                    dialog.InitialDirectory = RecipePathHelper.GetDatasetFolder(_currentLayoutName);
                 }
 
                 if (dialog.ShowDialog() == true)
@@ -4187,6 +4203,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 Directory.CreateDirectory(targetDirectory);
+                ObsoleteFileHelper.MoveExistingFilesToObsolete(targetDirectory, "model_*.json");
 
                 var manifest = new InspectionModelManifest
                 {
@@ -5306,17 +5323,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     return;
                 }
 
-                _annotatedOutputDir ??= Path.Combine(baseDir, "Annotated");
-                var outputName = Path.GetFileNameWithoutExtension(row.FullPath) + "_annotated.png";
-                var outputPath = Path.Combine(_annotatedOutputDir, outputName);
-
-                await RunOnStaThreadAsync(() =>
-                {
-                    ct.ThrowIfCancellationRequested();
-                    Annotator.SaveAnnotated(row.FullPath, outputPath, label);
-                }, ct).ConfigureAwait(false);
-
-                _log($"[batch] annotated saved: {outputPath}");
+                _log("[batch] annotate skipped: persistence disabled");
             }
             catch (OperationCanceledException)
             {

@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using BrakeDiscInspector_GUI_ROI;
+using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Util;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
@@ -12,16 +12,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
     public sealed class DatasetManager
     {
         private const string ImagesFolderName = "datasets";
+        private string _layoutName = "DefaultLayout";
 
-        public DatasetManager(string rootDirectory)
+        public DatasetManager(string initialLayoutName)
         {
-            RootDirectory = rootDirectory;
-            Directory.CreateDirectory(Path.Combine(RootDirectory, ImagesFolderName));
+            SetLayoutName(initialLayoutName);
         }
 
-        public string RootDirectory { get; }
+        private string ImagesRoot => Path.Combine(RecipePathHelper.GetDatasetFolder(_layoutName), ImagesFolderName);
 
-        private string ImagesRoot => Path.Combine(RootDirectory, ImagesFolderName);
+        public void SetLayoutName(string layoutName)
+        {
+            _layoutName = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
+            RecipePathHelper.EnsureRecipeFolders(_layoutName);
+            Directory.CreateDirectory(ImagesRoot);
+        }
 
         public string GetRoleRoiDirectory(string roleId, string roiId)
         {

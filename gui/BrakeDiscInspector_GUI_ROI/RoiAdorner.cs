@@ -587,6 +587,11 @@ namespace BrakeDiscInspector_GUI_ROI
             t.BorderThickness = new Thickness(1);
             t.Opacity = (w == 0 && h == 0) ? 0.0 : 0.8; // moveThumb transparente
             t.Margin = new Thickness(mL, mT, mR, mB);
+
+            if (w > 0 && h > 0)
+            {
+                t.Template = CreateSquareThumbTemplate(t.Background, t.BorderBrush, t.BorderThickness.Left);
+            }
         }
 
         private static void StyleRotationThumb(Thumb thumb)
@@ -601,17 +606,44 @@ namespace BrakeDiscInspector_GUI_ROI
             thumb.BorderThickness = new Thickness(0);
             thumb.Opacity = 1.0;
             thumb.Margin = new Thickness(0);
-            thumb.Template = CreateCircularThumbTemplate(Brushes.White, Brushes.SteelBlue, 1.5);
+            thumb.Template = CreateArcThumbTemplate();
         }
 
-        private static ControlTemplate CreateCircularThumbTemplate(Brush fill, Brush stroke, double thickness)
+        private static ControlTemplate CreateSquareThumbTemplate(Brush fill, Brush stroke, double thickness)
         {
             var template = new ControlTemplate(typeof(Thumb));
-            var ellipseFactory = new FrameworkElementFactory(typeof(Ellipse));
-            ellipseFactory.SetValue(Shape.FillProperty, fill);
-            ellipseFactory.SetValue(Shape.StrokeProperty, stroke);
-            ellipseFactory.SetValue(Shape.StrokeThicknessProperty, thickness);
-            template.VisualTree = ellipseFactory;
+            var rectFactory = new FrameworkElementFactory(typeof(Rectangle));
+            rectFactory.SetValue(Shape.FillProperty, fill);
+            rectFactory.SetValue(Shape.StrokeProperty, stroke);
+            rectFactory.SetValue(Shape.StrokeThicknessProperty, thickness);
+            template.VisualTree = rectFactory;
+            return template;
+        }
+
+        private static ControlTemplate CreateArcThumbTemplate()
+        {
+            var template = new ControlTemplate(typeof(Thumb));
+            var canvas = new FrameworkElementFactory(typeof(Canvas));
+            canvas.SetValue(FrameworkElement.WidthProperty, 22.0);
+            canvas.SetValue(FrameworkElement.HeightProperty, 22.0);
+
+            var arcPath = new FrameworkElementFactory(typeof(Path));
+            arcPath.SetValue(Shape.StrokeProperty, Brushes.SteelBlue);
+            arcPath.SetValue(Shape.StrokeThicknessProperty, 1.5);
+            arcPath.SetValue(Path.DataProperty, Geometry.Parse("M5,14 A7,7 0 0 1 17,14"));
+            canvas.AppendChild(arcPath);
+
+            var arrowStart = new FrameworkElementFactory(typeof(Path));
+            arrowStart.SetValue(Shape.FillProperty, Brushes.SteelBlue);
+            arrowStart.SetValue(Path.DataProperty, Geometry.Parse("M5,14 L8,11 L8,17 Z"));
+            canvas.AppendChild(arrowStart);
+
+            var arrowEnd = new FrameworkElementFactory(typeof(Path));
+            arrowEnd.SetValue(Shape.FillProperty, Brushes.SteelBlue);
+            arrowEnd.SetValue(Path.DataProperty, Geometry.Parse("M17,14 L14,11 L14,17 Z"));
+            canvas.AppendChild(arrowEnd);
+
+            template.VisualTree = canvas;
             return template;
         }
 

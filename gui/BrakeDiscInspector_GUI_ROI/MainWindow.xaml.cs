@@ -1019,6 +1019,7 @@ namespace BrakeDiscInspector_GUI_ROI
             InitializeOptionsFromConfig();
             _workflowViewModel?.SetMasterLayout(_layout);
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
+            _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
             RefreshInspectionSlotsFromLayout();
 
             if (_hasLoadedImage)
@@ -3126,6 +3127,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 EnsureInspectionDatasetStructure();
                 _workflowViewModel.SetMasterLayout(_layout);
                 _workflowViewModel.SetInspectionRoisCollection(_layout?.InspectionRois);
+                _workflowViewModel.AlignDatasetPathsWithCurrentLayout();
 
                 SyncDrawToolFromViewModel();
             }
@@ -11124,6 +11126,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             EnsureInspectionDatasetStructure();
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
+            _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
             RedrawAllRois();
         }
 

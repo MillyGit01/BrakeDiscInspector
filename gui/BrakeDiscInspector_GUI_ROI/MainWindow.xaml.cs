@@ -941,7 +941,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             using var layoutIo = ViewModel?.BeginLayoutIo(context);
 
-            string layoutPath = MasterLayoutManager.GetDefaultPath(_preset);
+            string layoutPath = _currentLayoutFilePath ?? MasterLayoutManager.GetDefaultPath(_preset);
             _currentLayoutFilePath = layoutPath;
             AppendLog($"[save] requested reason={context} path={layoutPath} suppress={_suppressSaves}");
 
@@ -10504,6 +10504,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var dir = Path.GetDirectoryName(outPath) ?? string.Empty;
                 var fileNameBase = $"master{masterIndex}_pattern";
                 var fileName = Path.GetFileName(outPath);
+                AppendLog($"[master] Guardando patrón M{masterIndex} en '{outPath}'");
                 ObsoleteFileHelper.MoveExistingFilesToObsolete(dir, fileNameBase + "*.png");
                 Cv2.ImWrite(outPath, cropWithAlpha);
                 AppendLog($"[master] Guardado {fileName} ROI=({cropInfo.Left:0.#},{cropInfo.Top:0.#},{cropInfo.Width:0.#},{cropInfo.Height:0.#}) " +

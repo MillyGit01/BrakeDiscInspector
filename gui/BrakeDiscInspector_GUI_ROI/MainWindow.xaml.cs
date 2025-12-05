@@ -12914,6 +12914,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void RemoveFor(MasterState state)
         {
             var prev = _state;
+            var restoreState = prev;
             _state = state;
             GuiLog.Info(
                 $"[master] RemoveFor BEGIN " +
@@ -12934,20 +12935,58 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 else
                 {
-                    Snack($"No hay ROI que eliminar para este slot."); // CODEX: string interpolation compatibility.
-                    GuiLog.Info($"[master] RemoveFor NO-ROI state={state} role={role}");
+                    bool isDrawingCancel = IsCancellingActiveDrawing(state);
+                    if (isDrawingCancel)
+                    {
+                        CancelActiveDrawing();
+                        restoreState = MasterState.Ready;
+                        Snack($"Dibujo cancelado para este ROI.");
+                        GuiLog.Info($"[master] RemoveFor CANCEL-DRAW state={state} role={role} editingM1={_editingM1} editingM2={_editingM2} editModeActive={_editModeActive}");
+                    }
+                    else
+                    {
+                        Snack($"No hay ROI que eliminar para este slot."); // CODEX: string interpolation compatibility.
+                        GuiLog.Info($"[master] RemoveFor NO-ROI state={state} role={role}");
+                    }
                 }
             }
             finally
             {
-                _state = prev;
+                _state = restoreState;
                 GuiLog.Info(
                     $"[master] RemoveFor END " +
-                    $"state={state} restoredState={prev} " +
+                    $"state={state} restoredState={restoreState} " +
                     $"editingM1={_editingM1} editingM2={_editingM2} " +
                     $"editModeActive={_editModeActive} " +
                     $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
             }
+        }
+
+        private bool IsCancellingActiveDrawing(MasterState state)
+        {
+            bool drawingMaster1 = (_state == MasterState.DrawM1_Pattern && state == MasterState.DrawM1_Pattern)
+                || (_state == MasterState.DrawM1_Search && state == MasterState.DrawM1_Search);
+            bool drawingMaster2 = (_state == MasterState.DrawM2_Pattern && state == MasterState.DrawM2_Pattern)
+                || (_state == MasterState.DrawM2_Search && state == MasterState.DrawM2_Search);
+
+            return (drawingMaster1 || drawingMaster2)
+                && _editModeActive
+                && _activeEditableRoiId == null;
+        }
+
+        private void CancelActiveDrawing()
+        {
+            _editModeActive = false;
+            _editingM1 = false;
+            _editingM2 = false;
+            _activeEditableRoiId = null;
+            _activeMaster1Role = null;
+            _activeMaster2Role = null;
+            _isDrawing = false;
+            _tmpBuffer = null;
+            UpdateEditableConfigState();
+            RedrawOverlaySafe();
+            UpdateWizardState();
         }
 
         private MasterState GetSelectedMasterState(int masterIndex)
@@ -13082,15 +13121,27 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var targetRole = GetSelectedMasterRole(1);
-            var targetRoi = GetMasterRoiForRole(targetRole);
+            bool hasPattern = GetMasterRoiForRole(RoiRole.Master1Pattern) != null;
+            bool hasSearch = GetMasterRoiForRole(RoiRole.Master1Search) != null;
+            bool hasTarget = targetRole switch
+            {
+                RoiRole.Master1Pattern => hasPattern,
+                RoiRole.Master1Search => hasSearch,
+                _ => false
+            };
 
-            GuiLog.Info($"[master] BtnEditM1_Click targetRole={targetRole} hasRoi={(targetRoi != null)}");
+            GuiLog.Info($"[master] BtnEditM1_Click targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch} hasTarget={hasTarget}");
 
             if (!_editingM1)
             {
-                if (targetRoi == null)
+                if (!hasTarget)
                 {
-                    Snack("Faltan ROI de Master 1.");
+                    string msg = targetRole == RoiRole.Master1Pattern
+                        ? "No hay ROI Master 1 Pattern. Crea el ROI antes de editar."
+                        : "No hay ROI Master 1 Search. Crea el ROI antes de editar.";
+
+                    Snack(msg);
+                    GuiLog.Info($"[master] BtnEditM1_Click NO-ROI targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch}");
                     return;
                 }
 
@@ -13161,13 +13212,20 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var targetRole = GetSelectedMasterRole(2);
-            var targetRoi = GetMasterRoiForRole(targetRole);
+            bool hasPattern = GetMasterRoiForRole(RoiRole.Master2Pattern) != null;
+            bool hasSearch = GetMasterRoiForRole(RoiRole.Master2Search) != null;
+            bool hasTarget = targetRole switch
+            {
+                RoiRole.Master2Pattern => hasPattern,
+                RoiRole.Master2Search => hasSearch,
+                _ => false
+            };
 
-            GuiLog.Info($"[master] BtnEditM2_Click targetRole={targetRole} hasRoi={(targetRoi != null)}");
+            GuiLog.Info($"[master] BtnEditM2_Click targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch} hasTarget={hasTarget}");
 
             if (!_editingM2)
             {
-                if (targetRoi == null)
+                if (!hasTarget)
                 {
                     var isDrawingM2 = _state == MasterState.DrawM2_Pattern || _state == MasterState.DrawM2_Search;
 
@@ -13179,7 +13237,12 @@ namespace BrakeDiscInspector_GUI_ROI
                         return;
                     }
 
-                    Snack("Faltan ROI de Master 2.");
+                    string msg = targetRole == RoiRole.Master2Pattern
+                        ? "No hay ROI Master 2 Pattern. Crea el ROI antes de editar."
+                        : "No hay ROI Master 2 Search. Crea el ROI antes de editar.";
+
+                    Snack(msg);
+                    GuiLog.Info($"[master] BtnEditM2_Click NO-ROI targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch}");
                     return;
                 }
 

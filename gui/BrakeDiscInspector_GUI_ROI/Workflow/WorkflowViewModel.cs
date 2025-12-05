@@ -521,6 +521,78 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _datasetManager.SetLayoutName(_currentLayoutName);
         }
 
+        public void AlignDatasetPathsWithCurrentLayout()
+        {
+            if (InspectionRois == null || InspectionRois.Count == 0)
+            {
+                return;
+            }
+
+            var layoutName = string.IsNullOrWhiteSpace(_currentLayoutName)
+                ? "DefaultLayout"
+                : _currentLayoutName;
+
+            string recipesRoot;
+            string datasetRoot;
+
+            try
+            {
+                recipesRoot = RecipePathHelper.RecipesRoot;
+                datasetRoot = RecipePathHelper.GetDatasetFolder(layoutName);
+            }
+            catch (Exception ex)
+            {
+                _log($"[dataset] align: failed to resolve recipe paths for layout '{layoutName}': {ex.Message}");
+                return;
+            }
+
+            foreach (var roi in InspectionRois)
+            {
+                if (roi == null || string.IsNullOrWhiteSpace(roi.Id))
+                {
+                    continue;
+                }
+
+                var current = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
+                var newPath = Path.Combine(datasetRoot, roi.Id);
+
+                if (string.Equals(current, newPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var shouldOverride =
+                    string.IsNullOrWhiteSpace(current) ||
+                    (!string.IsNullOrWhiteSpace(current) &&
+                     current.StartsWith(recipesRoot, StringComparison.OrdinalIgnoreCase));
+
+                if (!shouldOverride)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(current) &&
+                    current.StartsWith(recipesRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        if (Directory.Exists(current) &&
+                            !Directory.EnumerateFileSystemEntries(current).Any())
+                        {
+                            Directory.Delete(current);
+                        }
+                    }
+                    catch (Exception cleanupEx)
+                    {
+                        _log($"[dataset] align: cleanup of '{current}' failed: {cleanupEx.Message}");
+                    }
+                }
+
+                roi.DatasetPath = newPath;
+                _log($"[dataset:init] ROI '{roi.DisplayName}' aligned datasetPath='{roi.DatasetPath}'");
+            }
+        }
+
         public ObservableCollection<DatasetSample> OkSamples { get; }
         public ObservableCollection<DatasetSample> NgSamples { get; }
 

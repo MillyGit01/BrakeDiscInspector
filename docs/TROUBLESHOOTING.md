@@ -4,7 +4,7 @@ This checklist is derived from the current GUI/Backend code.
 
 ## GUI-side issues
 - **Backend unavailable:** `WorkflowViewModel.RefreshHealthAsync` reports the exception and `GuiLog` prints `[health] EX`. Verify `Backend.BaseUrl` (appsettings or `BDI_BACKEND_BASEURL`) and ensure `BackendClient.BaseUrl` points to the running FastAPI instance.
-- **Dataset path rejected:** when `InspectionRoiConfig.DatasetPath` is empty or invalid, the UI shows `Select a dataset`. Use the Browse button; valid folders must contain `/ok` and `/ng` (or `/ko`) subfolders.
+- **Dataset path rejected:** dataset panels read from the active recipe (`Recipes/<LayoutName>/Dataset/`). If folders were deleted manually, `RefreshDatasetCommand` will show `Select a dataset`; recreate `Inspection_<n>/ok` and `Inspection_<n>/ng` under the recipe or reload the layout to let `EnsureInspectionDatasetStructure` rebuild them.
 - **Cannot add sample:** `AddRoiToDatasetAsync` logs `AddToDataset aborted: ...`. Usually no image is loaded (`_getSourceImagePath()` null) or the ROI is not frozen; fix the ROI, re-export and retry.
 - **Heatmap missing or misaligned:** check `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` for the `[heatmap:tag]` entry. If `Transform Img→Canvas` shows `sx=0`, wait for the canvas to finish measuring (resize window or trigger a redraw). Batch mode also waits for `_batchAnchorReadyForStep`; ensure Master ROIs are visible.
 

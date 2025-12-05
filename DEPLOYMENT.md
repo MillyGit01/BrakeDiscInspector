@@ -26,7 +26,7 @@ There is no API-key enforcement or TLS termination inside the app; use a reverse
 
 ## GUI configuration
 - The executable reads `config/appsettings.json` first, then `appsettings.json`, then environment overrides (see `AppConfigLoader`).
-- Dataset root defaults to `<exe>/data`; set `BDI_DATASET_ROOT` if you want to point to a network share.
+- Dataset root is derived from the current layout name and always expands to `<exe>/Recipes/<LayoutName or DefaultLayout>/`; `BDI_DATASET_ROOT` is parsed by `AppConfig` but not used by the current recipe pipeline.
 - The GUI sends HTTP requests asynchronously; no additional services are required.
 
 ## Verification checklist

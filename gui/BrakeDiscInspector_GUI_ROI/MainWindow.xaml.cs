@@ -12915,6 +12915,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var prev = _state;
             var restoreState = prev;
+            bool isDrawingCancel = IsCancellingActiveDrawing(state, prev);
             _state = state;
             GuiLog.Info(
                 $"[master] RemoveFor BEGIN " +
@@ -12935,7 +12936,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 else
                 {
-                    bool isDrawingCancel = IsCancellingActiveDrawing(state);
                     if (isDrawingCancel)
                     {
                         CancelActiveDrawing();
@@ -12962,12 +12962,13 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private bool IsCancellingActiveDrawing(MasterState state)
+        private bool IsCancellingActiveDrawing(MasterState requestedState, MasterState activeState)
         {
-            bool drawingMaster1 = (_state == MasterState.DrawM1_Pattern && state == MasterState.DrawM1_Pattern)
-                || (_state == MasterState.DrawM1_Search && state == MasterState.DrawM1_Search);
-            bool drawingMaster2 = (_state == MasterState.DrawM2_Pattern && state == MasterState.DrawM2_Pattern)
-                || (_state == MasterState.DrawM2_Search && state == MasterState.DrawM2_Search);
+            bool drawingMaster1 = (activeState == MasterState.DrawM1_Pattern || activeState == MasterState.DrawM1_Search)
+                && (requestedState == MasterState.DrawM1_Pattern || requestedState == MasterState.DrawM1_Search);
+
+            bool drawingMaster2 = (activeState == MasterState.DrawM2_Pattern || activeState == MasterState.DrawM2_Search)
+                && (requestedState == MasterState.DrawM2_Pattern || requestedState == MasterState.DrawM2_Search);
 
             return (drawingMaster1 || drawingMaster2)
                 && _editModeActive

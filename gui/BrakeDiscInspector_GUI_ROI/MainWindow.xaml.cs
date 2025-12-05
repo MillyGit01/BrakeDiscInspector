@@ -8325,6 +8325,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            var mousePos = e.GetPosition(CanvasROI);
+            AppendLog(
+                $"[master-ui] MouseDown at ({mousePos.X:0.##},{mousePos.Y:0.##}) " +
+                $"state={_state} " +
+                $"editingM1={_editingM1} editingM2={_editingM2} " +
+                $"editModeActive={_editModeActive} " +
+                $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
+
             if (!_editModeActive)
             {
                 e.Handled = true;
@@ -12870,7 +12878,12 @@ namespace BrakeDiscInspector_GUI_ROI
             _editModeActive = true;
             _state = state;
             var shape = ReadShapeFrom(shapeCombo);
-            GuiLog.Info($"[master] StartDrawingFor state={state} shape={shape} combo={shapeCombo?.Name} currentRole={GetCurrentStateRole()}");
+            GuiLog.Info(
+                $"[master] StartDrawingFor " +
+                $"state={state} shape={shape} combo={shapeCombo?.Name} currentRole={GetCurrentStateRole()} " +
+                $"editingM1={_editingM1} editingM2={_editingM2} " +
+                $"editModeActive={_editModeActive} " +
+                $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
             SetDrawToolFromShape(shape);
             UpdateWizardState();
             Snack($"Dibuja el ROI en el canvas y pulsa Guardar."); // CODEX: string interpolation compatibility.
@@ -12902,7 +12915,12 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var prev = _state;
             _state = state;
-            GuiLog.Info($"[master] RemoveFor BEGIN state={state} prevState={prev} roleBefore={GetCurrentStateRole()}");
+            GuiLog.Info(
+                $"[master] RemoveFor BEGIN " +
+                $"state={state} prevState={prev} roleBefore={GetCurrentStateRole()} " +
+                $"editingM1={_editingM1} editingM2={_editingM2} " +
+                $"editModeActive={_editModeActive} " +
+                $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
             try
             {
                 var cleared = TryClearCurrentStatePersistedRoi(out var role);
@@ -12923,7 +12941,12 @@ namespace BrakeDiscInspector_GUI_ROI
             finally
             {
                 _state = prev;
-                GuiLog.Info($"[master] RemoveFor END state={state} restoredState={prev}");
+                GuiLog.Info(
+                    $"[master] RemoveFor END " +
+                    $"state={state} restoredState={prev} " +
+                    $"editingM1={_editingM1} editingM2={_editingM2} " +
+                    $"editModeActive={_editModeActive} " +
+                    $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
             }
         }
 

@@ -3,8 +3,8 @@
 The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes the structure that actually exists in the codebase and the workflows exposed to operators.
 
 ## Application structure
-- **Entry point:** `App.xaml` loads `MainWindow`. `AppConfigLoader` merges `config/appsettings.json`, `appsettings.json` and environment overrides (`BDI_BACKEND_BASEURL`, `BDI_DATASET_ROOT`, `BDI_ANALYZE_*`, `BDI_HEATMAP_OPACITY`).
-- **Main window:** `MainWindow.xaml.cs` instantiates `WorkflowViewModel`, sets up ROI overlays, handles image loading and delegates log output to `GuiLog`. It also creates the default data root (`<exe>/data`) if no explicit dataset root is configured.
+- **Entry point:** `App.xaml` loads `MainWindow`. `AppConfigLoader` merges `config/appsettings.json`, `appsettings.json` and environment overrides (`BDI_BACKEND_BASEURL`, `BDI_ANALYZE_*`, `BDI_HEATMAP_OPACITY`).
+- **Main window:** `MainWindow.xaml.cs` instantiates `WorkflowViewModel`, sets up ROI overlays, handles image loading and delegates log output to `GuiLog`. It resolves the recipe root via `EnsureDataRoot`, which maps the current layout name to `<exe>/Recipes/<LayoutName or DefaultLayout>/`.
 - **View model:** `WorkflowViewModel` contains all commands bound in XAML:
   - Dataset commands: `AddRoiToDatasetOkCommand`, `AddRoiToDatasetNgCommand`, `RemoveSelectedCommand`, `RefreshDatasetCommand`, `BrowseDatasetCommand`, `OpenDatasetFolderCommand`.
   - Training/calibration: `TrainSelectedRoiCommand`, `CalibrateSelectedRoiCommand`, `InferFromCurrentRoiCommand`, `EvaluateSelectedRoiCommand`, `EvaluateAllRoisCommand`, `InferEnabledRoisCommand`.
@@ -15,22 +15,22 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
 ## ROI editing and persistence
 - **Shapes:** `RoiModel` supports `Rectangle`, `Circle` and `Annulus`. Each ROI tracks both geometric data (center, radii, angle) and frozen state.
 - **Overlay/adorner:** `RoiOverlay` renders active shapes; `RoiAdorner`/`ResizeAdorner`/`RoiRotateAdorner` manipulate them. The adorner code is shared between manual and batch canvases and must stay untouched per `agents.md`.
-- **Master layouts:** `MasterLayoutManager` reads/writes `Layouts/*.layout.json`. `MasterLayout` includes Master 1/2 pattern/search ROIs, inspection baselines and UI/analyse options. When loading a layout, `MainWindow` calls `EnsureInspectionDatasetStructure`, which assigns `Inspection_<n>` directories to each slot.
+- **Master layouts:** `MasterLayoutManager` reads/writes `Layouts/*.layout.json`. `MasterLayout` includes Master 1/2 pattern/search ROIs, inspection baselines and UI/analyse options. When loading a layout, `MainWindow` calls `EnsureInspectionDatasetStructure`, which assigns `Inspection_<n>` directories under the recipe’s `Dataset` folder to each slot.
 - **Alignment:** `InspectionAlignmentHelper.MoveInspectionTo` applies translation/rotation/scale from the saved Master anchors (`Master1Pattern`/`Master2Pattern`) to the currently detected anchors before batch inspection. If the transform fails the ROI falls back to the midpoint between the anchors.
 
 ## Dataset layout
-- Default root: `<AppContext.BaseDirectory>/data`, unless `Dataset.Root` in `appsettings.json` or `BDI_DATASET_ROOT` overrides it.
-- For every inspection slot (1–4) the GUI creates `<root>/rois/Inspection_<n>/{ok,ng,Model}` and sets `InspectionRoiConfig.DatasetPath` to that folder. Operators can point a slot to a different folder or CSV via the **Browse** button; `Properties.Settings` remembers the last folder per ROI (`LastDatasetPathROI1..4`).
+- Root per layout: `RecipePathHelper` creates `<AppContext.BaseDirectory>/Recipes/<LayoutName or DefaultLayout>/` with `Dataset/`, `Model/` and `Master/` subfolders. `WorkflowViewModel.SetLayoutName` propagates the layout name to `DatasetManager` so every command reads/writes inside that recipe tree.
+- For every inspection slot (1–4) the GUI creates `Dataset/Inspection_<n>/{ok,ng}` for the on-disk dataset plus a `Model/Inspection_<n>/` directory for backend artefacts. Samples shown in the UI come from `Dataset/datasets/<roi_id>/<ok|ng>/` where `roi_id` is the stable identifier used in backend calls (e.g. `inspection-1`).
 - `DatasetManager.SaveSampleAsync` writes:
-  - PNG file: `SAMPLE_<roleId>_<roiId>_<UTC timestamp>.png` under `<dataset>/ok` or `<dataset>/ng` (if both `ng/` and `ko/` exist, the GUI prefers `ng/`).
+  - PNG file: `SAMPLE_<roleId>_<roiId>_<UTC timestamp>.png` under `Dataset/datasets/<roi_id>/ok` or `Dataset/datasets/<roi_id>/ng` (folder created on demand).
   - Metadata JSON (same basename) containing `{role_id, roi_id, mm_per_px, shape_json, source_path, angle, timestamp}`.
-- Dataset validation: `AnalyzeFolderDataset` requires `/ok` and `/ng` (or `/ko`) subfolders and counts the number of PNG/JPG/BMP/TIF/WEBP files. Alternatively, operators can point a slot to a CSV with `filename,label` columns; `AnalyzeCsvDataset` resolves the listed files and infers `ok`/`ng` labels.
+- Dataset validation performed by `RefreshDatasetCommand` walks the current recipe tree; CSV imports remain available but the canonical layout is the recipe folder. Older `<data root>/rois/Inspection_<n>` locations are only kept for backward compatibility paths already present in the layout files.
 
 ## Manual vs batch inspection
 ### Manual
 1. Load an image through the toolbar. `WorkflowViewModel.BeginManualInspection` remembers the path.
 2. Select an inspection ROI; the canvas shows adorners so it can be edited/frozen.
-3. Click **Evaluate** (or **Evaluate all enabled ROIs**). `EvaluateRoiAsync` exports the canonical ROI via `_exportRoiAsync`, builds `InferRequest` with `RoleId`, `RoiId`, `MmPerPx` and `ShapeJson`, calls `BackendClient.InferAsync`, then updates `Regions`, `InferenceScore` and the heatmap overlay.
+3. Click **Evaluate** (or **Evaluate all enabled ROIs**). `EvaluateRoiAsync` exports the canonical ROI via `_exportRoiAsync`, builds `InferRequest` with `RoleId`, `RoiId`, `MmPerPx` and `ShapeJson`, calls `BackendClient.InferAsync` (multipart POST to `/infer`), then updates `Regions`, `InferenceScore` and the heatmap overlay.
 4. `BackendMemoryNotFittedException` triggers an automatic `/fit_ok` using the OK samples already present under that ROI’s dataset path, so the UI can recover without manual intervention.
 
 ### Batch

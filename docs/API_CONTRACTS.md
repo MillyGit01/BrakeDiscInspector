@@ -103,7 +103,7 @@ Unknown kinds fall back to a full mask.
 
 ## File-based contracts
 ### Dataset samples (GUI side)
-`DatasetManager.SaveSampleAsync` stores each ROI crop as `PNG` plus a JSON file with the following schema:
+`DatasetManager.SaveSampleAsync` stores each ROI crop as `PNG` plus a JSON file under `Recipes/<LayoutName>/Dataset/datasets/<roi_id>/<ok|ng>/` with the following schema:
 ```json
 {
   "role_id": "Inspection",

@@ -2,6 +2,11 @@
 
 This document explains how ROIs are defined, exported, aligned and how heatmaps are rendered in both manual and batch modes. Every step references the code in this repository.
 
+## ROI identifiers and roles
+- Roles: `Inspection`, `Master1`, `Master2` (`RoiRole` enum). `BackendClient` forwards `role_id` unchanged to the FastAPI routes.
+- ROI ids: inspection slots keep `inspection-1..4` (see `MasterLayout.InspectionRois`), while Master anchors inherit their ids from the layout file. These ids are used in dataset file names (`SAMPLE_<role>_<roi>_*`) and in backend calls, so layout JSON, dataset JSON and recipes must match.
+- Recipes: each layout name resolves to `<exe>/Recipes/<LayoutName or DefaultLayout>/` with `Dataset/`, `Model/` and `Master/` subfolders. Dataset samples live under `Dataset/datasets/<roi_id>/<ok|ng>/` and masters/models are versioned by moving older files into `obsolete/`.
+
 ## 1. Canonical ROI export
 1. `WorkflowViewModel` calls `_exportRoiAsync`, which ultimately uses `RoiCropUtils.TryBuildRoiCropInfo` to capture the ROI geometry (`shape`, `Left/Top/Width/Height`, rotation pivot).
 2. `RoiCropUtils.TryGetRotatedCrop` rotates the full image around the ROI pivot (OpenCV warp affine) and extracts a crop with the exact same width/height as the drawn ROI. Rectangles use the `Left/Top/Width/Height` bounds; circles/annulus compute the bounding box from `CX/CY/R/RInner`.

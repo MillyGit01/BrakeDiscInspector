@@ -4,8 +4,8 @@ This document summarises how the current codebase is wired: which processes exis
 
 ## Components
 ### WPF front-end (`gui/BrakeDiscInspector_GUI_ROI`)
-- `MainWindow` hosts the ROI canvas, dataset panes and batch grid. It loads `MasterLayout`/`InspectionRoiConfig` records from `Layouts/*.layout.json`, wires `WorkflowViewModel` to XAML commands and forwards log messages to `GuiLog`.
-- `WorkflowViewModel` coordinates user actions: exporting canonical ROIs (`_exportRoiAsync` delegates to `RoiCropUtils`), calling the backend through `Workflow.BackendClient`, refreshing dataset previews and driving manual/batch inference.
+- `MainWindow` hosts the ROI canvas, dataset panes and batch grid. It loads `MasterLayout`/`InspectionRoiConfig` records from `Layouts/*.layout.json`, wires `WorkflowViewModel` to XAML commands and forwards log messages to `GuiLog`. Layout names double as recipe identifiers for on-disk folders under `<exe>/Recipes/`.
+- `WorkflowViewModel` coordinates user actions: exporting canonical ROIs (`_exportRoiAsync` delegates to `RoiCropUtils`), calling the backend through `Workflow.BackendClient`, refreshing dataset previews and driving manual/batch inference while keeping the active layout name in sync with `DatasetManager`.
 - `RoiOverlay` plus the `RoiAdorner`/`ResizeAdorner`/`RoiRotateAdorner` family render and edit ROI shapes. `InspectionAlignmentHelper.MoveInspectionTo` is responsible for transforming inspection ROIs based on detected Master 1/2 anchors.
 
 ### Python backend (`backend/`)
@@ -27,12 +27,12 @@ This document summarises how the current codebase is wired: which processes exis
 4. Batch heatmaps share the same overlay control; `SetBatchHeatmapForRoi` and `UpdateBatchHeatmapIndex` keep manual and batch canvases aligned while logging placement metadata.
 
 ## Datasets and persistence
-- The GUI writes datasets under `<data root>/rois/Inspection_<slot>/{ok,ng}` (see `MainWindow.EnsureInspectionDatasetStructure`). Each sample produces `SAMPLE_<role>_<roi>_<timestamp>.png` plus a metadata JSON (`SampleMetadata` in `DatasetSample.cs`).
+- Each layout name is a recipe stored at `<exe>/Recipes/<LayoutName or DefaultLayout>/`. `EnsureInspectionDatasetStructure` creates `Dataset/Inspection_<slot>/{ok,ng}` folders and `Model/Inspection_<slot>/` to mirror the GUI panels, while `DatasetManager.SaveSampleAsync` writes PNG+JSON samples to `Dataset/datasets/<roi_id>/<ok|ng>/` using the backend-facing ROI identifiers (`inspection-1..4`).
 - The backend stores embeddings as `<role>__<roi>.npz`, optional FAISS indices as `<role>__<roi>_index.faiss` and calibration files `<role>__<roi>_calib.json` below `BDI_MODELS_DIR` (default `models/`).
 - Batch results can be exported through whatever pipeline consumes the GUI logs; no intermediate CSV is written by the code.
 
 ## Configuration and contracts
-- GUI: `AppConfig` merges `config/appsettings.json`, `appsettings.json` and environment variables (`BDI_BACKEND_BASEURL`, `BDI_DATASET_ROOT`, `BDI_ANALYZE_*`). Dataset locations per slot are persisted in `Properties.Settings` (`LastDatasetPathROI1..4`).
+- GUI: `AppConfig` merges `config/appsettings.json`, `appsettings.json` and environment variables (`BDI_BACKEND_BASEURL`, `BDI_ANALYZE_*`, `BDI_HEATMAP_OPACITY`). Dataset roots are derived from the active layout name, not from `BDI_DATASET_ROOT`.
 - Backend: `_env_var` in `app.py` plus `backend/config.py` read the `BDI_*` environment variables. No API keys, manifests or `/metrics` routes are implemented in the checked-in code.
 
 ## Logging overview

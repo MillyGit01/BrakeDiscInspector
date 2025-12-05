@@ -29,7 +29,7 @@ The backend located in `backend/` exposes the same endpoints implemented in `bac
   <role>__<roi>_calib.json     # stored output of /calibrate_ng
   datasets/<role>/<roi>/ok|ng  # if scripts choose to reuse ModelStore for datasets
 ```
-Legacy layouts (`models/<role>/<roi>/memory.npz`, etc.) are still read for backward compatibility.
+File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_name`), so the exact ids sent by the GUI remain round-trippable even if they contain dashes. Legacy layouts (`models/<role>/<roi>/memory.npz`, etc.) are still read for backward compatibility.
 
 ## Endpoint behaviour
 - `GET /health`: returns `{status, device, model, version}`; device is `cuda` when `torch.cuda.is_available()`.

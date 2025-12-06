@@ -13108,7 +13108,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            GuiLog.Info($"[master] BtnEditM1_Click ENTER editingM1={_editingM1} editingM2={_editingM2} state={_state}");
+            GuiLog.Info($"[master] BtnEditM1_Click ENTER editingM1={_editingM1} editingM2={_editingM2} state={_state} editModeActive={_editModeActive} activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
 
             if (_editingInspectionSlot.HasValue)
             {
@@ -13130,17 +13130,44 @@ namespace BrakeDiscInspector_GUI_ROI
                 _ => false
             };
 
-            GuiLog.Info($"[master] BtnEditM1_Click targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch} hasTarget={hasTarget}");
+            bool drawingTargetRole = (_state == MasterState.DrawM1_Pattern && targetRole == RoiRole.Master1Pattern)
+                || (_state == MasterState.DrawM1_Search && targetRole == RoiRole.Master1Search);
+
+            GuiLog.Info(
+                $"[master] BtnEditM1_Click targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch} hasTarget={hasTarget} " +
+                $"drawingTargetRole={drawingTargetRole} tmpBuffer={_tmpBuffer != null} activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
+
+            if (drawingTargetRole)
+            {
+                bool hasEditableDraft = _tmpBuffer != null || !string.IsNullOrWhiteSpace(_activeEditableRoiId);
+                GuiLog.Info($"[master] BtnEditM1_Click DRAW-PATH role={targetRole} hasEditableDraft={hasEditableDraft} editModeActive={_editModeActive}");
+
+                if (!hasEditableDraft)
+                {
+                    Snack("Dibuja el ROI en el canvas antes de guardar.");
+                    GuiLog.Info($"[master] BtnEditM1_Click DRAW-PATH missing-roi role={targetRole}");
+                    return;
+                }
+
+                var targetState = ResolveMasterState(targetRole);
+                SaveFor(targetState);
+
+                _editModeActive = false;
+                _isDrawing = false;
+                _activeEditableRoiId = null;
+                _activeMaster1Role = null;
+                _state = MasterState.Ready;
+
+                GuiLog.Info($"[master] BtnEditM1_Click DRAW-PATH saved role={targetRole} -> state={_state}");
+                UpdateWorkflowMasterEditState();
+                return;
+            }
 
             if (!_editingM1)
             {
                 if (!hasTarget)
                 {
-                    string msg = targetRole == RoiRole.Master1Pattern
-                        ? "No hay ROI Master 1 Pattern. Crea el ROI antes de editar."
-                        : "No hay ROI Master 1 Search. Crea el ROI antes de editar.";
-
-                    Snack(msg);
+                    Snack("No hay ROI que editar para este slot.");
                     GuiLog.Info($"[master] BtnEditM1_Click NO-ROI targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch}");
                     return;
                 }

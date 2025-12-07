@@ -955,6 +955,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (requireMasters && !MastersReady(_layout))
             {
                 AppendLog($"{prefix} skipped ({context}) Master1 incompleto");
+                LogMasterRoiSnapshot("[master] SaveLayoutGuarded");
                 errorMessage = "Master 1 incompleto.";
                 return false;
             }
@@ -8718,6 +8719,25 @@ namespace BrakeDiscInspector_GUI_ROI
             };
         }
 
+        private void LogMasterRoiSnapshot(string prefix)
+        {
+            AppendLog($"{prefix} M1Pattern={DescribeRoleRoi(_layout?.Master1Pattern, RoiRole.Master1Pattern)}");
+            AppendLog($"{prefix} M1Search={DescribeRoleRoi(_layout?.Master1Search, RoiRole.Master1Search)}");
+            AppendLog($"{prefix} M2Pattern={DescribeRoleRoi(_layout?.Master2Pattern, RoiRole.Master2Pattern)}");
+            AppendLog($"{prefix} M2Search={DescribeRoleRoi(_layout?.Master2Search, RoiRole.Master2Search)}");
+        }
+
+        private string DescribeRoleRoi(RoiModel? roi, RoiRole role)
+        {
+            if (roi == null)
+            {
+                return $"role={role} <null>";
+            }
+
+            var id = string.IsNullOrWhiteSpace(roi.Id) ? "<null>" : roi.Id;
+            return $"role={role} id={id} roi={DescribeRoi(roi)}";
+        }
+
         private void HandleAdornerChange(RoiAdornerChangeKind changeKind, RoiModel canvasModel, RoiModel pixelModel, string contextLabel)
         {
             switch (changeKind)
@@ -8945,6 +8965,11 @@ namespace BrakeDiscInspector_GUI_ROI
             var stateForSave = ResolveStateForSave();
             var originalState = _state;
             bool restoreStateAfterSave = (_editingM1 || _editingM2) && stateForSave != _state;
+
+            AppendLog($"[master] SaveMasterWizardFlow ENTER stateForSave={stateForSave} originalState={originalState} " +
+                      $"editingM1={_editingM1} editingM2={_editingM2} editModeActive={_editModeActive} " +
+                      $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} tmpBuffer={DescribeRoi(_tmpBuffer)}");
+            LogMasterRoiSnapshot("[master] SaveMasterWizardFlow snapshot");
 
             if (_tmpBuffer is null)
             {
@@ -9184,7 +9209,14 @@ namespace BrakeDiscInspector_GUI_ROI
             // Limpia preview/adorner y persiste
             ClearPreview();
 
-            var saved = TrySaveLayoutGuarded("[wizard]", $"save => {layoutPath}", requireMasters: true, out var saveError);
+            bool requireMastersForSave = true;
+            if (stateForSave == MasterState.DrawM1_Pattern)
+            {
+                requireMastersForSave = false;
+                AppendLog("[master] SaveMaster: Master1Pattern saved; skip Master1 completeness requirement (search pending).");
+            }
+
+            var saved = TrySaveLayoutGuarded("[wizard]", $"save => {layoutPath}", requireMasters: requireMastersForSave, out var saveError);
 
             if (!skipRedrawForMasterInspection)
             {

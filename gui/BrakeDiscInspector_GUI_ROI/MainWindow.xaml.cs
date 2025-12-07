@@ -9152,8 +9152,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var savedRoiModel = savedRoi;
 
+            if (savedRoiModel != null)
+            {
+                var m1PatternState = _layout?.Master1Pattern != null ? "OK" : "NULL";
+                var m1SearchState = _layout?.Master1Search != null ? "OK" : "NULL";
+                GuiLog.Info($"[master] Layout after SaveMasterWizardFlow role={savedRoiModel.Role}: M1Pattern={m1PatternState} M1Search={m1SearchState}");
+            }
+
             bool skipRedrawForMasterInspection = savedRoiModel != null &&
-                (savedRoiModel.Role == RoiRole.Master1Search);
+                (savedRoiModel.Role == RoiRole.Inspection);
 
             if (skipRedrawForMasterInspection)
             {
@@ -12925,6 +12932,36 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             // Reutiliza la ruta ya probada por BtnSaveMaster_Click (usa _state actual internamente)
             var prev = _state;
+
+            bool hasDraft = _tmpBuffer != null || !string.IsNullOrWhiteSpace(_activeEditableRoiId);
+            if (!hasDraft && _previewShape?.Tag is RoiModel previewModel)
+            {
+                _tmpBuffer = CanvasToImage(previewModel);
+                if (_tmpBuffer != null && GetCurrentStateRole().HasValue)
+                {
+                    _tmpBuffer.Role = GetCurrentStateRole()!.Value;
+                }
+                hasDraft = _tmpBuffer != null;
+            }
+
+            if (!hasDraft && (state == MasterState.DrawM1_Pattern || state == MasterState.DrawM1_Search))
+            {
+                Snack("No hay ROI dibujado para guardar.");
+                GuiLog.Info($"[master] SaveFor SKIP (no-draft) state={state} prevState={prev} activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
+                _state = prev;
+                UpdateWizardState();
+                return;
+            }
+
+            if (state == MasterState.DrawM1_Search && (_layout?.Master1Pattern == null))
+            {
+                Snack("Falta Master1Pattern: guarda primero el patrón.");
+                GuiLog.Info($"[master] SaveFor SKIP (missing M1Pattern) state={state} prevState={prev}");
+                _state = prev;
+                UpdateWizardState();
+                return;
+            }
+
             _state = state;
             GuiLog.Info($"[master] SaveFor BEGIN state={state} prevState={prev} currentRole={GetCurrentStateRole()}");
             try
@@ -12959,6 +12996,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 var cleared = TryClearCurrentStatePersistedRoi(out var role);
                 if (cleared)
                 {
+                    _activeEditableRoiId = null;
+                    _editModeActive = false;
+                    _isDrawing = false;
+                    _tmpBuffer = null;
                     AppendLog($"[align] cleared {role}");
                     RedrawOverlaySafe();
                     UpdateWizardState();

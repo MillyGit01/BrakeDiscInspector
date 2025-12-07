@@ -216,11 +216,12 @@ namespace BrakeDiscInspector_GUI_ROI
             var dir = GetLayoutsFolder(preset);
             Directory.CreateDirectory(dir);
 
-            if (layout.Master1Pattern == null || layout.Master1Search == null)
+            // Sólo exigimos que exista Master 1 Pattern. Master1Search pasa a ser opcional
+            if (layout.Master1Pattern == null)
             {
                 throw new InvalidOperationException(
-                    "No se puede guardar el Layout: falta Master 1 (Pattern y/o Search). " +
-                    "Dibuja/guarda Master 1 antes de 'Save Layout'.");
+                    "No se puede guardar el Layout: falta Master 1 Pattern. " +
+                    "Dibuja/guarda Master 1 Pattern antes de 'Save Layout'.");
             }
 
             // === Sanitizar antes de serializar ===
@@ -270,12 +271,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 Directory.CreateDirectory(dir);
             }
 
-            // Reuse the same guardrails as the standard Save
-            if (layout.Master1Pattern == null || layout.Master1Search == null)
+            // Reuse the same guardrails as the standard Save, pero sólo para Master1Pattern
+            if (layout.Master1Pattern == null)
             {
                 throw new InvalidOperationException(
-                    "No se puede guardar el Layout: falta Master 1 (Pattern y/o Search). " +
-                    "Dibuja/guarda Master 1 antes de 'Save Layout'.");
+                    "No se puede guardar el Layout: falta Master 1 Pattern. " +
+                    "Dibuja/guarda Master 1 Pattern antes de 'Save Layout'.");
             }
 
             SanitizeForSave(layout);

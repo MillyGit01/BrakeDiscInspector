@@ -13425,10 +13425,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 string modelKey = $"LastModelDirROI{index}";
                 string? lastModelDir = settings[modelKey] as string;
 
-                string initialDirectory = !string.IsNullOrWhiteSpace(lastModelDir) && Directory.Exists(lastModelDir)
-                    ? lastModelDir
-                    : Directory.Exists(modelDir)
-                        ? modelDir
+                string initialDirectory = Directory.Exists(modelDir)
+                    ? modelDir
+                    : !string.IsNullOrWhiteSpace(lastModelDir) && Directory.Exists(lastModelDir)
+                        ? lastModelDir
                         : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
                 var dialog = new OpenFileDialog

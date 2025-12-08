@@ -3523,6 +3523,48 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return string.IsNullOrWhiteSpace(roiId) ? "UnknownRoi" : roiId;
         }
 
+        private static string EncodeBackendComponent(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "default";
+            }
+
+            var encoded = Convert.ToBase64String(Encoding.UTF8.GetBytes(value))
+                               .TrimEnd('=')
+                               .Replace('+', '-')
+                               .Replace('/', '_');
+
+            return string.IsNullOrWhiteSpace(encoded) ? "default" : encoded;
+        }
+
+        private static string SanitizeComponent(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "default";
+            }
+
+            var sb = new StringBuilder(value.Length);
+            foreach (var c in value.Trim())
+            {
+                sb.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_');
+            }
+
+            return sb.Length == 0 ? "default" : sb.ToString();
+        }
+
+        // Python ModelStore encodes role/roi with URL-safe Base64; include legacy/sanitized fallbacks.
+        private static IEnumerable<string> GetBackendModelBaseNames(string? roleId, string? roiId)
+        {
+            var role = roleId ?? string.Empty;
+            var roi = roiId ?? string.Empty;
+
+            yield return $"{EncodeBackendComponent(role)}__{EncodeBackendComponent(roi)}";
+            yield return $"{SanitizeComponent(role)}_{SanitizeComponent(roi)}";
+            yield return $"{role}__{roi}";
+        }
+
         private static string DetermineNegLabelDir(string datasetRoot)
         {
             var ng = Path.Combine(datasetRoot, "ng");
@@ -4333,6 +4375,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        // Backend ModelStore (backend/app.py + storage.py) persists under BDI_MODELS_DIR / BRAKEDISC_MODELS_DIR
+        // defaulting to a "models" folder relative to the backend working directory.
         private static string ResolveBackendModelsRoot()
         {
             var env = Environment.GetEnvironmentVariable("BDI_MODELS_DIR")
@@ -4369,25 +4413,40 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Directory.CreateDirectory(modelDir);
 
             var modelsRoot = ResolveBackendModelsRoot();
-            var baseName = $"{RoleId}__{roi.ModelKey}";
+            foreach (var baseName in GetBackendModelBaseNames(RoleId, roi.ModelKey))
+            {
+                var copiedMemory = TryCopyModel(
+                    Path.Combine(modelsRoot, baseName + ".npz"),
+                    Path.Combine(modelDir, baseName + ".npz"));
 
-            TryCopyModel(Path.Combine(modelsRoot, baseName + ".npz"), Path.Combine(modelDir, baseName + ".npz"));
-            TryCopyModel(Path.Combine(modelsRoot, baseName + "_calib.json"), Path.Combine(modelDir, baseName + "_calib.json"));
+                var copiedCalib = TryCopyModel(
+                    Path.Combine(modelsRoot, baseName + "_calib.json"),
+                    Path.Combine(modelDir, baseName + "_calib.json"));
+
+                if (copiedMemory || copiedCalib)
+                {
+                    // Prefer the first naming scheme that produces artifacts on disk.
+                    break;
+                }
+            }
         }
 
-        private static void TryCopyModel(string src, string dst)
+        private static bool TryCopyModel(string src, string dst)
         {
             try
             {
                 if (File.Exists(src))
                 {
                     File.Copy(src, dst, overwrite: true);
+                    return true;
                 }
             }
             catch (Exception ex)
             {
                 GuiLog.Warn($"[model-copy] failed '{src}' → '{dst}': {ex.Message}");
             }
+
+            return false;
         }
 
         private async Task<bool> EnsureTrainedBeforeCalibrateAsync(InspectionRoiConfig? roi, CancellationToken ct)

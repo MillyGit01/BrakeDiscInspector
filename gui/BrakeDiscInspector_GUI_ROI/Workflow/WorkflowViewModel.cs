@@ -554,7 +554,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
 
                 var current = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
-                var newPath = Path.Combine(datasetRoot, roi.Id);
+                var roiFolder = MapRoiIdToFolder(roi.ModelKey);
+                var newPath = Path.Combine(datasetRoot, roiFolder);
 
                 if (string.Equals(current, newPath, StringComparison.OrdinalIgnoreCase))
                 {
@@ -3511,6 +3512,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private static string RoiFolderName(string displayName)
             => displayName.Replace(" ", "_");
 
+        private static string MapRoiIdToFolder(string roiId)
+        {
+            var m = Regex.Match(roiId ?? string.Empty, @"^inspection-(\d+)$", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                return $"Inspection_{m.Groups[1].Value}";
+            }
+
+            return string.IsNullOrWhiteSpace(roiId) ? "UnknownRoi" : roiId;
+        }
+
         private static string DetermineNegLabelDir(string datasetRoot)
         {
             var ng = Path.Combine(datasetRoot, "ng");
@@ -3940,6 +3952,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 roi.HasFitOk = true;
                 _lastFitResultsByRoi[roi] = result;
                 await SaveModelManifestAsync(roi, result, null, ct).ConfigureAwait(false);
+                CopyModelArtifactsToRecipe(roi);
             }
             catch (HttpRequestException ex)
             {
@@ -4069,6 +4082,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             await SaveModelManifestAsync(roi, GetLastFitResult(roi), calibResult, ct).ConfigureAwait(false);
+            CopyModelArtifactsToRecipe(roi);
         }
 
         public void ResetModelStates()
@@ -4316,6 +4330,63 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             catch (Exception ex)
             {
                 _log($"[model] error al guardar manifest: {ex.Message}");
+            }
+        }
+
+        private static string ResolveBackendModelsRoot()
+        {
+            var env = Environment.GetEnvironmentVariable("BDI_MODELS_DIR")
+                      ?? Environment.GetEnvironmentVariable("BRAKEDISC_MODELS_DIR");
+            if (!string.IsNullOrWhiteSpace(env))
+            {
+                try
+                {
+                    return Path.GetFullPath(env);
+                }
+                catch
+                {
+                    return env;
+                }
+            }
+
+            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "models");
+        }
+
+        private void CopyModelArtifactsToRecipe(InspectionRoiConfig roi)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            var layoutName = string.IsNullOrWhiteSpace(_currentLayoutName)
+                ? "DefaultLayout"
+                : _currentLayoutName;
+
+            var datasetRoot = RecipePathHelper.GetDatasetFolder(layoutName);
+            var roiFolder = MapRoiIdToFolder(roi.ModelKey);
+            var modelDir = Path.Combine(datasetRoot, roiFolder, "Model");
+            Directory.CreateDirectory(modelDir);
+
+            var modelsRoot = ResolveBackendModelsRoot();
+            var baseName = $"{RoleId}__{roi.ModelKey}";
+
+            TryCopyModel(Path.Combine(modelsRoot, baseName + ".npz"), Path.Combine(modelDir, baseName + ".npz"));
+            TryCopyModel(Path.Combine(modelsRoot, baseName + "_calib.json"), Path.Combine(modelDir, baseName + "_calib.json"));
+        }
+
+        private static void TryCopyModel(string src, string dst)
+        {
+            try
+            {
+                if (File.Exists(src))
+                {
+                    File.Copy(src, dst, overwrite: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Warn($"[model-copy] failed '{src}' → '{dst}': {ex.Message}");
             }
         }
 

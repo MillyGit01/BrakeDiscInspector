@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Util;
@@ -11,7 +12,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
     public sealed class DatasetManager
     {
-        private const string ImagesFolderName = "datasets";
         private string _layoutName = "DefaultLayout";
 
         public DatasetManager(string initialLayoutName)
@@ -19,7 +19,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             SetLayoutName(initialLayoutName);
         }
 
-        private string ImagesRoot => Path.Combine(RecipePathHelper.GetDatasetFolder(_layoutName), ImagesFolderName);
+        private string ImagesRoot => RecipePathHelper.GetDatasetFolder(_layoutName);
 
         public void SetLayoutName(string layoutName)
         {
@@ -30,7 +30,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public string GetRoleRoiDirectory(string roleId, string roiId)
         {
-            var roiDir = Path.Combine(ImagesRoot, Sanitize(roiId));
+            var roiFolder = MapRoiIdToFolder(roiId);
+            var roiDir = Path.Combine(ImagesRoot, Sanitize(roiFolder));
             Directory.CreateDirectory(roiDir);
             return roiDir;
         }
@@ -45,7 +46,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             string sourceImagePath,
             double angleDeg)
         {
-            var roiDir = Path.Combine(ImagesRoot, Sanitize(roiId));
+            var roiDir = GetRoleRoiDirectory(roleId, roiId);
             var labelDir = Path.Combine(roiDir, isNg ? "ng" : "ok");
             Directory.CreateDirectory(labelDir);
 
@@ -94,7 +95,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return Task.Run(() =>
             {
                 var result = new List<DatasetSample>();
-            var roiDir = Path.Combine(ImagesRoot, Sanitize(roiId));
+            var roiDir = GetRoleRoiDirectory(roleId: roleId, roiId: roiId);
             var labelDir = Path.Combine(roiDir, isNg ? "ng" : "ok");
                 if (!Directory.Exists(labelDir))
                 {
@@ -123,7 +124,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public void EnsureRoleRoiDirectories(string roleId, string roiId)
         {
-            var roiDir = Path.Combine(ImagesRoot, Sanitize(roiId));
+            var roiDir = GetRoleRoiDirectory(roleId, roiId);
             Directory.CreateDirectory(Path.Combine(roiDir, "ok"));
             Directory.CreateDirectory(Path.Combine(roiDir, "ng"));
         }
@@ -150,6 +151,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             var trimmed = value.Trim();
             return string.IsNullOrEmpty(trimmed) ? "default" : trimmed;
+        }
+
+        private static string MapRoiIdToFolder(string roiId)
+        {
+            var m = Regex.Match(roiId ?? string.Empty, @"^inspection-(\d+)$", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                return $"Inspection_{m.Groups[1].Value}";
+            }
+
+            return roiId ?? "UnknownRoi";
         }
     }
 }

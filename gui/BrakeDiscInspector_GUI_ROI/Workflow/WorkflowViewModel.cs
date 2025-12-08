@@ -269,6 +269,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly SemaphoreSlim _captureGate = new(1, 1);
         private bool _sharedHeatmapGuardLogged;
 
+        public string CurrentLayoutName => _currentLayoutName;
+
         public int AnchorScoreMin { get; set; } = 85;
 
         private record RoiBaseline(string RoiId, Rect BaseRect, Point Center, double R, double Rin, double AngleDeg);

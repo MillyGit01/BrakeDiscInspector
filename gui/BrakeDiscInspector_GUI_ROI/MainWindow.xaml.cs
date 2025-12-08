@@ -19,6 +19,7 @@ using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -3013,6 +3014,17 @@ namespace BrakeDiscInspector_GUI_ROI
             return string.IsNullOrWhiteSpace(name) ? "DefaultLayout" : name;
         }
 
+        private static string MapRoiIdToFolder(string roiId)
+        {
+            var m = Regex.Match(roiId ?? string.Empty, @"^inspection-(\d+)$", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                return $"Inspection_{m.Groups[1].Value}";
+            }
+
+            return string.IsNullOrWhiteSpace(roiId) ? "UnknownRoi" : roiId;
+        }
+
         private void EnsureInspectionDatasetStructure()
         {
             if (_layout?.InspectionRois == null)
@@ -3027,7 +3039,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             foreach (var roi in _layout.InspectionRois)
             {
-                var folderName = $"Inspection_{roi.Index}";
+                var folderName = MapRoiIdToFolder(roi.ModelKey);
                 var roiDir = Path.Combine(roisRoot, folderName);
                 Directory.CreateDirectory(roiDir);
                 Directory.CreateDirectory(Path.Combine(roiDir, "ok"));
@@ -3041,25 +3053,22 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private string GetInspectionModelFolder(int inspectionIndex)
+        private string GetInspectionModelFolder(int inspectionIndex, string? roiId = null)
         {
             _dataRoot ??= EnsureDataRoot();
 
             int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
-            var roisRoot = RecipePathHelper.GetModelFolder(GetCurrentLayoutName());
+            var roisRoot = RecipePathHelper.GetDatasetFolder(GetCurrentLayoutName());
             Directory.CreateDirectory(roisRoot);
 
-            var folderName = $"Inspection_{clamped}";
-            var roiDir = Path.Combine(roisRoot, folderName);
+            var folderName = MapRoiIdToFolder(string.IsNullOrWhiteSpace(roiId) ? $"inspection-{clamped}" : roiId);
+            var roiDir = Path.Combine(roisRoot, folderName, "Model");
             Directory.CreateDirectory(roiDir);
-
-            var modelDir = roiDir;
-            Directory.CreateDirectory(modelDir);
-            return modelDir;
+            return roiDir;
         }
 
         private string? ResolveInspectionModelDirectory(InspectionRoiConfig roi)
-            => roi == null ? null : GetInspectionModelFolder(roi.Index);
+            => roi == null ? null : GetInspectionModelFolder(roi.Index, roi.ModelKey);
 
         private void InitWorkflow()
         {
@@ -13405,7 +13414,13 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
-                var modelDir = GetInspectionModelFolder(index);
+                InspectionRoiConfig? roiConfig = null;
+                if (_workflowViewModel != null)
+                {
+                    roiConfig = _workflowViewModel.InspectionRois?.FirstOrDefault(r => r.Index == index);
+                }
+
+                var modelDir = GetInspectionModelFolder(index, roiConfig?.ModelKey);
                 var settings = Properties.Settings.Default;
                 string modelKey = $"LastModelDirROI{index}";
                 string? lastModelDir = settings[modelKey] as string;
@@ -13435,7 +13450,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                var roiConfig = _workflowViewModel.InspectionRois?.FirstOrDefault(r => r.Index == index);
                 if (roiConfig == null)
                 {
                     Snack($"Inspection {index} no está configurado.");

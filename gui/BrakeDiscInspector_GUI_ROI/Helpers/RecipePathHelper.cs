@@ -24,8 +24,8 @@ namespace BrakeDiscInspector_GUI_ROI.Helpers
 
         public static void EnsureRecipeFolders(string layoutName)
         {
+            Directory.CreateDirectory(GetLayoutFolder(layoutName));
             Directory.CreateDirectory(GetDatasetFolder(layoutName));
-            Directory.CreateDirectory(GetModelFolder(layoutName));
             Directory.CreateDirectory(GetMasterFolder(layoutName));
         }
 

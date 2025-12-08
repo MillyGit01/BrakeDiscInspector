@@ -3057,8 +3057,14 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             _dataRoot ??= EnsureDataRoot();
 
+            var layoutName = _workflowViewModel?.CurrentLayoutName;
+            if (string.IsNullOrWhiteSpace(layoutName))
+            {
+                layoutName = GetCurrentLayoutName();
+            }
+
             int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
-            var roisRoot = RecipePathHelper.GetDatasetFolder(GetCurrentLayoutName());
+            var roisRoot = RecipePathHelper.GetDatasetFolder(layoutName);
             Directory.CreateDirectory(roisRoot);
 
             var folderName = MapRoiIdToFolder(string.IsNullOrWhiteSpace(roiId) ? $"inspection-{clamped}" : roiId);
@@ -3068,7 +3074,14 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private string? ResolveInspectionModelDirectory(InspectionRoiConfig roi)
-            => roi == null ? null : GetInspectionModelFolder(roi.Index, roi.ModelKey);
+        {
+            if (roi == null)
+            {
+                return null;
+            }
+
+            return GetInspectionModelFolder(roi.Index, roi.ModelKey);
+        }
 
         private void InitWorkflow()
         {
@@ -13420,16 +13433,30 @@ namespace BrakeDiscInspector_GUI_ROI
                     roiConfig = _workflowViewModel.InspectionRois?.FirstOrDefault(r => r.Index == index);
                 }
 
-                var modelDir = GetInspectionModelFolder(index, roiConfig?.ModelKey);
+                string? modelDir = roiConfig != null ? ResolveInspectionModelDirectory(roiConfig) : null;
                 var settings = Properties.Settings.Default;
                 string modelKey = $"LastModelDirROI{index}";
                 string? lastModelDir = settings[modelKey] as string;
 
-                string initialDirectory = Directory.Exists(modelDir)
-                    ? modelDir
-                    : !string.IsNullOrWhiteSpace(lastModelDir) && Directory.Exists(lastModelDir)
-                        ? lastModelDir
-                        : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                var layoutDatasetRoot = RecipePathHelper.GetDatasetFolder(_workflowViewModel?.CurrentLayoutName ?? GetCurrentLayoutName());
+
+                string initialDirectory;
+                if (!string.IsNullOrWhiteSpace(modelDir) && Directory.Exists(modelDir))
+                {
+                    initialDirectory = modelDir;
+                }
+                else if (!string.IsNullOrWhiteSpace(lastModelDir) && Directory.Exists(lastModelDir))
+                {
+                    initialDirectory = lastModelDir;
+                }
+                else if (Directory.Exists(layoutDatasetRoot))
+                {
+                    initialDirectory = layoutDatasetRoot;
+                }
+                else
+                {
+                    initialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                }
 
                 var dialog = new OpenFileDialog
                 {

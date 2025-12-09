@@ -339,7 +339,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _clearHeatmap = clearHeatmap ?? throw new ArgumentNullException(nameof(clearHeatmap));
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
             _activateInspectionIndex = activateInspectionIndex;
-            _resolveModelDirectory = resolveModelDirectory;
+            _resolveModelDirectory = resolveModelDirectory ?? GetModelDirectoryForRoi;
             _repositionInspectionRoisAsyncExternal = repositionInspectionRoisAsync;
             _createMasterRoiAsync = createMasterRoiAsync;
             _toggleEditSaveMasterRoiAsync = toggleEditSaveMasterRoiAsync;
@@ -4297,6 +4297,32 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private FitOkResult? GetLastFitResult(InspectionRoiConfig roi)
             => roi != null && _lastFitResultsByRoi.TryGetValue(roi, out var value) ? value : null;
 
+        private string? GetModelDirectoryForRoi(InspectionRoiConfig roi)
+        {
+            if (roi == null)
+            {
+                return null;
+            }
+
+            var datasetPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
+            if (string.IsNullOrWhiteSpace(datasetPath))
+            {
+                return null;
+            }
+
+            var modelDir = Path.Combine(datasetPath, "Model");
+            try
+            {
+                Directory.CreateDirectory(modelDir);
+            }
+            catch (Exception ex)
+            {
+                _log?.Invoke($"[model] failed to ensure model dir '{modelDir}': {ex.Message}");
+            }
+
+            return modelDir;
+        }
+
         private async Task SaveModelManifestAsync(InspectionRoiConfig roi, FitOkResult? fit, CalibResult? calib, CancellationToken ct)
         {
             if (roi == null)
@@ -4405,14 +4431,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            var layoutName = string.IsNullOrWhiteSpace(_currentLayoutName)
-                ? "DefaultLayout"
-                : _currentLayoutName;
-
-            var datasetRoot = RecipePathHelper.GetDatasetFolder(layoutName);
-            var roiFolder = MapRoiIdToFolder(roi.ModelKey);
-            var modelDir = Path.Combine(datasetRoot, roiFolder, "Model");
-            Directory.CreateDirectory(modelDir);
+            var modelDir = _resolveModelDirectory?.Invoke(roi) ?? GetModelDirectoryForRoi(roi);
+            if (string.IsNullOrWhiteSpace(modelDir))
+            {
+                _log?.Invoke($"[model] cannot resolve model directory for ROI '{roi.DisplayName}'");
+                return;
+            }
 
             var modelsRoot = ResolveBackendModelsRoot();
             foreach (var baseName in GetBackendModelBaseNames(RoleId, roi.ModelKey))

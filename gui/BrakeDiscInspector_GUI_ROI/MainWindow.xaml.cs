@@ -3057,6 +3057,16 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             _dataRoot ??= EnsureDataRoot();
 
+            var roiFromVm = _workflowViewModel?.InspectionRois?.FirstOrDefault(r => r.Index == inspectionIndex);
+            var datasetPath = DatasetPathHelper.NormalizeDatasetPath(roiFromVm?.DatasetPath);
+
+            if (!string.IsNullOrWhiteSpace(datasetPath))
+            {
+                var modelDir = Path.Combine(datasetPath, "Model");
+                Directory.CreateDirectory(modelDir);
+                return modelDir;
+            }
+
             var layoutName = _workflowViewModel?.CurrentLayoutName ?? GetCurrentLayoutName();
 
             int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
@@ -3074,6 +3084,22 @@ namespace BrakeDiscInspector_GUI_ROI
             if (roi == null)
             {
                 return null;
+            }
+
+            var datasetPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
+            if (!string.IsNullOrWhiteSpace(datasetPath))
+            {
+                var modelDir = Path.Combine(datasetPath, "Model");
+                try
+                {
+                    Directory.CreateDirectory(modelDir);
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[model] failed to ensure model dir '{modelDir}': {ex.Message}");
+                }
+
+                return modelDir;
             }
 
             return GetInspectionModelFolder(roi.Index, roi.ModelKey);

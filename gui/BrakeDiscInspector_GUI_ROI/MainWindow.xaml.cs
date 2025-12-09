@@ -11332,6 +11332,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[layout] Saving from ROI model snapshot (manual button)"); // CODEX: confirm manual saves never use batch heatmap geometry.
                 MasterLayoutManager.Save(preset, snapshot);
                 AppendLog($"[layout-save] ok -> {targetPath}");
+                _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                 Snack($"Layout guardado ✅"); // CODEX: string interpolation compatibility.
             }
             catch (Exception ex)
@@ -11373,6 +11375,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     MasterLayoutManager.SaveAs(_preset, _layout, finalPath);
                     _currentLayoutFilePath = finalPath;
                     _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                    _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                     _dataRoot = EnsureDataRoot();
                     EnsureInspectionDatasetStructure();
 

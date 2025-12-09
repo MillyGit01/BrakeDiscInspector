@@ -3057,7 +3057,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             _dataRoot ??= EnsureDataRoot();
 
-            var layoutName = GetCurrentLayoutName();
+            var layoutName = _workflowViewModel?.CurrentLayoutName ?? GetCurrentLayoutName();
 
             int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
             var roisRoot = RecipePathHelper.GetDatasetFolder(layoutName);

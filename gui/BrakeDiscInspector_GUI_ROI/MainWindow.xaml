@@ -71,6 +71,18 @@
                       Click="BtnSaveLayout_Click"/>
             </StackPanel>
 
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+              <Button Content="Delete Selected"
+                      Padding="12,4"
+                      Margin="0,0,8,0"
+                      Command="{Binding DataContext.DeleteSelectedCommand, ElementName=WorkflowHost}"
+                      ToolTip="Delete selected samples from the current dataset"/>
+              <Button Content="Blank Dataset"
+                      Padding="12,4"
+                      Command="{Binding DataContext.BlankDatasetCommand, ElementName=WorkflowHost}"
+                      ToolTip="Create a blank dataset for the current layout"/>
+            </StackPanel>
+
             <CheckBox Content="Layout Autosave"
                       IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay}"
                       Margin="0,4,0,8"/>

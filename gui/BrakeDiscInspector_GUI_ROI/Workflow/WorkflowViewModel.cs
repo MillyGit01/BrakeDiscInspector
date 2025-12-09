@@ -2582,6 +2582,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand AddOkFromCurrentRoiCommand { get; }
         public AsyncCommand AddNgFromCurrentRoiCommand { get; }
         public AsyncCommand RemoveSelectedCommand { get; }
+        public AsyncCommand DeleteSelectedCommand => RemoveSelectedCommand;
         public AsyncCommand OpenDatasetFolderCommand { get; }
         public AsyncCommand TrainFitCommand { get; }
         public AsyncCommand CalibrateCommand { get; }

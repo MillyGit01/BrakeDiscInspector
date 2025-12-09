@@ -454,6 +454,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }, _ => _isBatchRunning);
 
             BrowseDatasetCommand = CreateCommand(_ => BrowseDatasetAsync(), _ => !IsBusy && SelectedInspectionRoi != null);
+            BlankDatasetCommand = CreateCommand(_ => BlankDatasetAsync(), _ => !IsBusy);
             TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
             CalibrateSelectedRoiCommand = CreateCommand(async _ => await CalibrateSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && CanCalibrateSelectedRoi());
             EvaluateSelectedRoiCommand = CreateCommand(_ => EvaluateSelectedRoiAsync(), _ => !IsBusy && SelectedInspectionRoi != null && SelectedInspectionRoi.Enabled);
@@ -593,6 +594,78 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 roi.DatasetPath = newPath;
                 _log($"[dataset:init] ROI '{roi.DisplayName}' aligned datasetPath='{roi.DatasetPath}'");
+            }
+        }
+
+        private Task BlankDatasetAsync()
+        {
+            BlankDataset();
+            return Task.CompletedTask;
+        }
+
+        private void BlankDataset()
+        {
+            var layoutName = string.IsNullOrWhiteSpace(_currentLayoutName)
+                ? "DefaultLayout"
+                : _currentLayoutName;
+
+            string datasetRoot;
+            try
+            {
+                datasetRoot = RecipePathHelper.GetDatasetFolder(layoutName);
+            }
+            catch (Exception ex)
+            {
+                _log($"[dataset] blank: failed to resolve dataset folder for layout '{layoutName}': {ex.Message}");
+                return;
+            }
+
+            foreach (var roi in InspectionRois ?? Enumerable.Empty<InspectionRoiConfig>())
+            {
+                if (roi == null)
+                {
+                    continue;
+                }
+
+                var roiFolder = MapRoiIdToFolder(roi.ModelKey);
+                var roiPath = Path.Combine(datasetRoot, roiFolder);
+
+                DeleteFilesIn(Path.Combine(roiPath, "ok"));
+                DeleteFilesIn(Path.Combine(roiPath, "ng"));
+                DeleteFilesIn(Path.Combine(roiPath, "Model"));
+            }
+
+            _log?.Invoke($"[dataset] Cleared dataset for layout '{layoutName}'");
+
+            foreach (var roi in InspectionRois ?? Enumerable.Empty<InspectionRoiConfig>())
+            {
+                if (roi == null)
+                {
+                    continue;
+                }
+
+                _ = RefreshRoiDatasetStateAsync(roi);
+                _ = RefreshDatasetPreviewsForRoiAsync(roi);
+            }
+        }
+
+        private static void DeleteFilesIn(string dir)
+        {
+            if (!Directory.Exists(dir))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.GetFiles(dir))
+            {
+                try
+                {
+                    File.Delete(file);
+                }
+                catch
+                {
+                    // ignore individual file delete errors
+                }
             }
         }
 
@@ -2516,6 +2589,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand RefreshDatasetCommand { get; }
         public AsyncCommand RefreshHealthCommand { get; }
         public AsyncCommand BrowseDatasetCommand { get; }
+        public AsyncCommand BlankDatasetCommand { get; }
         public AsyncCommand TrainSelectedRoiCommand { get; }
         public AsyncCommand CalibrateSelectedRoiCommand { get; }
         public AsyncCommand EvaluateSelectedRoiCommand { get; }

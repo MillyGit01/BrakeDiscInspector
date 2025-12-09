@@ -3007,6 +3007,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 path = MasterLayoutManager.GetDefaultPath(_preset);
             }
 
+            return GetLayoutNameFromPath(path);
+        }
+
+        private static string GetLayoutNameFromPath(string path)
+        {
             var name = Path.GetFileNameWithoutExtension(path);
             if (name.EndsWith(".layout", StringComparison.OrdinalIgnoreCase))
             {
@@ -3014,6 +3019,35 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             return string.IsNullOrWhiteSpace(name) ? "DefaultLayout" : name;
+        }
+
+        private static void CopyDirectory(string sourceDir, string destinationDir)
+        {
+            if (string.Equals(sourceDir, destinationDir, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!Directory.Exists(sourceDir))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(destinationDir);
+
+            foreach (var file in Directory.GetFiles(sourceDir))
+            {
+                var fileName = Path.GetFileName(file);
+                var destFile = Path.Combine(destinationDir, fileName);
+                File.Copy(file, destFile, overwrite: true);
+            }
+
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+            {
+                var dirName = Path.GetFileName(dir);
+                var destSubDir = Path.Combine(destinationDir, dirName);
+                CopyDirectory(dir, destSubDir);
+            }
         }
 
         private static string MapRoiIdToFolder(string roiId)
@@ -11352,6 +11386,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
+                var oldLayoutName = GetCurrentLayoutName();
+
                 // 1) First, save using the standard mechanism so that last.layout.json and the
                 //    usual timestamped snapshot are updated.
                 MasterLayoutManager.Save(_preset, _layout);
@@ -11375,8 +11411,28 @@ namespace BrakeDiscInspector_GUI_ROI
                     var finalPath = MasterLayoutManager.EnsureLayoutJsonExtension(dlg.FileName);
 
                     MasterLayoutManager.SaveAs(_preset, _layout, finalPath);
+                    var newLayoutName = GetLayoutNameFromPath(finalPath);
+
+                    RecipePathHelper.EnsureRecipeFolders(newLayoutName);
+
+                    if (!string.Equals(oldLayoutName, newLayoutName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var oldRoot = RecipePathHelper.GetLayoutFolder(oldLayoutName);
+                            var newRoot = RecipePathHelper.GetLayoutFolder(newLayoutName);
+
+                            CopyDirectory(Path.Combine(oldRoot, "Master"), Path.Combine(newRoot, "Master"));
+                            CopyDirectory(Path.Combine(oldRoot, "Dataset"), Path.Combine(newRoot, "Dataset"));
+                        }
+                        catch (Exception copyEx)
+                        {
+                            AppendLog($"[layout] Failed to clone dataset/master folders: {copyEx.Message}");
+                        }
+                    }
+
                     _currentLayoutFilePath = finalPath;
-                    _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                    _workflowViewModel?.SetLayoutName(newLayoutName);
                     _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                     _dataRoot = EnsureDataRoot();
                     EnsureInspectionDatasetStructure();

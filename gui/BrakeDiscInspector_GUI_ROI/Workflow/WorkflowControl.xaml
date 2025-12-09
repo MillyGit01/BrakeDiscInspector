@@ -249,6 +249,11 @@
                                                 Margin="0,0,8,0"
                                                 Tag="{Binding Index}"
                                                 Click="LoadModelButton_Click"/>
+                                        <Button Content="Blank Dataset"
+                                                Padding="12,4"
+                                                Margin="0,0,8,0"
+                                                Command="{Binding DataContext.BlankDatasetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                ToolTip="Clear all OK/NG images and models for this layout"/>
                                         <Button Content="Train"
                                                 Padding="12,4"
                                                 Margin="0,0,8,0"

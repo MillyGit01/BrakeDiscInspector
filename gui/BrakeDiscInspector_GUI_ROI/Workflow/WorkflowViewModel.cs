@@ -4811,7 +4811,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 try
                 {
-                    await _client.FitOkAsync(RoleId, RoiId, MmPerPx, okPaths, memoryFit: false, ct).ConfigureAwait(false);
+                    await _client.FitOkAsync(RoleId, RoiId, MmPerPx, okPaths, memoryFit: false, datasetPath: null, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

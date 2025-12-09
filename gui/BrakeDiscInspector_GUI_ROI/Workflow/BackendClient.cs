@@ -13,6 +13,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using BrakeDiscInspector_GUI_ROI.Helpers;
+using BrakeDiscInspector_GUI_ROI.Util;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
@@ -480,7 +481,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                await FitOkAsync(roleId, roiId, mmPerPx, samples, memoryFit, ct).ConfigureAwait(false);
+                await FitOkAsync(roleId, roiId, mmPerPx, samples, memoryFit, datasetPath: null, ct).ConfigureAwait(false);
                 return true;
             }
             catch

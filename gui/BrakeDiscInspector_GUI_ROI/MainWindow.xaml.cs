@@ -966,6 +966,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 var snapshot = BuildLayoutSnapshotForSave();
                 AppendLog($"[layout] saving ROI-model snapshot ({context})"); // CODEX: persist layout straight from ROI models, never from batch visuals.
                 MasterLayoutManager.Save(_preset, snapshot);
+                _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                 AppendLog($"{prefix} layout saved ({context})");
                 return true;
             }

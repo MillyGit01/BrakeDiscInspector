@@ -11,6 +11,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using BrakeDiscInspector_GUI_ROI.Helpers;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
@@ -148,6 +150,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             double mmPerPx,
             IEnumerable<string> okImagePaths,
             bool memoryFit = false,
+            string? datasetPath = null,
             CancellationToken ct = default)
         {
             var images = new List<FitImage>();
@@ -162,7 +165,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 images.Add(new FitImage(bytes, Path.GetFileName(path)));
             }
 
-            return await FitOkAsync(roleId, roiId, mmPerPx, images, memoryFit, ct).ConfigureAwait(false);
+            return await FitOkAsync(roleId, roiId, mmPerPx, images, memoryFit, datasetPath, ct).ConfigureAwait(false);
         }
 
         public async Task<FitOkResult> FitOkAsync(
@@ -171,6 +174,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             double mmPerPx,
             IEnumerable<FitImage> okImages,
             bool memoryFit = false,
+            string? datasetPath = null,
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(roleId)) throw new ArgumentException("Role id required", nameof(roleId));
@@ -203,16 +207,36 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (!hasImage)
                 throw new InvalidOperationException("No OK images were provided for training.");
 
-            using var response = await _httpTrainClient.PostAsync("fit_ok", form, ct).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                throw new HttpRequestException($"/fit_ok {response.StatusCode}: {body}");
+            var baseUrl = _httpTrainClient.BaseAddress?.ToString().TrimEnd('/') ?? string.Empty;
+            var url = string.IsNullOrWhiteSpace(baseUrl) ? "fit_ok" : $"{baseUrl}/fit_ok";
+            GuiLog.Info($"[backend] Calling /fit_ok url='{url}' dataset='{datasetPath}'");
 
-            using var streamResp = new MemoryStream(Encoding.UTF8.GetBytes(body));
-            var payload = await JsonSerializer.DeserializeAsync<FitOkResult>(streamResp, JsonOptions, ct).ConfigureAwait(false)
-                          ?? throw new InvalidOperationException("Empty or invalid JSON from fit_ok endpoint.");
+            try
+            {
+                using var response = await _httpTrainClient.PostAsync("fit_ok", form, ct).ConfigureAwait(false);
+                GuiLog.Info($"[backend] /fit_ok response StatusCode={(int)response.StatusCode} Reason='{response.ReasonPhrase}'");
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"/fit_ok {response.StatusCode}: {body}");
 
-            return payload;
+                using var streamResp = new MemoryStream(Encoding.UTF8.GetBytes(body));
+                var payload = await JsonSerializer.DeserializeAsync<FitOkResult>(streamResp, JsonOptions, ct).ConfigureAwait(false)
+                              ?? throw new InvalidOperationException("Empty or invalid JSON from fit_ok endpoint.");
+
+                return payload;
+            }
+            catch (HttpRequestException ex)
+            {
+                GuiLog.Error($"[backend] /fit_ok HttpRequestException: {ex.Message}");
+                ShowBackendNotAvailableMessage("/fit_ok");
+                throw;
+            }
+            catch (TaskCanceledException ex)
+            {
+                GuiLog.Error($"[backend] /fit_ok timeout: {ex.Message}");
+                ShowBackendNotAvailableMessage("/fit_ok");
+                throw;
+            }
         }
 
         public async Task<CalibResult> CalibrateAsync(
@@ -583,6 +607,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (t.Contains("no embeddings") || t.Contains("embeddings not found")) return true;
             if (t.Contains("not fitted") || t.Contains("missing fit")) return true;
             return false;
+        }
+
+        private static void ShowBackendNotAvailableMessage(string endpoint)
+        {
+            try
+            {
+                Application.Current?.Dispatcher.Invoke(() =>
+                {
+                    MessageBox.Show($"Backend {endpoint} endpoint is not available.");
+                });
+            }
+            catch
+            {
+                // ignore UI failures
+            }
         }
 
         private static string GuessMediaType(string pathOrName)

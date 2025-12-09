@@ -3849,6 +3849,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return RoiDatasetAnalysis.Empty("Dataset path not found");
         }
 
+        private static string[] GetImageFiles(string folder)
+        {
+            if (!Directory.Exists(folder))
+                return Array.Empty<string>();
+
+            var patterns = new[] { "*.bmp", "*.BMP", "*.png", "*.PNG", "*.jpg", "*.JPG", "*.jpeg", "*.JPEG" };
+            var files = patterns.SelectMany(p => Directory.GetFiles(folder, p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            GuiLog.Info($"[dataset:scan] folder='{folder}' files={files.Length}");
+            foreach (var f in files)
+                GuiLog.Info($"[dataset:file] '{f}'");
+
+            return files;
+        }
+
         private static RoiDatasetAnalysis AnalyzeFolderDataset(string folderPath)
         {
             try
@@ -3868,10 +3885,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     return RoiDatasetAnalysis.Empty("Folder must contain /ok and /ko subfolders");
                 }
 
-                var okFiles = EnumerateImages(okDir);
-                var koFiles = EnumerateImages(negDir);
+                var okFiles = GetImageFiles(okDir);
+                var koFiles = GetImageFiles(negDir);
 
-                GuiLog.Info($"[dataset] folder '{folderPath}' contains {okFiles.Count} OK images and {koFiles.Count} {negLabel.ToUpper()} images");
+                GuiLog.Info($"[dataset] folder '{folderPath}' contains {okFiles.Length} OK images and {koFiles.Length} {negLabel.ToUpper()} images");
 
                 var entries = okFiles.Select(path => new DatasetEntry(path, true))
                     .Concat(koFiles.Select(path => new DatasetEntry(path, false)))
@@ -3881,11 +3898,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 preview.AddRange(okFiles.Take(3).Select(p => (p, true)));
                 preview.AddRange(koFiles.Take(3).Select(p => (p, false)));
 
-                bool ready = okFiles.Count > 0 && koFiles.Count > 0;
+                bool ready = okFiles.Length > 0 && koFiles.Length > 0;
                 string status = ready ? (negLabel == "ng" ? "Dataset Ready ✅ (using /ng)" : "Dataset Ready ✅")
-                    : (okFiles.Count == 0 ? "Dataset missing OK samples" : "Dataset missing KO samples");
+                    : (okFiles.Length == 0 ? "Dataset missing OK samples" : "Dataset missing KO samples");
 
-                return new RoiDatasetAnalysis(folderPath, entries, okFiles.Count, koFiles.Count, ready, status, preview);
+                return new RoiDatasetAnalysis(folderPath, entries, okFiles.Length, koFiles.Length, ready, status, preview);
             }
             catch (Exception ex)
             {
@@ -4006,26 +4023,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             };
         }
 
-        private static List<string> EnumerateImages(string directory)
-        {
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!Directory.Exists(directory))
-            {
-                return new List<string>();
-            }
-
-            foreach (var file in Directory
-                         .EnumerateFiles(directory, "*.*", SearchOption.AllDirectories)
-                         .Where(f => BatchImageExtensions.Contains(Path.GetExtension(f))))
-            {
-                set.Add(file);
-            }
-
-            var list = set.ToList();
-            list.Sort(StringComparer.OrdinalIgnoreCase);
-            return list;
-        }
-
         private async Task<bool> TrainSelectedRoiAsync(CancellationToken ct = default)
         {
             EnsureRoleRoi();
@@ -4040,6 +4037,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 await ShowMessageAsync("Select a dataset path before training.");
                 return false;
             }
+
+            var roiPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
+            GuiLog.Info($"[train] START roi='{roi.DisplayName}' datasetPath='{roiPath}'");
 
             var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
             if (analysis.OkCount == 0)
@@ -4071,7 +4071,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                var result = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okImages, roi.TrainMemoryFit, ct).ConfigureAwait(false);
+                var result = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okImages, roi.TrainMemoryFit, roiPath, ct).ConfigureAwait(false);
                 var memoryHint = roi.TrainMemoryFit ? " (memory-fit)" : string.Empty;
                 FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]" + memoryHint;
                 roi.HasFitOk = true;

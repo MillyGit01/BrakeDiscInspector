@@ -105,6 +105,10 @@
                           Click="SaveCurrentLayoutAs_Click"/>
                   <Button Content="Delete Selected"
                           Command="{Binding LayoutProfiles.DeleteSelectedCommand}"/>
+                  <Button Content="Blank Dataset"
+                          Margin="4,0,0,0"
+                          Command="{Binding BlankDatasetCommand}"
+                          ToolTip="Create a blank dataset for the current layout"/>
                 </StackPanel>
 
               </StackPanel>

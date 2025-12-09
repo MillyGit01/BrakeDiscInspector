@@ -3057,11 +3057,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             _dataRoot ??= EnsureDataRoot();
 
-            var layoutName = _workflowViewModel?.CurrentLayoutName;
-            if (string.IsNullOrWhiteSpace(layoutName))
-            {
-                layoutName = GetCurrentLayoutName();
-            }
+            var layoutName = GetCurrentLayoutName();
 
             int clamped = Math.Max(1, Math.Min(4, inspectionIndex));
             var roisRoot = RecipePathHelper.GetDatasetFolder(layoutName);
@@ -13438,7 +13434,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 string modelKey = $"LastModelDirROI{index}";
                 string? lastModelDir = settings[modelKey] as string;
 
-                var layoutDatasetRoot = RecipePathHelper.GetDatasetFolder(_workflowViewModel?.CurrentLayoutName ?? GetCurrentLayoutName());
+                var layoutDatasetRoot = RecipePathHelper.GetDatasetFolder(GetCurrentLayoutName());
 
                 string initialDirectory;
                 if (!string.IsNullOrWhiteSpace(modelDir) && Directory.Exists(modelDir))

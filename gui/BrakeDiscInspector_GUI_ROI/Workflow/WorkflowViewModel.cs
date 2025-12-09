@@ -593,7 +593,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
 
                 roi.DatasetPath = newPath;
-                _log($"[dataset:init] ROI '{roi.DisplayName}' aligned datasetPath='{roi.DatasetPath}'");
+                _log($"[dataset:align] layout='{layoutName}' roi='{roi.DisplayName}' path='{roi.DatasetPath}'");
             }
         }
 

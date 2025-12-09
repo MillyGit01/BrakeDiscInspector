@@ -13516,7 +13516,21 @@ namespace BrakeDiscInspector_GUI_ROI
                     roiConfig = _workflowViewModel.InspectionRois?.FirstOrDefault(r => r.Index == index);
                 }
 
-                string? modelDir = roiConfig != null ? ResolveInspectionModelDirectory(roiConfig) : null;
+                string? modelDir = null;
+                if (roiConfig != null)
+                {
+                    var datasetPath = DatasetPathHelper.NormalizeDatasetPath(roiConfig.DatasetPath);
+                    if (!string.IsNullOrWhiteSpace(datasetPath))
+                    {
+                        modelDir = Path.Combine(datasetPath, "Model");
+                        Directory.CreateDirectory(modelDir);
+                    }
+                    else
+                    {
+                        modelDir = ResolveInspectionModelDirectory(roiConfig);
+                    }
+                }
+
                 var settings = Properties.Settings.Default;
                 string modelKey = $"LastModelDirROI{index}";
                 string? lastModelDir = settings[modelKey] as string;

@@ -249,6 +249,10 @@
                                                 Margin="0,0,8,0"
                                                 Tag="{Binding Index}"
                                                 Click="LoadModelButton_Click"/>
+                                        <Button Content="Delete Selected"
+                                                Padding="12,4"
+                                                Margin="0,0,8,0"
+                                                Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                         <Button Content="Blank Dataset"
                                                 Padding="12,4"
                                                 Margin="0,0,8,0"

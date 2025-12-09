@@ -3493,13 +3493,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         UseDescriptionForTitle = true,
                     };
 
-                    if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
-                    {
-                        dialog.SelectedPath = lastDatasetPath;
-                    }
-                    else if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && Directory.Exists(roi.DatasetPath))
+                    if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && Directory.Exists(roi.DatasetPath))
                     {
                         dialog.SelectedPath = roi.DatasetPath;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
+                    {
+                        dialog.SelectedPath = lastDatasetPath;
                     }
                     else
                     {
@@ -3526,14 +3526,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     Multiselect = false
                 };
 
-                if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
+                var normalizedRoiDataset = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
+
+                if (!string.IsNullOrWhiteSpace(normalizedRoiDataset) && File.Exists(normalizedRoiDataset))
+                {
+                    dialog.InitialDirectory = Path.GetDirectoryName(normalizedRoiDataset);
+                    dialog.FileName = Path.GetFileName(normalizedRoiDataset);
+                }
+                else if (!string.IsNullOrWhiteSpace(normalizedRoiDataset) && Directory.Exists(normalizedRoiDataset))
+                {
+                    dialog.InitialDirectory = normalizedRoiDataset;
+                }
+                else if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
                 {
                     dialog.InitialDirectory = lastDatasetPath;
-                }
-                else if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && File.Exists(roi.DatasetPath))
-                {
-                    dialog.InitialDirectory = Path.GetDirectoryName(roi.DatasetPath);
-                    dialog.FileName = Path.GetFileName(roi.DatasetPath);
                 }
                 else
                 {

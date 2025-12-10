@@ -5387,19 +5387,43 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return null;
             }
 
+            var effectivePath = path;
+
+            if (!string.IsNullOrWhiteSpace(_currentLayoutName))
+            {
+                const string lastSegment = "\\Recipes\\last\\";
+                var recipeSegment = "\\Recipes\\" + _currentLayoutName + "\\";
+
+                if (effectivePath.IndexOf(lastSegment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    var candidate = effectivePath.Replace(lastSegment, recipeSegment, StringComparison.OrdinalIgnoreCase);
+                    if (File.Exists(candidate))
+                    {
+                        TraceBatch(FormattableString.Invariant(
+                            $"[match] Redirecting {tag} pattern template from 'last' to '{_currentLayoutName}': '{candidate}'"));
+                        effectivePath = candidate;
+                    }
+                    else
+                    {
+                        TraceBatch(FormattableString.Invariant(
+                            $"[match] Redirect candidate for {tag} missing: '{candidate}'"));
+                    }
+                }
+            }
+
             try
             {
-                if (!File.Exists(path))
+                if (!File.Exists(effectivePath))
                 {
-                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} not found at '{path}'"));
+                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} not found at '{effectivePath}'"));
                     return null;
                 }
 
-                var mat = Cv2.ImRead(path, ImreadModes.Grayscale);
+                var mat = Cv2.ImRead(effectivePath, ImreadModes.Grayscale);
                 if (mat.Empty())
                 {
                     mat.Dispose();
-                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} empty at '{path}'"));
+                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} empty at '{effectivePath}'"));
                     return null;
                 }
 

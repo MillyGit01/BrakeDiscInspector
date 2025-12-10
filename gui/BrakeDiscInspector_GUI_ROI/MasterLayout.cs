@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Models;
 
 namespace BrakeDiscInspector_GUI_ROI
@@ -129,6 +130,17 @@ namespace BrakeDiscInspector_GUI_ROI
             => System.IO.Path.Combine(GetLayoutsFolder(preset),
                                       DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".layout.json");
 
+        public static string GetLayoutNameFromPath(string path)
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            if (name.EndsWith(".layout", StringComparison.OrdinalIgnoreCase))
+            {
+                name = Path.GetFileNameWithoutExtension(name);
+            }
+
+            return string.IsNullOrWhiteSpace(name) ? "DefaultLayout" : name;
+        }
+
         public static MasterLayout LoadFromFile(string filePath)
         {
             try
@@ -148,6 +160,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     layout = JsonSerializer.Deserialize<MasterLayout>(json, s_opts) ?? new MasterLayout();
                 }
 
+                var layoutName = GetLayoutNameFromPath(filePath);
+                NormalizeLayoutPathsForRecipe(layout, layoutName, filePath);
                 EnsureInspectionRoiDefaults(layout);
                 EnsureOptionDefaults(layout);
 
@@ -182,6 +196,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 else
                 {
                     layout = LoadFromFile(path);
+                    NormalizeLayoutPathsForRecipe(layout, GetLayoutNameFromPath(path), path);
                 }
             }
             catch (Exception ex) when (ex is IOException || ex is JsonException)
@@ -416,6 +431,109 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
 
                     layout.InspectionBaselinesByImage[key] = normalized;
+                }
+            }
+        }
+
+        private static void NormalizeLayoutPathsForRecipe(MasterLayout layout, string recipeName, string? layoutFilePath)
+        {
+            if (layout == null || string.IsNullOrWhiteSpace(recipeName))
+            {
+                return;
+            }
+
+            string ReplaceLastSegment(string? original)
+            {
+                if (string.IsNullOrWhiteSpace(original))
+                {
+                    return original ?? string.Empty;
+                }
+
+                var updated = original;
+                var lastSegment = $"{Path.DirectorySeparatorChar}Recipes{Path.DirectorySeparatorChar}last{Path.DirectorySeparatorChar}";
+                var recipeSegment = $"{Path.DirectorySeparatorChar}Recipes{Path.DirectorySeparatorChar}{recipeName}{Path.DirectorySeparatorChar}";
+
+                if (updated.IndexOf(lastSegment, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    updated = updated.Replace(lastSegment, recipeSegment, StringComparison.OrdinalIgnoreCase);
+                }
+
+                var lastAlt = $"{Path.AltDirectorySeparatorChar}Recipes{Path.AltDirectorySeparatorChar}last{Path.AltDirectorySeparatorChar}";
+                var recipeAlt = $"{Path.AltDirectorySeparatorChar}Recipes{Path.AltDirectorySeparatorChar}{recipeName}{Path.AltDirectorySeparatorChar}";
+
+                if (updated.IndexOf(lastAlt, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    updated = updated.Replace(lastAlt, recipeAlt, StringComparison.OrdinalIgnoreCase);
+                }
+
+                return updated;
+            }
+
+            void NormalizeMaster(ref string? field, string tag)
+            {
+                if (string.IsNullOrWhiteSpace(field))
+                {
+                    return;
+                }
+
+                var candidate = ReplaceLastSegment(field);
+                if (string.Equals(candidate, field, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (File.Exists(candidate))
+                {
+                    Debug.WriteLine(FormattableString.Invariant(
+                        $"[layout:path] Redirecting {tag} from 'last' to '{recipeName}': '{candidate}' (layout='{layoutFilePath}')"));
+                    field = candidate;
+                }
+                else
+                {
+                    Debug.WriteLine(FormattableString.Invariant(
+                        $"[layout:path] WARNING {tag}: candidate missing for layout '{recipeName}' -> '{candidate}' (layout='{layoutFilePath}')"));
+                }
+            }
+
+            NormalizeMaster(ref layout.Master1PatternImagePath, "M1");
+            NormalizeMaster(ref layout.Master2PatternImagePath, "M2");
+
+            if (layout.InspectionRois != null)
+            {
+                foreach (var roi in layout.InspectionRois)
+                {
+                    if (roi == null || string.IsNullOrWhiteSpace(roi.DatasetPath))
+                    {
+                        continue;
+                    }
+
+                    var candidate = ReplaceLastSegment(roi.DatasetPath);
+                    if (string.Equals(candidate, roi.DatasetPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        Directory.CreateDirectory(candidate);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine(FormattableString.Invariant(
+                            $"[layout:path] WARNING dataset mkdir failed roi='{roi.Id}' path='{candidate}': {ex.Message}"));
+                    }
+
+                    if (Directory.Exists(candidate))
+                    {
+                        roi.DatasetPath = Util.DatasetPathHelper.NormalizeDatasetPath(candidate);
+                        Debug.WriteLine(FormattableString.Invariant(
+                            $"[layout:path] Redirecting dataset roi='{roi.Id}' layout='{recipeName}' -> '{roi.DatasetPath}'"));
+                    }
+                    else
+                    {
+                        Debug.WriteLine(FormattableString.Invariant(
+                            $"[layout:path] WARNING dataset missing roi='{roi.Id}' layout='{recipeName}' -> '{candidate}'"));
+                    }
                 }
             }
         }

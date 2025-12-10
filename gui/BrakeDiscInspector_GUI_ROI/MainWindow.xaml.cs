@@ -1083,6 +1083,18 @@ namespace BrakeDiscInspector_GUI_ROI
             _workflowViewModel?.SetMasterLayout(_layout);
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
             _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
+            AppendLog(FormattableString.Invariant(
+                $"[layout] Master1PatternImagePath='{_layout?.Master1PatternImagePath}'"));
+            AppendLog(FormattableString.Invariant(
+                $"[layout] Master2PatternImagePath='{_layout?.Master2PatternImagePath}'"));
+            if (_layout?.InspectionRois != null)
+            {
+                foreach (var roi in _layout.InspectionRois)
+                {
+                    AppendLog(FormattableString.Invariant(
+                        $"[layout] {roi.Id}.DatasetPath='{roi.DatasetPath}'"));
+                }
+            }
             RefreshInspectionSlotsFromLayout();
 
             if (_hasLoadedImage)

@@ -327,9 +327,9 @@ namespace BrakeDiscInspector_GUI_ROI
                         searchRect.X + tm.center.Value.X,
                         searchRect.Y + tm.center.Value.Y);
 
-                    Log(log,
-                        $"[EDGES] HIT center=({globalEdges.X.ToString(\"F1\", CultureInfo.InvariantCulture)},{globalEdges.Y.ToString(\"F1\", CultureInfo.InvariantCulture)}) " +
-                        $"score={tm.score} corr={tm.bestCorr:F3}");
+                Log(log,
+                    FormattableString.Invariant(
+                        $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
 
                     return (globalEdges, tm.score);
                 }
@@ -350,7 +350,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
 
                     var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
-                    Log(log, $"[RESULT] HIT (TM) center=({globalTM.X.ToString("F1", CultureInfo.InvariantCulture)},{globalTM.Y.ToString("F1", CultureInfo.InvariantCulture)}) score={tm.score} corr={tm.bestCorr:F3}");
+                    Log(log,
+                        FormattableString.Invariant(
+                            $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
                     return (globalTM, tm.score);
                 }
 
@@ -362,7 +364,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 var global = new Point2d(searchRect.X + feat.center.Value.X, searchRect.Y + feat.center.Value.Y);
-                Log(log, $"[RESULT] HIT (FEATURES) center=({global.X.ToString("F1", CultureInfo.InvariantCulture)},{global.Y.ToString("F1", CultureInfo.InvariantCulture)}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount,1)}");
+                Log(log,
+                    FormattableString.Invariant(
+                        $"[RESULT] HIT (FEATURES) center=({global.X:F1},{global.Y:F1}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount, 1)}"));
                 return (global, feat.score);
             }
             finally

@@ -917,6 +917,49 @@ namespace BrakeDiscInspector_GUI_ROI
         private static bool MastersReady(MasterLayout? layout)
             => layout?.Master1Pattern != null && layout.Master1Search != null;
 
+        private bool TrySeedMastersBaselineForCurrentImage(string reason, bool force = false)
+        {
+            if (!_hasLoadedImage || _layout == null)
+            {
+                return false;
+            }
+
+            string key = ComputeImageSeedKey();
+            _currentImageHash = key;
+
+            if (force || !string.Equals(key, _imageKeyForMasters, System.StringComparison.Ordinal))
+            {
+                _imageKeyForMasters = key;
+                _mastersSeededForImage = false;
+                _lastAccM1X = _lastAccM1Y = _lastAccM2X = _lastAccM2Y = double.NaN;
+                _lastDetectionAccepted = false;
+                InspLog($"[Seed-M] Reset masters baseline (reason={reason}) for imageKey='{key}'");
+            }
+            else
+            {
+                InspLog($"[Seed-M] Same image key='{key}', keep current masters baseline.");
+            }
+
+            if (!_mastersSeededForImage && _layout.Master1Pattern != null && _layout.Master2Pattern != null)
+            {
+                var (m1cx, m1cy) = GetCenterShapeAware(_layout.Master1Pattern);
+                var (m2cx, m2cy) = GetCenterShapeAware(_layout.Master2Pattern);
+
+                _m1BaseX = m1cx; _m1BaseY = m1cy;
+                _m2BaseX = m2cx; _m2BaseY = m2cy;
+                _mastersSeededForImage = true;
+
+                Dbg($"[Seed-M] {reason}: M1_base=({m1cx:F3},{m1cy:F3}) M2_base=({m2cx:F3},{m2cy:F3})");
+            }
+
+            if (!_mastersSeededForImage)
+            {
+                InspLog("[Seed-M] WARNING: Cannot seed masters baseline (missing Master1Pattern/Master2Pattern).");
+            }
+
+            return _mastersSeededForImage;
+        }
+
         private IDisposable SuppressAutoSaves()
             => new ActionOnDispose(
                 () => System.Threading.Interlocked.Increment(ref _suppressSaves),
@@ -1037,6 +1080,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_hasLoadedImage)
             {
                 ReseedInspectionBaselineFromLayout($"layout:{sourceContext}");
+                TrySeedMastersBaselineForCurrentImage($"layout:{sourceContext}", force: true);
             }
 
             UpdateWizardState();
@@ -4048,43 +4092,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            {
-                string key = ComputeImageSeedKey();
-                _currentImageHash = key;
-                var m1p = _layout?.Master1Pattern;
-                var m2p = _layout?.Master2Pattern;
-
-                if (!string.Equals(key, _imageKeyForMasters, System.StringComparison.Ordinal))
-                {
-                    _imageKeyForMasters = key;
-                    _mastersSeededForImage = false;
-                    _lastAccM1X = _lastAccM1Y = _lastAccM2X = _lastAccM2Y = double.NaN;
-                    _lastDetectionAccepted = false;
-                    InspLog("[Analyze] Reset last-accepted M1/M2 for new image.");
-                }
-                else
-                {
-                    InspLog($"[Seed-M] Same image key='{key}', keep current masters baseline.");
-                }
-
-                // Seed masters BASE pivots once per image using true geometric centers (shape-aware)
-                if (!_mastersSeededForImage && _layout?.Master1Pattern != null && _layout?.Master2Pattern != null)
-                {
-                    var (m1cx, m1cy) = GetCenterShapeAware(_layout.Master1Pattern);
-                    var (m2cx, m2cy) = GetCenterShapeAware(_layout.Master2Pattern);
-
-                    _m1BaseX = m1cx; _m1BaseY = m1cy;
-                    _m2BaseX = m2cx; _m2BaseY = m2cy;
-                    _mastersSeededForImage = true;
-
-                    Dbg($"[Seed-M] New image: M1_base=({m1cx:F3},{m1cy:F3}) M2_base=({m2cx:F3},{m2cy:F3})");
-                }
-
-                if (!_mastersSeededForImage)
-                {
-                    InspLog("[Seed-M] WARNING: Cannot seed masters baseline (missing Master1Pattern/Master2Pattern).");
-                }
-            }
+            TrySeedMastersBaselineForCurrentImage("imgload");
 
             // === ROI DIAG: after image load & overlay sync ===
             try
@@ -9438,6 +9446,17 @@ namespace BrakeDiscInspector_GUI_ROI
         // ===== En MainWindow.xaml.cs =====
         private async Task AnalyzeMastersAsync()
         {
+            if (!_mastersSeededForImage)
+            {
+                var seeded = TrySeedMastersBaselineForCurrentImage("analyze:precheck", force: true);
+                if (!seeded)
+                {
+                    Snack("No se ha podido inicializar la baseline de Masters (faltan ROIs Master en el layout actual o no hay imagen cargada)."); // CODEX: string interpolation compatibility.
+                    AppendLog("[ANALYZE] Masters baseline missing; aborting AnalyzeMastersAsync");
+                    return;
+                }
+            }
+
             for (int attempt = 0; attempt < 2; attempt++)
             {
                 try

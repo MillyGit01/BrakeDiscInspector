@@ -24,18 +24,33 @@ namespace BrakeDiscInspector_GUI_ROI
                     "BrakeDiscInspector",
                     "logs");
 
-                if (Directory.Exists(logsDir))
+                Directory.CreateDirectory(logsDir);
+
+                var logFiles = new[]
                 {
-                    foreach (var logFile in Directory.EnumerateFiles(logsDir, "*.log"))
+                    Path.Combine(logsDir, "gui.log"),
+                    Path.Combine(logsDir, "roi_load_coords.log"),
+                    Path.Combine(logsDir, "gui_heatmap.log"),
+                    Path.Combine(logsDir, "roi_analyze_master.log"),
+                };
+
+                foreach (var logFile in logFiles)
+                {
+                    try
                     {
-                        try
+                        if (File.Exists(logFile))
                         {
                             File.Delete(logFile);
                         }
-                        catch
+
+                        // Recreate empty file so logging starts cleanly for the session.
+                        using (File.Create(logFile))
                         {
-                            // Swallow individual deletion errors to avoid breaking startup.
                         }
+                    }
+                    catch
+                    {
+                        // Swallow individual deletion errors to avoid breaking startup.
                     }
                 }
 

@@ -177,6 +177,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private int _batchPlacementTokenPlaced = -1;
         private bool _batchCanvasMeasured;
         private string? _currentBatchFile;
+        private bool _allowBatchInferWithoutAnchors;
         public string? CurrentManualImagePath { get; private set; }
         private int _currentRowIndex;
         private string? _currentImagePath;
@@ -5144,7 +5145,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 continue;
                             }
 
-                            if (!_batchAnchorsOk)
+                            if (!_batchAnchorsOk && !_allowBatchInferWithoutAnchors)
                             {
                                 var fileName = row.FileName;
                                 var message = FormattableString.Invariant($"[batch] skip ROI={config.Index} for file='{fileName}' because master fit failed (fit_ok=false)");
@@ -5311,14 +5312,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return Task.CompletedTask;
             }
 
-            return EnsureBatchRepositionAsync(imagePath, ct, "row-start");
+            return RepositionInspectionRoisForImageCoreAsync(imagePath, ct);
         }
 
-        private async Task _repositionInspectionRoisAsync(string imagePath)
+        private async Task RepositionInspectionRoisForImageCoreAsync(string imagePath, CancellationToken ct)
+        {
+            _batchAnchorsOk = await TryUpdateBatchAnchorsForImageAsync(imagePath, ct).ConfigureAwait(false);
+            await EnsureBatchRepositionAsync(imagePath, ct, "row-start").ConfigureAwait(false);
+        }
+
+        private async Task _repositionInspectionRoisAsync(string imagePath, CancellationToken ct, bool skipIfAnchorsReady = false)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || _layoutOriginal == null)
             {
                 TraceBatch("[match] SKIP: missing image/layout");
+                _batchAnchorsOk = false;
                 return;
             }
 
@@ -5326,10 +5334,60 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 || _layoutOriginal.Master1Search == null || _layoutOriginal.Master2Search == null)
             {
                 TraceBatch("[match] SKIP: missing master patterns/search");
+                _batchAnchorsOk = false;
                 return;
             }
 
+            if (skipIfAnchorsReady && _batchAnchorReadyForStep == _batchStepId && _batchAnchorsOk)
+            {
+                TraceBatch("[match] SKIP: anchors already computed for current step");
+                return;
+            }
+
+            await TryUpdateBatchAnchorsForImageAsync(imagePath, ct).ConfigureAwait(false);
+        }
+
+        private async Task<bool> TryUpdateBatchAnchorsForImageAsync(string imagePath, CancellationToken ct)
+        {
+            _batchAnchorsOk = false;
+            _batchAnchorM1Ready = false;
+            _batchAnchorM2Ready = false;
+            _batchAnchorM1Score = 0;
+            _batchAnchorM2Score = 0;
+            _batchDetectedM1 = null;
+            _batchDetectedM2 = null;
+
+            var fileName = Path.GetFileName(imagePath) ?? string.Empty;
+            TraceBatch($"[batch] match: start file='{fileName}'");
+            GuiLog.Info($"[batch] match: start file='{fileName}'");
+
+            ct.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(imagePath))
+            {
+                GuiLog.Warn("[batch] match: missing image path");
+                return false;
+            }
+
+            if (_layoutOriginal == null)
+            {
+                GuiLog.Warn("[batch] match: no layout loaded; anchors cannot be computed");
+                return false;
+            }
+
+            if (_layoutOriginal.Master1Pattern == null || _layoutOriginal.Master2Pattern == null
+                || _layoutOriginal.Master1Search == null || _layoutOriginal.Master2Search == null)
+            {
+                GuiLog.Warn("[batch] match: master ROIs are missing (pattern/search)");
+                return false;
+            }
+
             using var mat = new Mat(imagePath, ImreadModes.Grayscale);
+            if (mat.Empty())
+            {
+                GuiLog.Warn($"[batch] match: image '{fileName}' could not be loaded for anchors");
+                return false;
+            }
 
             var pattern1 = LoadMasterPatternTemplate(_layoutOriginal.Master1PatternImagePath, "M1");
             var pattern2 = LoadMasterPatternTemplate(_layoutOriginal.Master2PatternImagePath, "M2");
@@ -5338,9 +5396,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 pattern1?.Dispose();
                 pattern2?.Dispose();
-                TraceBatch("[match] SKIP: missing reference patterns (M1/M2)");
-                _batchAnchorsOk = false;
-                return;
+                GuiLog.Warn("[batch] match: missing reference patterns for M1/M2");
+                return false;
             }
 
             using (pattern1)
@@ -5355,16 +5412,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (m1 == null || m2 == null)
                 {
                     TraceBatch(FormattableString.Invariant(
-                        $"[match] Failed: M1={(m1 != null)} M2={(m2 != null)}"));
-                    TraceBatch(FormattableString.Invariant(
-                        $"[match] Scores: M1={score1:0.00} M2={score2:0.00}"));
+                        $"[batch] match: failed M1={(m1 != null)} M2={(m2 != null)} scores(M1={score1:0.00}, M2={score2:0.00})"));
+                    GuiLog.Warn(FormattableString.Invariant(
+                        $"[batch] match: anchors not found for file='{fileName}' (M1={(m1 != null)} M2={(m2 != null)})"));
                     _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
-                    _batchAnchorsOk = false;
-                    return;
+                    return false;
                 }
 
                 TraceBatch(FormattableString.Invariant(
-                    $"[match] OK: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
+                    $"[batch] match: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
 
                 var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
                 var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
@@ -5376,6 +5432,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     new Point(m2.Value.X, m2.Value.Y),
                     (int)Math.Round(score1 * 100),
                     (int)Math.Round(score2 * 100));
+
+                _batchAnchorsOk = AnchorsMeetThreshold();
+                GuiLog.Info(FormattableString.Invariant(
+                    $"[batch] match: M1 score={score1 * 100:0.0} M2 score={score2 * 100:0.0} anchorsOk={_batchAnchorsOk}"));
+                return _batchAnchorsOk;
             }
         }
 
@@ -5459,7 +5520,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 if (_layoutOriginal != null)
                 {
-                    await _repositionInspectionRoisAsync(imagePath).ConfigureAwait(false);
+                    await _repositionInspectionRoisAsync(imagePath, ct, skipIfAnchorsReady: true).ConfigureAwait(false);
                     TraceBatch(FormattableString.Invariant($"[batch-repos] reposition layout DONE stepId={stepId}"));
                 }
                 else if (_repositionInspectionRoisAsyncExternal != null)
@@ -6469,7 +6530,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public Task RepositionMastersAsync(string imagePath)
         {
             InitializeBatchSession();
-            return _repositionInspectionRoisAsync(imagePath);
+            return _repositionInspectionRoisAsync(imagePath, CancellationToken.None);
         }
 
         public void TraceBatchInspectionRoisSnapshot(string label)

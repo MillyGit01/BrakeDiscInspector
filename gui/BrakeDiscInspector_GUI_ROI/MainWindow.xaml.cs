@@ -940,7 +940,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 InspLog($"[Seed-M] Same image key='{key}', keep current masters baseline.");
             }
 
-            if (!_mastersSeededForImage && _layout.Master1Pattern != null && _layout.Master2Pattern != null)
+            bool hasPatterns = _layout.Master1Pattern != null && _layout.Master2Pattern != null;
+            bool hasSearch   = _layout.Master1Search  != null && _layout.Master2Search  != null;
+
+            if (!_mastersSeededForImage && hasPatterns && hasSearch)
             {
                 var (m1cx, m1cy) = GetCenterShapeAware(_layout.Master1Pattern);
                 var (m2cx, m2cy) = GetCenterShapeAware(_layout.Master2Pattern);
@@ -949,12 +952,17 @@ namespace BrakeDiscInspector_GUI_ROI
                 _m2BaseX = m2cx; _m2BaseY = m2cy;
                 _mastersSeededForImage = true;
 
-                Dbg($"[Seed-M] {reason}: M1_base=({m1cx:F3},{m1cy:F3}) M2_base=({m2cx:F3},{m2cy:F3})");
+                InspLog($"[Seed-M] Masters baseline SEEDED (reason={reason}, layout='{GetCurrentLayoutName()}', imageKey='{key}') " +
+                        $"M1_base=({m1cx:F3},{m1cy:F3}) M2_base=({m2cx:F3},{m2cy:F3})");
             }
 
             if (!_mastersSeededForImage)
             {
-                InspLog("[Seed-M] WARNING: Cannot seed masters baseline (missing Master1Pattern/Master2Pattern).");
+                string missing = hasPatterns && !hasSearch
+                    ? "Master1Search/Master2Search"
+                    : (!hasPatterns && hasSearch ? "Master1Pattern/Master2Pattern" : "Master1Pattern/Master2Pattern/Master1Search/Master2Search");
+
+                InspLog($"[Seed-M] Cannot seed masters baseline (missing {missing}).");
             }
 
             return _mastersSeededForImage;

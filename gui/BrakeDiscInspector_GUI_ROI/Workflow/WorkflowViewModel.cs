@@ -244,6 +244,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private ImageSource? _batchHeatmapSource;
         private int _heatmapCutoffPercent = 50;
         private string _heatmapInfo = "Cutoff: 50%";
+        private const double BatchPauseMinSeconds = 0.0;
+        private const double BatchPauseMaxSeconds = 10.0;
         private double _batchPausePerRoiSeconds = 0.0;
         private byte[]? _lastHeatmapPngBytes;
         private WriteableBitmap? _lastHeatmapBitmap;
@@ -1173,12 +1175,24 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             get => _batchPausePerRoiSeconds;
             set
             {
-                var clamped = Math.Min(10.0, Math.Max(0.0, value));
-                if (Math.Abs(_batchPausePerRoiSeconds - clamped) > 1e-6)
+                var clamped = value;
+
+                if (clamped < BatchPauseMinSeconds)
                 {
-                    _batchPausePerRoiSeconds = clamped;
-                    OnPropertyChanged();
+                    clamped = BatchPauseMinSeconds;
                 }
+                else if (clamped > BatchPauseMaxSeconds)
+                {
+                    clamped = BatchPauseMaxSeconds;
+                }
+
+                if (Math.Abs(_batchPausePerRoiSeconds - clamped) < 0.0001)
+                {
+                    return;
+                }
+
+                _batchPausePerRoiSeconds = clamped;
+                OnPropertyChanged();
             }
         }
 
@@ -5004,6 +5018,39 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             ClearBatchBaselineRois();
         }
 
+        private async Task ApplyBatchPauseAsync(CancellationToken ct)
+        {
+            var seconds = _batchPausePerRoiSeconds;
+            if (seconds <= 0.0)
+            {
+                return;
+            }
+
+            var totalMs = (int)Math.Round(seconds * 1000.0);
+            if (totalMs <= 0)
+            {
+                return;
+            }
+
+            var sw = Stopwatch.StartNew();
+
+            while (sw.ElapsedMilliseconds < totalMs)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                _pauseGate?.Wait(ct);
+
+                var remaining = totalMs - (int)sw.ElapsedMilliseconds;
+                if (remaining <= 0)
+                {
+                    break;
+                }
+
+                var step = Math.Min(remaining, 50);
+                await Task.Delay(step, ct).ConfigureAwait(false);
+            }
+        }
+
         private async Task RunBatchAsync(CancellationToken ct)
         {
             EnsureRoleRoi();
@@ -5080,7 +5127,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             var config = GetInspectionConfigByIndex(roiIndex);
                             if (config == null)
                             {
-                                UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                                SetBatchCellStatus(row, roiIndex - 1, null);
+                                await ApplyBatchPauseAsync(ct).ConfigureAwait(false);
                                 continue;
                             }
 
@@ -5088,10 +5136,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             if (!config.Enabled)
                             {
-                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
+                                SetBatchCellStatus(row, config.Index - 1, null);
                                 InvokeOnUi(ClearBatchHeatmap);
                                 _clearHeatmap();
                                 _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
+                                await ApplyBatchPauseAsync(ct).ConfigureAwait(false);
                                 continue;
                             }
 
@@ -5100,7 +5149,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 var fileName = row.FileName;
                                 var message = FormattableString.Invariant($"[batch] skip ROI={config.Index} for file='{fileName}' because master fit failed (fit_ok=false)");
                                 _log(message);
-                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
+                                SetBatchCellStatus(row, config.Index - 1, null);
+                                await ApplyBatchPauseAsync(ct).ConfigureAwait(false);
                                 continue;
                             }
 
@@ -5110,7 +5160,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 var message = FormattableString.Invariant($"[batch] skip ROI={config.Index} for file='{fileName}' because master fit failed (anchors not ready)");
                                 TraceBatch("[batch] wait: anchors not ready -> skipping ROI 3/4");
                                 _log?.Invoke(message);
-                                UpdateBatchRowStatus(row, config.Index, BatchCellStatus.Unknown);
+                                SetBatchCellStatus(row, config.Index - 1, null);
+                                await ApplyBatchPauseAsync(ct).ConfigureAwait(false);
                                 continue;
                             }
 
@@ -5159,17 +5210,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                     decisionThreshold = LocalThreshold;
                                 }
 
-                            bool isNg = result.score > decisionThreshold;
-                            UpdateBatchRowStatus(row, config.Index, isNg ? BatchCellStatus.Nok : BatchCellStatus.Ok);
-
-                            if (BatchPausePerRoiSeconds > 0)
-                            {
-                                var pause = TimeSpan.FromSeconds(BatchPausePerRoiSeconds);
-                                if (pause > TimeSpan.Zero)
+                                bool? roiOk = null;
+                                if (decisionThreshold > 0)
                                 {
-                                    await Task.Delay(pause, ct).ConfigureAwait(false);
+                                    roiOk = result.score <= decisionThreshold;
                                 }
-                            }
+
+                                SetBatchCellStatus(row, config.Index - 1, roiOk);
                         }
                         catch (OperationCanceledException)
                         {
@@ -5180,6 +5227,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             _log($"[batch] ROI{roiIndex} failed for '{row.FileName}': {ex.Message}");
                             UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                         }
+
+                        await ApplyBatchPauseAsync(ct).ConfigureAwait(false);
                     }
 
                     if (_batchPlacedForStep != _batchStepId)
@@ -5196,7 +5245,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                     }
 
-                    BatchRowOk = !IsRowNg(row);
+                    BatchRowOk = ComputeBatchRowOk(row);
                     GuiLog.Info($"[batch] row result file='{Path.GetFileName(CurrentImagePath ?? string.Empty)}' => {(BatchRowOk == true ? "OK" : "NG")}");
 
                     try
@@ -5544,6 +5593,58 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return snapshot ?? new List<BatchRow>();
         }
 
+        private static bool? ComputeBatchRowOk(BatchRow row)
+        {
+            var statuses = new[]
+            {
+                row.ROI1,
+                row.ROI2,
+                row.ROI3,
+                row.ROI4
+            };
+
+            if (statuses.All(s => s == BatchCellStatus.Unknown))
+            {
+                return null;
+            }
+
+            if (statuses.Any(s => s == BatchCellStatus.Nok))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private void SetBatchCellStatus(BatchRow row, int roiIndex, bool? isOk)
+        {
+            var status =
+                isOk == null
+                    ? BatchCellStatus.Unknown
+                    : (isOk.Value ? BatchCellStatus.Ok : BatchCellStatus.Nok);
+
+            InvokeOnUi(() =>
+            {
+                switch (roiIndex)
+                {
+                    case 0:
+                        row.ROI1 = status;
+                        break;
+                    case 1:
+                        row.ROI2 = status;
+                        break;
+                    case 2:
+                        row.ROI3 = status;
+                        break;
+                    case 3:
+                        row.ROI4 = status;
+                        break;
+                }
+
+                BatchRowOk = ComputeBatchRowOk(row);
+            });
+        }
+
         private InspectionRoiConfig? GetInspectionConfigByIndex(int index)
             => _inspectionRois?.FirstOrDefault(r => r.Index == index);
 
@@ -5564,24 +5665,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            InvokeOnUi(() =>
+            bool? isOk = status switch
             {
-                switch (roiIndex)
-                {
-                    case 1:
-                        row.ROI1 = status;
-                        break;
-                    case 2:
-                        row.ROI2 = status;
-                        break;
-                    case 3:
-                        row.ROI3 = status;
-                        break;
-                    case 4:
-                        row.ROI4 = status;
-                        break;
-                }
-            });
+                BatchCellStatus.Ok => true,
+                BatchCellStatus.Nok => false,
+                _ => (bool?)null
+            };
+
+            SetBatchCellStatus(row, roiIndex - 1, isOk);
         }
 
         private bool IsRowNg(BatchRow row)

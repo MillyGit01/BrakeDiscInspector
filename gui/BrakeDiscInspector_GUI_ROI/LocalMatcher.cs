@@ -305,6 +305,35 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 var mode = (feature ?? "").Trim().ToLowerInvariant();
 
+                if (mode == "edges")
+                {
+                    using var searchEdges = new Mat();
+                    using var patternEdges = new Mat();
+
+                    Cv2.Canny(searchGray, searchEdges, 50, 150);
+                    Cv2.Canny(patternGray, patternEdges, 50, 150);
+
+                    Log(log, "[EDGES] using Canny + MatchTemplateRot");
+
+                    var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log);
+
+                    if (tm.center is null || tm.score < threshold)
+                    {
+                        Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) cause={tm.failure}");
+                        return (null, tm.score);
+                    }
+
+                    var globalEdges = new Point2d(
+                        searchRect.X + tm.center.Value.X,
+                        searchRect.Y + tm.center.Value.Y);
+
+                    Log(log,
+                        $"[EDGES] HIT center=({globalEdges.X.ToString(\"F1\", CultureInfo.InvariantCulture)},{globalEdges.Y.ToString(\"F1\", CultureInfo.InvariantCulture)}) " +
+                        $"score={tm.score} corr={tm.bestCorr:F3}");
+
+                    return (globalEdges, tm.score);
+                }
+
                 // 1) FEATURES
                 var feat = MatchFeatures(searchGray, patternGray, log);
 

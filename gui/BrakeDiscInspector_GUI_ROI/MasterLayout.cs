@@ -469,34 +469,34 @@ namespace BrakeDiscInspector_GUI_ROI
                 return updated;
             }
 
-            void NormalizeMaster(ref string? field, string tag)
+            string? NormalizeMaster(string? field, string tag)
             {
                 if (string.IsNullOrWhiteSpace(field))
                 {
-                    return;
+                    return field;
                 }
 
                 var candidate = ReplaceLastSegment(field);
                 if (string.Equals(candidate, field, StringComparison.OrdinalIgnoreCase))
                 {
-                    return;
+                    return field;
                 }
 
                 if (File.Exists(candidate))
                 {
                     Debug.WriteLine(FormattableString.Invariant(
                         $"[layout:path] Redirecting {tag} from 'last' to '{recipeName}': '{candidate}' (layout='{layoutFilePath}')"));
-                    field = candidate;
+                    return candidate;
                 }
-                else
-                {
-                    Debug.WriteLine(FormattableString.Invariant(
-                        $"[layout:path] WARNING {tag}: candidate missing for layout '{recipeName}' -> '{candidate}' (layout='{layoutFilePath}')"));
-                }
+
+                Debug.WriteLine(FormattableString.Invariant(
+                    $"[layout:path] WARNING {tag}: candidate missing for layout '{recipeName}' -> '{candidate}' (layout='{layoutFilePath}')"));
+
+                return field;
             }
 
-            NormalizeMaster(ref layout.Master1PatternImagePath, "M1");
-            NormalizeMaster(ref layout.Master2PatternImagePath, "M2");
+            layout.Master1PatternImagePath = NormalizeMaster(layout.Master1PatternImagePath, "M1");
+            layout.Master2PatternImagePath = NormalizeMaster(layout.Master2PatternImagePath, "M2");
 
             if (layout.InspectionRois != null)
             {

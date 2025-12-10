@@ -274,6 +274,7 @@
                       <ComboBoxItem Content="sift"/>
                       <ComboBoxItem Content="orb"/>
                       <ComboBoxItem Content="tm_rot"/>
+                      <ComboBoxItem Content="edges"/>
                     </ComboBox>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" Margin="0,8,0,8">

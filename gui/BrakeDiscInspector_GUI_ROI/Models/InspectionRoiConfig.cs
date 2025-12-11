@@ -9,6 +9,12 @@ using BrakeDiscInspector_GUI_ROI.Util;
 
 namespace BrakeDiscInspector_GUI_ROI.Models
 {
+    public enum MasterAnchorChoice
+    {
+        Master1 = 1,
+        Master2 = 2
+    }
+
     public class InspectionRoiConfig : INotifyPropertyChanged
     {
         private int _index;
@@ -34,6 +40,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         private ObservableCollection<DatasetPreviewItem> _okPreview = new();
         private ObservableCollection<DatasetPreviewItem> _ngPreview = new();
         private bool _hasFitOk;
+        private MasterAnchorChoice _anchorMaster = MasterAnchorChoice.Master1;
 
         public InspectionRoiConfig(int index)
         {
@@ -206,6 +213,17 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             {
                 if (_hasFitOk == value) return;
                 _hasFitOk = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public MasterAnchorChoice AnchorMaster
+        {
+            get => _anchorMaster;
+            set
+            {
+                if (_anchorMaster == value) return;
+                _anchorMaster = value;
                 OnPropertyChanged();
             }
         }
@@ -387,6 +405,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 DatasetOkCount = DatasetOkCount,
                 DatasetKoCount = DatasetKoCount,
                 HasFitOk = HasFitOk,
+                AnchorMaster = AnchorMaster,
                 BaseImgW = BaseImgW,
                 BaseImgH = BaseImgH,
                 IsDatasetLoading = IsDatasetLoading

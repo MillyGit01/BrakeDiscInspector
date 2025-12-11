@@ -103,17 +103,18 @@
                         </TabControl.ItemTemplate>
                         <TabControl.ContentTemplate>
                             <DataTemplate DataType="{x:Type m:InspectionRoiConfig}">
-                                <Grid Margin="0,8,0,0">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="*"/>
-                                        <RowDefinition Height="Auto"/>
-                                        <RowDefinition Height="Auto"/>
-                                    </Grid.RowDefinitions>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
 
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
@@ -150,7 +151,19 @@
                                         <CheckBox Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center"/>
                                     </StackPanel>
 
-                                    <Grid Grid.Row="2" Margin="0,8,0,0">
+                                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                            <ComboBox Width="90"
+                                                      SelectedValuePath="Content"
+                                                      SelectedValue="{Binding AnchorMaster, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Master1" />
+                                                <ComboBoxItem Content="Master2" />
+                                            </ComboBox>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <Grid Grid.Row="3" Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
@@ -167,7 +180,7 @@
                                                 Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                     </Grid>
 
-                                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0">
+                                    <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="{Binding DatasetStatus}">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
@@ -185,11 +198,11 @@
                                         <TextBlock Text="{Binding DatasetCountsText}"/>
                                     </StackPanel>
 
-                                    <ProgressBar Grid.Row="4" Height="4" Margin="0,4,0,0"
+                                    <ProgressBar Grid.Row="5" Height="4" Margin="0,4,0,0"
                                                  IsIndeterminate="True"
                                                  Visibility="{Binding IsDatasetLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-                                    <StackPanel Grid.Row="5" Margin="0,8,0,0">
+                                    <StackPanel Grid.Row="6" Margin="0,8,0,0">
                                         <TextBlock Text="OK dataset" FontWeight="SemiBold" Margin="0,6,0,4"/>
                                         <ScrollViewer HorizontalScrollBarVisibility="Auto"
                                                       VerticalScrollBarVisibility="Disabled"
@@ -243,7 +256,7 @@
                                         </ScrollViewer>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                    <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                                         <Button Content="Load model"
                                                 Padding="12,4"
                                                 Margin="0,0,8,0"
@@ -266,7 +279,7 @@
                                                 Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="7" Orientation="Horizontal" Margin="0,8,0,0">
+                                    <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,8,0,0">
                                         <TextBlock Text="Score:"/>
                                         <TextBlock Text="{Binding LastScore, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
                                         <TextBlock Text="Threshold:"/>

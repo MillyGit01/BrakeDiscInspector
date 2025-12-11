@@ -795,6 +795,72 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        public string AnalyzeFeatureM1
+        {
+            get => _analyzeFeatureM1;
+            set
+            {
+                var normalized = NormalizeFeature(value);
+                if (string.Equals(_analyzeFeatureM1, normalized, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _analyzeFeatureM1 = normalized;
+                OnPropertyChanged();
+                PersistAnalyzeOptions();
+            }
+        }
+
+        public string AnalyzeFeatureM2
+        {
+            get => _analyzeFeatureM2;
+            set
+            {
+                var normalized = NormalizeFeature(value);
+                if (string.Equals(_analyzeFeatureM2, normalized, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                _analyzeFeatureM2 = normalized;
+                OnPropertyChanged();
+                PersistAnalyzeOptions();
+            }
+        }
+
+        public int AnalyzeThrM1
+        {
+            get => _analyzeThrM1;
+            set
+            {
+                if (_analyzeThrM1 == value)
+                {
+                    return;
+                }
+
+                _analyzeThrM1 = value;
+                OnPropertyChanged();
+                PersistAnalyzeOptions();
+            }
+        }
+
+        public int AnalyzeThrM2
+        {
+            get => _analyzeThrM2;
+            set
+            {
+                if (_analyzeThrM2 == value)
+                {
+                    return;
+                }
+
+                _analyzeThrM2 = value;
+                OnPropertyChanged();
+                PersistAnalyzeOptions();
+            }
+        }
+
         public double AnalyzeAngToleranceDeg
         {
             get => _analyzeAngTolDeg;
@@ -883,6 +949,10 @@ namespace BrakeDiscInspector_GUI_ROI
             _layout.Analyze.AngTolDeg = _analyzeAngTolDeg;
             _layout.Analyze.ScaleLock = _scaleLock;
             _layout.Analyze.UseLocalMatcher = (ChkUseLocalMatcher?.IsChecked == true);
+            _layout.Analyze.FeatureM1 = _analyzeFeatureM1;
+            _layout.Analyze.FeatureM2 = _analyzeFeatureM2;
+            _layout.Analyze.ThrM1 = _analyzeThrM1;
+            _layout.Analyze.ThrM2 = _analyzeThrM2;
 
             TryPersistLayout();
         }
@@ -1432,6 +1502,10 @@ namespace BrakeDiscInspector_GUI_ROI
         // Tolerances (pixels / degrees). Tune if needed.
         private double _analyzePosTolPx = 1.0;    // <=1 px considered the same
         private double _analyzeAngTolDeg = 0.5;   // <=0.5° considered the same
+        private string _analyzeFeatureM1 = "auto";
+        private string _analyzeFeatureM2 = "auto";
+        private int _analyzeThrM1 = 85;
+        private int _analyzeThrM2 = 85;
 
         private bool _scaleLock = true;                  // Size lock already in use; keep it true
 
@@ -3012,6 +3086,10 @@ namespace BrakeDiscInspector_GUI_ROI
             double posTol = layoutAnalyze != null && layoutAnalyze.PosTolPx > 0 ? layoutAnalyze.PosTolPx : defaultPosTol;
             double angTol = layoutAnalyze != null && layoutAnalyze.AngTolDeg > 0 ? layoutAnalyze.AngTolDeg : defaultAngTol;
             bool scaleLock = layoutAnalyze?.ScaleLock ?? defaultScaleLock;
+            string featureM1 = NormalizeFeature(layoutAnalyze?.FeatureM1);
+            string featureM2 = NormalizeFeature(layoutAnalyze?.FeatureM2);
+            int thrM1 = layoutAnalyze?.ThrM1 ?? 85;
+            int thrM2 = layoutAnalyze?.ThrM2 ?? 85;
             double opacity = layoutUi != null && layoutUi.HeatmapOverlayOpacity >= 0
                 ? Math.Max(0.0, Math.Min(1.0, layoutUi.HeatmapOverlayOpacity))
                 : defaultOpacity;
@@ -3047,6 +3125,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 ScaleLock = scaleLock;
                 AnalyzePosTolerancePx = posTol;
                 AnalyzeAngToleranceDeg = angTol;
+                AnalyzeFeatureM1 = featureM1;
+                AnalyzeFeatureM2 = featureM2;
+                AnalyzeThrM1 = thrM1;
+                AnalyzeThrM2 = thrM2;
                 HeatmapGain = gain;
                 HeatmapGamma = gamma;
                 HeatmapOverlayOpacity = opacity;
@@ -11575,6 +11657,10 @@ namespace BrakeDiscInspector_GUI_ROI
             snapshot.Analyze.AngTolDeg = source.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
             snapshot.Analyze.ScaleLock = source.Analyze?.ScaleLock ?? _scaleLock;
             snapshot.Analyze.UseLocalMatcher = source.Analyze?.UseLocalMatcher ?? (ChkUseLocalMatcher?.IsChecked == true);
+            snapshot.Analyze.FeatureM1 = source.Analyze?.FeatureM1 ?? _analyzeFeatureM1;
+            snapshot.Analyze.FeatureM2 = source.Analyze?.FeatureM2 ?? _analyzeFeatureM2;
+            snapshot.Analyze.ThrM1 = source.Analyze?.ThrM1 ?? _analyzeThrM1;
+            snapshot.Analyze.ThrM2 = source.Analyze?.ThrM2 ?? _analyzeThrM2;
 
             snapshot.Ui.HeatmapOverlayOpacity = _heatmapOverlayOpacity;
             snapshot.Ui.HeatmapGain = _heatmapGain;
@@ -11650,6 +11736,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 CalibratedThreshold = cfg.CalibratedThreshold,
                 ThresholdDefault = cfg.ThresholdDefault,
                 Shape = cfg.Shape,
+                AnchorMaster = cfg.AnchorMaster,
                 BaseImgW = cfg.BaseImgW,
                 BaseImgH = cfg.BaseImgH,
                 HasFitOk = cfg.HasFitOk,

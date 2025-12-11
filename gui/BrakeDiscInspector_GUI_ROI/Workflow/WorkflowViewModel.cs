@@ -141,6 +141,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public override string ToString() => Label;
     }
 
+    public sealed class MasterDetection
+    {
+        public Point2d? Center { get; set; }
+        public double AngleDeg { get; set; }
+        public int Score { get; set; }
+        public bool IsOk => Center.HasValue;
+    }
+
     public sealed partial class WorkflowViewModel : INotifyPropertyChanged
     {
         private readonly BackendClient _client;
@@ -148,6 +156,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Func<Task<RoiExportResult?>> _exportRoiAsync;
         private readonly Func<string?> _getSourceImagePath;
         private readonly Action<string> _log;
+        private readonly Action<string>? _trace;
         private readonly Func<RoiExportResult, byte[], double, Task> _showHeatmapAsync;
         private readonly Action _clearHeatmap;
         private readonly Action<bool?> _updateGlobalBadge;
@@ -222,6 +231,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private int _batchAnchorM1Score;
         private int _batchAnchorM2Score;
         private bool _batchAnchorsOk;
+        private MasterDetection? _m1Detection;
+        private MasterDetection? _m2Detection;
         private readonly RoiModel?[] _batchBaselineRois = new RoiModel?[4];
 
         // CODEX: batch reposition flags
@@ -338,6 +349,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _exportRoiAsync = exportRoiAsync ?? throw new ArgumentNullException(nameof(exportRoiAsync));
             _getSourceImagePath = getSourceImagePath ?? throw new ArgumentNullException(nameof(getSourceImagePath));
             _log = log ?? (_ => { });
+            _trace = log;
             _showHeatmapAsync = showHeatmapAsync ?? throw new ArgumentNullException(nameof(showHeatmapAsync));
             _clearHeatmap = clearHeatmap ?? throw new ArgumentNullException(nameof(clearHeatmap));
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
@@ -5356,6 +5368,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchAnchorM2Score = 0;
             _batchDetectedM1 = null;
             _batchDetectedM2 = null;
+            _m1Detection = new MasterDetection();
+            _m2Detection = new MasterDetection();
 
             var fileName = Path.GetFileName(imagePath) ?? string.Empty;
             TraceBatch($"[batch] match: start file='{fileName}'");
@@ -5382,6 +5396,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return false;
             }
 
+            var analyze = _layoutOriginal.Analyze ?? new AnalyzeOptions();
+            var featureM1 = analyze.FeatureM1;
+            var featureM2 = analyze.FeatureM2;
+            var thrM1 = analyze.ThrM1;
+            var thrM2 = analyze.ThrM2;
+
+            _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 feature={featureM1} thr={thrM1}"));
+            _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 feature={featureM2} thr={thrM2}"));
+
             using var mat = new Mat(imagePath, ImreadModes.Grayscale);
             if (mat.Empty())
             {
@@ -5403,24 +5426,59 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             using (pattern1)
             using (pattern2)
             {
-                var search1 = _layoutOriginal.Master1Search.ToCvRect(mat.Width, mat.Height);
-                var search2 = _layoutOriginal.Master2Search.ToCvRect(mat.Width, mat.Height);
+                var m1Result = LocalMatcher.MatchInSearchROIWithDetails(
+                    mat,
+                    _layoutOriginal.Master1Pattern,
+                    _layoutOriginal.Master1Search,
+                    featureM1,
+                    thrM1,
+                    analyze.RotRange,
+                    analyze.ScaleMin,
+                    analyze.ScaleMax,
+                    pattern1,
+                    _trace);
 
-                var (m1, score1) = LocalMatcher.MatchInSearchROI(mat, search1, pattern1);
-                var (m2, score2) = LocalMatcher.MatchInSearchROI(mat, search2, pattern2);
+                var m2Result = LocalMatcher.MatchInSearchROIWithDetails(
+                    mat,
+                    _layoutOriginal.Master2Pattern,
+                    _layoutOriginal.Master2Search,
+                    featureM2,
+                    thrM2,
+                    analyze.RotRange,
+                    analyze.ScaleMin,
+                    analyze.ScaleMax,
+                    pattern2,
+                    _trace);
 
-                if (m1 == null || m2 == null)
+                _m1Detection = new MasterDetection
+                {
+                    Center = m1Result.Center,
+                    AngleDeg = m1Result.AngleDeg,
+                    Score = m1Result.Score
+                };
+
+                _m2Detection = new MasterDetection
+                {
+                    Center = m2Result.Center,
+                    AngleDeg = m2Result.AngleDeg,
+                    Score = m2Result.Score
+                };
+
+                _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 center={_m1Detection.Center} angle={_m1Detection.AngleDeg:F1} score={_m1Detection.Score}"));
+                _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 center={_m2Detection.Center} angle={_m2Detection.AngleDeg:F1} score={_m2Detection.Score}"));
+
+                if (_m1Detection.Center == null || _m2Detection.Center == null)
                 {
                     TraceBatch(FormattableString.Invariant(
-                        $"[batch] match: failed M1={(m1 != null)} M2={(m2 != null)} scores(M1={score1:0.00}, M2={score2:0.00})"));
+                        $"[batch] match: failed M1={_m1Detection.IsOk} M2={_m2Detection.IsOk} scores(M1={_m1Detection.Score:0.00}, M2={_m2Detection.Score:0.00})"));
                     GuiLog.Warn(FormattableString.Invariant(
-                        $"[batch] match: anchors not found for file='{fileName}' (M1={(m1 != null)} M2={(m2 != null)})"));
+                        $"[batch] match: anchors not found for file='{fileName}' (M1={_m1Detection.IsOk} M2={_m2Detection.IsOk})"));
                     _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
                     return false;
                 }
 
                 TraceBatch(FormattableString.Invariant(
-                    $"[batch] match: M1=({m1.Value.X:0.0},{m1.Value.Y:0.0}) score={score1:0.00}  M2=({m2.Value.X:0.0},{m2.Value.Y:0.0}) score={score2:0.00}"));
+                    $"[batch] match: M1=({_m1Detection.Center.Value.X:0.0},{_m1Detection.Center.Value.Y:0.0}) score={_m1Detection.Score:0.00}  M2=({_m2Detection.Center.Value.X:0.0},{_m2Detection.Center.Value.Y:0.0}) score={_m2Detection.Score:0.00}"));
 
                 var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
                 var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
@@ -5428,14 +5486,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 RegisterBatchAnchors(
                     new Point(m1Base.cx, m1Base.cy),
                     new Point(m2Base.cx, m2Base.cy),
-                    new Point(m1.Value.X, m1.Value.Y),
-                    new Point(m2.Value.X, m2.Value.Y),
-                    (int)Math.Round(score1 * 100),
-                    (int)Math.Round(score2 * 100));
+                    new Point(_m1Detection.Center.Value.X, _m1Detection.Center.Value.Y),
+                    new Point(_m2Detection.Center.Value.X, _m2Detection.Center.Value.Y),
+                    _m1Detection.Score,
+                    _m2Detection.Score);
 
                 _batchAnchorsOk = AnchorsMeetThreshold();
                 GuiLog.Info(FormattableString.Invariant(
-                    $"[batch] match: M1 score={score1 * 100:0.0} M2 score={score2 * 100:0.0} anchorsOk={_batchAnchorsOk}"));
+                    $"[batch] match: M1 score={_m1Detection.Score:0.0} M2 score={_m2Detection.Score:0.0} anchorsOk={_batchAnchorsOk}"));
                 return _batchAnchorsOk;
             }
         }

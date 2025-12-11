@@ -68,7 +68,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     FeatureM1 = Analyze?.FeatureM1 ?? new AnalyzeOptions().FeatureM1,
                     FeatureM2 = Analyze?.FeatureM2 ?? new AnalyzeOptions().FeatureM2,
                     ThrM1 = Analyze?.ThrM1 ?? new AnalyzeOptions().ThrM1,
-                    ThrM2 = Analyze?.ThrM2 ?? new AnalyzeOptions().ThrM2
+                    ThrM2 = Analyze?.ThrM2 ?? new AnalyzeOptions().ThrM2,
+                    RotRange = Analyze?.RotRange ?? new AnalyzeOptions().RotRange,
+                    ScaleMin = Analyze?.ScaleMin ?? new AnalyzeOptions().ScaleMin,
+                    ScaleMax = Analyze?.ScaleMax ?? new AnalyzeOptions().ScaleMax
                 },
                 Ui = new UiOptions
                 {
@@ -108,6 +111,9 @@ namespace BrakeDiscInspector_GUI_ROI
         public int ThrM1 { get; set; } = 85;
         public string FeatureM2 { get; set; } = "auto";
         public int ThrM2 { get; set; } = 85;
+        public int RotRange { get; set; } = 10;
+        public double ScaleMin { get; set; } = 0.95;
+        public double ScaleMax { get; set; } = 1.05;
     }
 
     public sealed class UiOptions

@@ -7,6 +7,14 @@ namespace BrakeDiscInspector_GUI_ROI
 {
     public static class LocalMatcher
     {
+        public sealed class LocalMatchResult
+        {
+            public Point2d? Center { get; init; }
+            public int Score { get; init; }
+            public double AngleDeg { get; init; }
+            public bool UsedFeatures { get; init; }
+        }
+
         private static void Log(Action<string>? log, string message) => log?.Invoke(message);
 
         private static Mat PackPoints(Point2f[] pts)
@@ -53,14 +61,15 @@ namespace BrakeDiscInspector_GUI_ROI
             return dst;
         }
 
-        private static (Point2d? center, int score, string? failure, double bestCorr) MatchTemplateRot(
+        private static (Point2d? center, int score, string? failure, double bestCorr, double bestAngleDeg) MatchTemplateRot(
             Mat imageGray, Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax, Action<string>? log)
         {
             if (imageGray.Empty() || patternGray.Empty())
-                return (null, 0, "imgs vacías", 0);
+                return (null, 0, "imgs vacías", 0, 0);
 
             double best = -1.0;
             Point2d? bestPoint = null;
+            double bestAngle = 0.0;
 
             var minScale = Math.Min(scaleMin, scaleMax);
             var maxScale = Math.Max(scaleMin, scaleMax);
@@ -89,15 +98,16 @@ namespace BrakeDiscInspector_GUI_ROI
                     {
                         best = maxVal;
                         bestPoint = new Point2d(maxLoc.X + rotated.Width / 2.0, maxLoc.Y + rotated.Height / 2.0);
+                        bestAngle = angle;
                     }
                 }
             }
 
             string? failure = bestPoint == null ? "sin correlación" : $"maxCorr={Math.Max(best, 0):F4}";
-            return (bestPoint, ToScore(best), failure, best);
+            return (bestPoint, ToScore(best), failure, best, bestAngle);
         }
 
-        private static (Point2d? center, int score, string? failure, int imgKps, int patKps, int goodCount, int inliers, double avgDist) MatchFeatures(
+        private static (Point2d? center, int score, string? failure, int imgKps, int patKps, int goodCount, int inliers, double avgDist, double rotDegApprox) MatchFeatures(
             Mat imageGrayIn, Mat patternGrayIn, Action<string>? log)
         {
             // Trabajar sobre clones: NUNCA liberar ni reasignar Mats del caller
@@ -107,7 +117,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (imageGray.Empty() || patternGray.Empty())
             {
                 Log(log, "[FEATURE] entradas vacías");
-                return (null, 0, "imgs vacías", 0, 0, 0, 0, 256);
+                return (null, 0, "imgs vacías", 0, 0, 0, 0, 256, 0.0);
             }
 
             using var orb = ORB.Create(
@@ -148,7 +158,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (imgKp.Length < 8 || patKp.Length < 8)
             {
                 Log(log, $"[FEATURE] abort: insufficient keypoints img={imgKp.Length} pat={patKp.Length}");
-                return (null, 0, "insufficient-keypoints", imgKp.Length, patKp.Length, 0, 0, 0.0);
+                return (null, 0, "insufficient-keypoints", imgKp.Length, patKp.Length, 0, 0, 0.0, 0.0);
             }
 
             using var imgDesc = new Mat();
@@ -159,7 +169,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (imgDesc.Empty() || patDesc.Empty() || imgKp.Length < 8 || patKp.Length < 8)
             {
                 Log(log, "[FEATURE] sin descriptores suficientes");
-                return (null, 0, "sin descriptores suficientes", imgKp.Length, patKp.Length, 0, 0, 256);
+                return (null, 0, "sin descriptores suficientes", imgKp.Length, patKp.Length, 0, 0, 256, 0.0);
             }
 
             using var matcher = new BFMatcher(NormTypes.Hamming, crossCheck: false);
@@ -179,7 +189,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (good.Length < 8)
             {
                 Log(log, $"[FEATURE] abort: too-few-good-matches={good.Length}");
-                return (null, 0, "too-few-good-matches", imgKp.Length, patKp.Length, good.Length, 0, 0.0);
+                return (null, 0, "too-few-good-matches", imgKp.Length, patKp.Length, good.Length, 0, 0.0, 0.0);
             }
 
             Log(log, $"[FEATURE] kps(pattern,img)=({patKp.Length},{imgKp.Length}) good={good.Length} ratio={usedRatio:F2}");
@@ -194,7 +204,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (H.Empty())
             {
                 Log(log, "[FEATURE] abort: homography-empty");
-                return (null, 0, "homography-empty", imgKp.Length, patKp.Length, good.Length, 0, 0.0);
+                return (null, 0, "homography-empty", imgKp.Length, patKp.Length, good.Length, 0, 0.0, 0.0);
             }
 
             int inliers = Cv2.CountNonZero(mask);
@@ -233,10 +243,26 @@ namespace BrakeDiscInspector_GUI_ROI
             Log(log,
                 $"[FEATURE] inliers={inliers}/{good.Length} " +
                 $"avgDist={avgDist:F1} score={score} rot≈{rotDegApprox:F1}deg");
-            return (new Point2d(cx, cy), score, null, imgKp.Length, patKp.Length, good.Length, inliers, avgDist);
+            return (new Point2d(cx, cy), score, null, imgKp.Length, patKp.Length, good.Length, inliers, avgDist, rotDegApprox);
         }
 
         public static (Point2d? center, int score) MatchInSearchROI(
+            Mat fullImageBgr,
+            RoiModel patternRoi,
+            RoiModel searchRoi,
+            string feature,
+            int threshold,
+            int rotRange,
+            double scaleMin,
+            double scaleMax,
+            Mat? patternOverride = null,
+            Action<string>? log = null)
+        {
+            var detailed = MatchInSearchROIWithDetails(fullImageBgr, patternRoi, searchRoi, feature, threshold, rotRange, scaleMin, scaleMax, patternOverride, log);
+            return (detailed.Center, detailed.Score);
+        }
+
+        public static LocalMatchResult MatchInSearchROIWithDetails(
             Mat fullImageBgr,
             RoiModel patternRoi,
             RoiModel searchRoi,
@@ -287,7 +313,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (searchRect.Width < 5 || searchRect.Height < 5)
             {
                 Log(log, "[INPUT] search ROI demasiado pequeño");
-                return (null, 0);
+                return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
             }
 
             using var searchRegion = new Mat(fullImageBgr, searchRect);
@@ -303,7 +329,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (patternOverride.Empty() || patternOverride.Width < 3 || patternOverride.Height < 3)
                     {
                         Log(log, "[INPUT] patrón override vacío/pequeño");
-                        return (null, 0);
+                        return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
                     }
                     patternGray = ToGray(patternOverride);
                 }
@@ -313,7 +339,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (pr.Width < 3 || pr.Height < 3)
                     {
                         Log(log, "[INPUT] patrón demasiado pequeño]");
-                        return (null, 0);
+                        return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
                     }
                     patternRegion = new Mat(fullImageBgr, pr);
                     patternGray = ToGray(patternRegion);
@@ -322,7 +348,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (patternGray == null || patternGray.Empty())
                 {
                     Log(log, "[INPUT] patrón vacío/pequeño");
-                    return (null, 0);
+                    return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
                 }
 
                 Log(log, $"[INPUT] feature={feature} thr={threshold} search={searchRect.Width}x{searchRect.Height} pattern={patternGray.Width}x{patternGray.Height}");
@@ -353,7 +379,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (tm.center is null || tm.score < threshold)
                     {
                         Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
-                        return (null, tm.score);
+                        return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
                     }
 
                     var globalEdges = new Point2d(
@@ -364,7 +390,24 @@ namespace BrakeDiscInspector_GUI_ROI
                         FormattableString.Invariant(
                             $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
 
-                    return (globalEdges, tm.score);
+                    return new LocalMatchResult { Center = globalEdges, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                }
+
+                if (mode == "tm_rot")
+                {
+                    var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
+
+                    if (tm.center is null || tm.score < threshold)
+                    {
+                        Log(log, $"[TM] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
+                        return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                    }
+
+                    var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
+                    Log(log,
+                        FormattableString.Invariant(
+                            $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
+                    return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
                 }
 
                 // 1) FEATURES
@@ -379,28 +422,30 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (tm.center is null || tm.score < threshold)
                     {
                         Log(log, $"[RESULT] no-hit scoreFeat={feat.score} scoreTM={tm.score} (<{threshold}) causeFeat={feat.failure} causeTM={tm.failure}");
-                        return (null, Math.Max(feat.score, tm.score));
+                        var maxScore = Math.Max(feat.score, tm.score);
+                        var angleDeg = tm.score >= feat.score ? tm.bestAngleDeg : feat.rotDegApprox;
+                        return new LocalMatchResult { Center = null, Score = maxScore, AngleDeg = angleDeg, UsedFeatures = tm.score < feat.score };
                     }
 
                     var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
                     Log(log,
                         FormattableString.Invariant(
                             $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
-                    return (globalTM, tm.score);
+                    return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
                 }
 
                 if (feat.center is null || feat.score < threshold)
                 {
                     var reason = feat.failure ?? (feat.center is null ? "sin coincidencias" : $"score={feat.score}");
                     Log(log, $"[RESULT] no-hit score={feat.score} (<{threshold}) cause={reason}");
-                    return (null, feat.score);
+                    return new LocalMatchResult { Center = null, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
                 }
 
                 var global = new Point2d(searchRect.X + feat.center.Value.X, searchRect.Y + feat.center.Value.Y);
                 Log(log,
                     FormattableString.Invariant(
                         $"[RESULT] HIT (FEATURES) center=({global.X:F1},{global.Y:F1}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount, 1)}"));
-                return (global, feat.score);
+                return new LocalMatchResult { Center = global, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
             }
             finally
             {

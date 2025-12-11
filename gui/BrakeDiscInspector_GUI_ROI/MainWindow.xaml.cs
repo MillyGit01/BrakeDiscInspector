@@ -10727,7 +10727,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 Cv2.ImWrite(grayPath, gray);
 
                 using var claheMat = new Mat();
-                using (var clahe = Cv2.CreateCLAHE(2.0, new Size(8, 8)))
+                using (var clahe = Cv2.CreateCLAHE(2.0, new OpenCvSharp.Size(8, 8)))
                 {
                     clahe.Apply(gray, claheMat);
                 }

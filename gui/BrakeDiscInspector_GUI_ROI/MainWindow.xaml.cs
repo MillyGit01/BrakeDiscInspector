@@ -10683,9 +10683,63 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[master] Guardando patrón M{masterIndex} en '{outPath}'");
                 ObsoleteFileHelper.MoveExistingFilesToObsolete(dir, fileNameBase + "*.png");
                 Cv2.ImWrite(outPath, cropWithAlpha);
+                SaveMasterDebugImages(outPath, cropWithAlpha);
                 AppendLog($"[master] Guardado {fileName} ROI=({cropInfo.Left:0.#},{cropInfo.Top:0.#},{cropInfo.Width:0.#},{cropInfo.Height:0.#}) " +
                           $"crop=({cropRect.X},{cropRect.Y},{cropRect.Width},{cropRect.Height}) ang={roi.AngleDeg:0.##}");
                 return outPath;
+            }
+        }
+
+        private void SaveMasterDebugImages(string masterPatternPath, Mat patternMat)
+        {
+            try
+            {
+                var masterDir = Path.GetDirectoryName(masterPatternPath);
+                if (string.IsNullOrEmpty(masterDir))
+                    return;
+
+                var processedDir = Path.Combine(masterDir, "Processed");
+                Directory.CreateDirectory(processedDir);
+
+                var baseName = Path.GetFileNameWithoutExtension(masterPatternPath);
+                var originalPath = Path.Combine(processedDir, baseName + "_original.png");
+                var grayPath = Path.Combine(processedDir, baseName + "_gray.png");
+                var clahePath = Path.Combine(processedDir, baseName + "_clahe.png");
+                var edgesPath = Path.Combine(processedDir, baseName + "_edges.png");
+
+                Cv2.ImWrite(originalPath, patternMat);
+
+                using var gray = new Mat();
+                int channels = patternMat.Channels();
+                if (channels == 1)
+                {
+                    patternMat.CopyTo(gray);
+                }
+                else if (channels == 4)
+                {
+                    Cv2.CvtColor(patternMat, gray, ColorConversionCodes.BGRA2GRAY);
+                }
+                else
+                {
+                    Cv2.CvtColor(patternMat, gray, ColorConversionCodes.BGR2GRAY);
+                }
+
+                Cv2.ImWrite(grayPath, gray);
+
+                using var claheMat = new Mat();
+                using (var clahe = Cv2.CreateCLAHE(2.0, new Size(8, 8)))
+                {
+                    clahe.Apply(gray, claheMat);
+                }
+                Cv2.ImWrite(clahePath, claheMat);
+
+                using var edges = new Mat();
+                Cv2.Canny(gray, edges, 50, 150);
+                Cv2.ImWrite(edgesPath, edges);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[master] Failed to save processed images for '{masterPatternPath}': {ex.Message}");
             }
         }
 

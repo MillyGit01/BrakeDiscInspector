@@ -143,6 +143,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 Log(log, $"[FEATURE] CLAHE patrón -> kps={patKp.Length}");
             }
 
+            Log(log, $"[FEATURE] kps(img,pat)=({imgKp.Length},{patKp.Length})");
+
+            if (imgKp.Length < 8 || patKp.Length < 8)
+            {
+                Log(log, $"[FEATURE] abort: insufficient keypoints img={imgKp.Length} pat={patKp.Length}");
+                return (null, 0, "insufficient-keypoints", imgKp.Length, patKp.Length, 0, 0, 0.0);
+            }
+
             using var imgDesc = new Mat();
             using var patDesc = new Mat();
             orb.Compute(imageGray, ref imgKp, imgDesc);
@@ -167,12 +175,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 good = cand; usedRatio = r;
             }
 
-            Log(log, $"[FEATURE] kps(pattern,img)=({patKp.Length},{imgKp.Length}) good={good.Length} ratio={usedRatio:F2}");
-
+            Log(log, $"[FEATURE] good-matches={good.Length}");
             if (good.Length < 8)
             {
-                return (null, 0, "pocos good matches", imgKp.Length, patKp.Length, good.Length, 0, 256);
+                Log(log, $"[FEATURE] abort: too-few-good-matches={good.Length}");
+                return (null, 0, "too-few-good-matches", imgKp.Length, patKp.Length, good.Length, 0, 0.0);
             }
+
+            Log(log, $"[FEATURE] kps(pattern,img)=({patKp.Length},{imgKp.Length}) good={good.Length} ratio={usedRatio:F2}");
 
             var srcPts = good.Select(m => patKp[m.QueryIdx].Pt).ToArray();
             var dstPts = good.Select(m => imgKp[m.TrainIdx].Pt).ToArray();
@@ -183,8 +193,8 @@ namespace BrakeDiscInspector_GUI_ROI
             using var H = Cv2.FindHomography(srcMat, dstMat, HomographyMethods.Ransac, 3.0, mask);
             if (H.Empty())
             {
-                Log(log, "[FEATURE] homografía vacía");
-                return (null, 0, "homografía vacía", imgKp.Length, patKp.Length, good.Length, 0, 256);
+                Log(log, "[FEATURE] abort: homography-empty");
+                return (null, 0, "homography-empty", imgKp.Length, patKp.Length, good.Length, 0, 0.0);
             }
 
             int inliers = Cv2.CountNonZero(mask);
@@ -192,6 +202,18 @@ namespace BrakeDiscInspector_GUI_ROI
             int scoreInliers = ToScore((double)inliers / Math.Max(good.Length, 1));
             int scoreDistance = ToScore(1.0 - Math.Clamp(avgDist / 256.0, 0.0, 1.0));
             int score = (int)Math.Round(0.7 * scoreInliers + 0.3 * scoreDistance);
+
+            double rotDegApprox = 0.0;
+            try
+            {
+                double a = H.Get<double>(0, 0);
+                double b = H.Get<double>(0, 1);
+                rotDegApprox = Math.Atan2(b, a) * 180.0 / Math.PI;
+            }
+            catch
+            {
+                // ignore
+            }
 
             var rect = new[]
             {
@@ -208,7 +230,9 @@ namespace BrakeDiscInspector_GUI_ROI
             double cx = transformed.Average(p => p.X);
             double cy = transformed.Average(p => p.Y);
 
-            Log(log, $"[FEATURE] inliers={inliers}/{good.Length} avgDist={avgDist:F1} score={score}");
+            Log(log,
+                $"[FEATURE] inliers={inliers}/{good.Length} " +
+                $"avgDist={avgDist:F1} score={score} rot≈{rotDegApprox:F1}deg");
             return (new Point2d(cx, cy), score, null, imgKp.Length, patKp.Length, good.Length, inliers, avgDist);
         }
 
@@ -305,6 +329,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 var mode = (feature ?? "").Trim().ToLowerInvariant();
 
+                Log(log,
+                    $"[MATCH] mode={mode} thr={threshold} " +
+                    $"searchRect=({searchRect.X},{searchRect.Y},{searchRect.Width},{searchRect.Height}) " +
+                    $"patternRect=({patternRect.X},{patternRect.Y},{patternRect.Width},{patternRect.Height})");
+
                 if (mode == "edges")
                 {
                     using var searchEdges = new Mat();
@@ -313,13 +342,17 @@ namespace BrakeDiscInspector_GUI_ROI
                     Cv2.Canny(searchGray, searchEdges, 50, 150);
                     Cv2.Canny(patternGray, patternEdges, 50, 150);
 
+                    int nzSearch = Cv2.CountNonZero(searchEdges);
+                    int nzPattern = Cv2.CountNonZero(patternEdges);
+
+                    Log(log, $"[EDGES] nz(search,pattern)=({nzSearch},{nzPattern}) thr={threshold}");
                     Log(log, "[EDGES] using Canny + MatchTemplateRot");
 
                     var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log);
 
                     if (tm.center is null || tm.score < threshold)
                     {
-                        Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) cause={tm.failure}");
+                        Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
                         return (null, tm.score);
                     }
 
@@ -327,9 +360,9 @@ namespace BrakeDiscInspector_GUI_ROI
                         searchRect.X + tm.center.Value.X,
                         searchRect.Y + tm.center.Value.Y);
 
-                Log(log,
-                    FormattableString.Invariant(
-                        $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
+                    Log(log,
+                        FormattableString.Invariant(
+                            $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
 
                     return (globalEdges, tm.score);
                 }

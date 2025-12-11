@@ -5320,44 +5320,46 @@ namespace BrakeDiscInspector_GUI_ROI
                                 m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
                             }
 
-                        var res1 = LocalMatcher.MatchInSearchROI(
+                        var analyze = _layout.Analyze ?? new AnalyzeOptions();
+
+                        var res1 = LocalMatcher.MatchInSearchROIWithDetails(
                             img,
                             _layout.Master1Pattern,
                             _layout.Master1Search,
-                            _preset.Feature,
-                            _preset.MatchThr,
-                            _preset.RotRange,
-                            _preset.ScaleMin,
-                            _preset.ScaleMax,
+                            analyze.FeatureM1,
+                            analyze.ThrM1,
+                            analyze.RotRange,
+                            analyze.ScaleMin,
+                            analyze.ScaleMax,
                             m1Override,
                             LogToFileAndUI);
 
-                        if (res1.center.HasValue)
+                        if (res1.Center.HasValue)
                         {
-                            c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y);
-                            s1 = res1.score;
+                            c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
+                            s1 = res1.Score;
                         }
                         else
                         {
                             AppendLog("[batch] local matcher: Master1 not found");
                         }
 
-                            var res2 = LocalMatcher.MatchInSearchROI(
+                            var res2 = LocalMatcher.MatchInSearchROIWithDetails(
                                 img,
                                 _layout.Master2Pattern,
                                 _layout.Master2Search,
-                                _preset.Feature,
-                                _preset.MatchThr,
-                            _preset.RotRange,
-                            _preset.ScaleMin,
-                            _preset.ScaleMax,
-                            m2Override,
-                            LogToFileAndUI);
+                                analyze.FeatureM2,
+                                analyze.ThrM2,
+                                analyze.RotRange,
+                                analyze.ScaleMin,
+                                analyze.ScaleMax,
+                                m2Override,
+                                LogToFileAndUI);
 
-                        if (res2.center.HasValue)
+                        if (res2.Center.HasValue)
                         {
-                            c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y);
-                            s2 = res2.score;
+                            c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
+                            s2 = res2.Score;
                         }
                         else
                         {
@@ -9651,6 +9653,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         using var img = Cv.Cv2.ImRead(_currentImagePathWin);
                         Mat? m1Override = null;
                         Mat? m2Override = null;
+                        var analyze = _layout.Analyze ?? new AnalyzeOptions();
                         try
                         {
                             if (_layout.Master1Pattern != null)
@@ -9658,20 +9661,20 @@ namespace BrakeDiscInspector_GUI_ROI
                             if (_layout.Master2Pattern != null)
                                 m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
 
-                            var res1 = LocalMatcher.MatchInSearchROI(img, _layout.Master1Pattern, _layout.Master1Search,
-                                _preset.Feature, _preset.MatchThr, _preset.RotRange, _preset.ScaleMin, _preset.ScaleMax, m1Override,
+                            var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master1Pattern, _layout.Master1Search,
+                                analyze.FeatureM1, analyze.ThrM1, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m1Override,
                                 LogToFileAndUI);
-                            if (res1.center.HasValue) { c1 = new SWPoint(res1.center.Value.X, res1.center.Value.Y); s1 = res1.score; AppendLog($"[LOCAL] M1 hit score={res1.score:0.###}"); }
+                            if (res1.Center.HasValue) { c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y); s1 = res1.Score; AppendLog($"[LOCAL] M1 hit score={res1.Score:0.###}"); }
                             else
                             {
                                 // CODEX: string interpolation compatibility.
                                 AppendLog($"[LOCAL] M1 no encontrado");
                             }
 
-                            var res2 = LocalMatcher.MatchInSearchROI(img, _layout.Master2Pattern, _layout.Master2Search,
-                                _preset.Feature, _preset.MatchThr, _preset.RotRange, _preset.ScaleMin, _preset.ScaleMax, m2Override,
+                            var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master2Pattern, _layout.Master2Search,
+                                analyze.FeatureM2, analyze.ThrM2, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m2Override,
                                 LogToFileAndUI);
-                            if (res2.center.HasValue) { c2 = new SWPoint(res2.center.Value.X, res2.center.Value.Y); s2 = res2.score; AppendLog($"[LOCAL] M2 hit score={res2.score:0.###}"); }
+                            if (res2.Center.HasValue) { c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y); s2 = res2.Score; AppendLog($"[LOCAL] M2 hit score={res2.Score:0.###}"); }
                             else
                             {
                                 // CODEX: string interpolation compatibility.

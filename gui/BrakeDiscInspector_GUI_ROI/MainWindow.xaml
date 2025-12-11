@@ -265,33 +265,71 @@
                 </StackPanel>
               </GroupBox>
 
-              <GroupBox Header="Feature Options" Width="260">
-                <StackPanel Margin="8,4,0,0">
-                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="ComboFeature" Width="110">
-                      <ComboBoxItem Content="auto"/>
-                      <ComboBoxItem Content="sift"/>
-                      <ComboBoxItem Content="orb"/>
-                      <ComboBoxItem Content="tm_rot"/>
-                      <ComboBoxItem Content="edges"/>
-                    </ComboBox>
+              <StackPanel Orientation="Vertical">
+                <GroupBox Header="Master 1 Analyze" Width="260">
+                  <StackPanel Margin="8,4,0,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                      <ComboBox x:Name="ComboFeature" Width="110"
+                                SelectedValuePath="Content"
+                                SelectedValue="{Binding AnalyzeFeatureM1, Mode=TwoWay}">
+                        <ComboBoxItem Content="auto"/>
+                        <ComboBoxItem Content="sift"/>
+                        <ComboBoxItem Content="orb"/>
+                        <ComboBoxItem Content="tm_rot"/>
+                        <ComboBoxItem Content="edges"/>
+                      </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                      <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                      <TextBox x:Name="TxtThr" Width="40"
+                               Margin="4,0,0,0"
+                               Text="{Binding AnalyzeThrM1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
                   </StackPanel>
-                  <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
-                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtThr" Width="60" Margin="4,0,8,0" Text="85"/>
-                    <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
-                    <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtSMin" Width="60" Margin="4,0,8,0" Text="0.95"/>
-                    <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
-                    <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
+                </GroupBox>
+
+                <GroupBox Header="Master 2 Analyze" Width="260">
+                  <StackPanel Margin="8,4,0,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                      <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                      <ComboBox x:Name="ComboFeatureM2" Width="110"
+                                SelectedValuePath="Content"
+                                SelectedValue="{Binding AnalyzeFeatureM2, Mode=TwoWay}">
+                        <ComboBoxItem Content="auto"/>
+                        <ComboBoxItem Content="sift"/>
+                        <ComboBoxItem Content="orb"/>
+                        <ComboBoxItem Content="tm_rot"/>
+                        <ComboBoxItem Content="edges"/>
+                      </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                      <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                      <TextBox x:Name="TxtThrM2" Width="40"
+                               Margin="4,0,0,0"
+                               Text="{Binding AnalyzeThrM2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    </StackPanel>
                   </StackPanel>
-                  <WrapPanel>
-                    <Button x:Name="BtnSavePreset" Content="Save Preset" Click="BtnSavePreset_Click" Margin="0,0,8,0"/>
-                  </WrapPanel>
-                </StackPanel>
-              </GroupBox>
+                </GroupBox>
+
+                <GroupBox Header="Match Options" Width="260">
+                  <StackPanel Margin="8,4,0,0">
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                      <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
+                      <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
+                      <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
+                      <TextBox x:Name="TxtSMin" Width="60" Margin="4,0,8,0" Text="0.95"/>
+                      <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
+                      <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
+                    </StackPanel>
+                    <WrapPanel>
+                      <Button x:Name="BtnSavePreset" Content="Save Preset" Click="BtnSavePreset_Click" Margin="0,0,8,0"/>
+                    </WrapPanel>
+                  </StackPanel>
+                </GroupBox>
+              </StackPanel>
             </StackPanel>
 
             <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">

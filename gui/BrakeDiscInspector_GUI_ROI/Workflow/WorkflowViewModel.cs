@@ -157,6 +157,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Func<string?> _getSourceImagePath;
         private readonly Action<string> _log;
         private readonly Action<string>? _trace;
+        private readonly Action<string>? _showSnackbar;
         private readonly Func<RoiExportResult, byte[], double, Task> _showHeatmapAsync;
         private readonly Action _clearHeatmap;
         private readonly Action<bool?> _updateGlobalBadge;
@@ -342,7 +343,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Func<RoiRole, RoiShape, Task>? createMasterRoiAsync = null,
             Func<RoiRole, Task<bool>>? toggleEditSaveMasterRoiAsync = null,
             Func<RoiRole, Task>? removeMasterRoiAsync = null,
-            Func<bool>? canEditMasterRoi = null)
+            Func<bool>? canEditMasterRoi = null,
+            Action<string>? showSnackbar = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -350,6 +352,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _getSourceImagePath = getSourceImagePath ?? throw new ArgumentNullException(nameof(getSourceImagePath));
             _log = log ?? (_ => { });
             _trace = log;
+            _showSnackbar = showSnackbar;
             _showHeatmapAsync = showHeatmapAsync ?? throw new ArgumentNullException(nameof(showHeatmapAsync));
             _clearHeatmap = clearHeatmap ?? throw new ArgumentNullException(nameof(clearHeatmap));
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
@@ -772,8 +775,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var distO = Math.Sqrt(dxO * dxO + dyO * dyO);
             var distN = Math.Sqrt(dxN * dxN + dyN * dyN);
-            _ = (distO > 1e-6) ? distN / distO : 1.0; // measured scale (ignored to keep ROI radii fixed)
-            const double scale = 1.0;
+            var scale = (distO > 1e-6) ? distN / distO : 1.0;
 
             var angO = Math.Atan2(dyO, dxO);
             var angN = Math.Atan2(dyN, dxN);
@@ -1966,6 +1968,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
         }
 
+        private static RoiModel BuildBaselineModel(RoiModel roi, RoiBaseline baseline)
+        {
+            var baselineModel = roi.Clone();
+            baselineModel.Width = baseline.BaseRect.Width;
+            baselineModel.Height = baseline.BaseRect.Height;
+            baselineModel.Left = baseline.BaseRect.Left;
+            baselineModel.Top = baseline.BaseRect.Top;
+            baselineModel.X = baseline.Center.X;
+            baselineModel.Y = baseline.Center.Y;
+            baselineModel.CX = baseline.Center.X;
+            baselineModel.CY = baseline.Center.Y;
+            baselineModel.R = baseline.R;
+            baselineModel.RInner = baseline.Rin;
+            baselineModel.AngleDeg = baseline.AngleDeg;
+            return baselineModel;
+        }
+
         private void ApplyTransformedRectToRoi(RoiModel roi, RoiBaseline baseline, Rect tRect, double scale, double rot)
         {
             double width = Math.Max(1.0, baseline.BaseRect.Width * scale);
@@ -2126,9 +2145,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            if (!TryComputeBatchXform(out var xf, out var anchorsOk))
+            if (!TryBuildAnchorContext(out var anchorContext, logError: false, logSummary: false))
             {
-                GuiLog.Warn($"[batch-ui] place skipped: xform missing step={_batchStepId} file='{imgName}' reason={reason}");
+                GuiLog.Warn($"[batch-ui] place skipped: anchors unavailable step={_batchStepId} file='{imgName}' reason={reason}");
                 return;
             }
 
@@ -2141,26 +2160,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (_inspectionRois != null)
             {
-                foreach (var rcfg in _inspectionRois)
-                {
-                    var roi = GetInspectionModelByIndex(rcfg.Index);
-                    if (roi == null)
-                    {
-                        continue;
-                    }
-
-                    var baseline = EnsureBaselineForRoi(rcfg, roi, "place");
-                    var tRect = ApplyXformToRect(baseline.BaseRect, xf);
-
-                    ApplyTransformedRectToRoi(roi, baseline, tRect, xf.s, xf.rot);
-
-                    TraceBatch(FormattableString.Invariant(
-                        $"[batch-roi] step={BatchStepId} file='{_currentBatchFile ?? "<none>"}' roiIndex={rcfg.Index} base=(cx={baseline.Center.X:0.###},cy={baseline.Center.Y:0.###},r={baseline.R:0.###},rin={baseline.Rin:0.###}) aligned=(cx={roi.CX:0.###},cy={roi.CY:0.###},r={roi.R:0.###}) angΔ={xf.rot:0.###} d=(dx={xf.dx:0.##},dy={xf.dy:0.##})"));
-
-                    FormattableString placeMessage =
-                        $"[place] idx={rcfg.Index} roi='{baseline.RoiId}' from={RectToStr(baseline.BaseRect)} -> dst={RectToStr(tRect)} s={xf.s:0.000} rot={xf.rot:0.00} dx={xf.dx:0.0} dy={xf.dy:0.0} anchorsOk={anchorsOk} reason={reason}";
-                    GuiLog.Info(placeMessage);
-                }
+                RepositionInspectionRois(anchorContext);
 
                 if (_inspectionRois.Count >= 2)
                 {
@@ -2170,8 +2170,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     {
                         var r1Img = EnsureBaselineForRoi(GetInspectionConfigByIndex(1), first, "guard").BaseRect;
                         var r2Img = EnsureBaselineForRoi(GetInspectionConfigByIndex(2), second, "guard").BaseRect;
-                        var r1Cv = ApplyXformToRect(r1Img, xf);
-                        var r2Cv = ApplyXformToRect(r2Img, xf);
+                        var r1Cv = BuildRoiRect(first);
+                        var r2Cv = BuildRoiRect(second);
                         if (NearlyEqualRects(r1Img, r2Img) || NearlyEqualRects(r1Cv, r2Cv))
                         {
                             GuiLog.Warn($"[batch-ui] guard: idx=2 would share RECTimg/canvas with idx=1; reason={reason} step={_batchStepId} file='{imgName}'");
@@ -2389,13 +2389,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var config = FindInspectionConfigForRoi(source);
             var baseline = EnsureBaselineForRoi(config, source, "export");
 
-            if (!TryComputeBatchXform(out var xf, out _))
+            if (!TryBuildAnchorContext(out var anchorContext, logError: false, logSummary: false))
             {
                 return clone;
             }
 
-            var tRect = ApplyXformToRect(baseline.BaseRect, xf);
-            ApplyTransformedRectToRoi(clone, baseline, tRect, xf.s, xf.rot);
+            var baselineModel = BuildBaselineModel(clone, baseline);
+            var anchor = config?.AnchorMaster ?? MasterAnchorChoice.Master1;
+            InspectionAlignmentHelper.MoveInspectionTo(clone, baselineModel, anchor, anchorContext, _trace);
             return clone;
         }
 
@@ -5317,6 +5318,63 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
         }
 
+        private bool TryBuildAnchorContext(out AnchorTransformContext context, bool logError, bool logSummary = true)
+        {
+            context = default;
+
+            if (_layoutOriginal?.Master1Pattern == null || _layoutOriginal.Master2Pattern == null)
+            {
+                return false;
+            }
+
+            if (_m1Detection == null || _m2Detection == null || !_m1Detection.IsOk || !_m2Detection.IsOk || !_batchAnchorsOk)
+            {
+                _trace?.Invoke("[anchors] ERROR: masters not detected or score below threshold. No ROI repositioned.");
+                if (logError)
+                {
+                    ShowSnackbar("Master anchors not detected. ROIs not repositioned.");
+                }
+
+                return false;
+            }
+
+            var (m1bx, m1by) = _layoutOriginal.Master1Pattern.GetCenter();
+            var (m2bx, m2by) = _layoutOriginal.Master2Pattern.GetCenter();
+            var m1BaselineCenter = new Point2d(m1bx, m1by);
+            var m2BaselineCenter = new Point2d(m2bx, m2by);
+
+            var m1DetectedCenter = _m1Detection.Center!.Value;
+            var m2DetectedCenter = _m2Detection.Center!.Value;
+
+            var vBase = new Point2d(m2BaselineCenter.X - m1BaselineCenter.X, m2BaselineCenter.Y - m1BaselineCenter.Y);
+            var vCurr = new Point2d(m2DetectedCenter.X - m1DetectedCenter.X, m2DetectedCenter.Y - m1DetectedCenter.Y);
+
+            var scale = vCurr.Length / Math.Max(vBase.Length, 1e-3);
+
+            var angBase = Math.Atan2(vBase.Y, vBase.X);
+            var angCurr = Math.Atan2(vCurr.Y, vCurr.X);
+            var angleDeltaGlobal = angCurr - angBase;
+
+            if (logSummary)
+            {
+                _trace?.Invoke(FormattableString.Invariant($"[ANCHORS] scale={scale:F3} angleDeltaGlobal={angleDeltaGlobal * 180.0 / Math.PI:F1}deg"));
+            }
+
+            context = new AnchorTransformContext(
+                m1BaselineCenter,
+                m2BaselineCenter,
+                m1DetectedCenter,
+                m2DetectedCenter,
+                _layoutOriginal.Master1Pattern.AngleDeg,
+                _layoutOriginal.Master2Pattern.AngleDeg,
+                _m1Detection.AngleDeg,
+                _m2Detection.AngleDeg,
+                scale,
+                angleDeltaGlobal);
+
+            return true;
+        }
+
         private Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(imagePath))
@@ -5325,6 +5383,27 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return RepositionInspectionRoisForImageCoreAsync(imagePath, ct);
+        }
+
+        private void RepositionInspectionRois(AnchorTransformContext anchorContext)
+        {
+            if (_inspectionRois == null)
+            {
+                return;
+            }
+
+            foreach (var rcfg in _inspectionRois)
+            {
+                var roi = GetInspectionModelByIndex(rcfg.Index);
+                if (roi == null)
+                {
+                    continue;
+                }
+
+                var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
+                var baselineModel = BuildBaselineModel(roi, baseline);
+                InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, rcfg.AnchorMaster, anchorContext, _trace);
+            }
         }
 
         private async Task RepositionInspectionRoisForImageCoreAsync(string imagePath, CancellationToken ct)
@@ -5579,6 +5658,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (_layoutOriginal != null)
                 {
                     await _repositionInspectionRoisAsync(imagePath, ct, skipIfAnchorsReady: true).ConfigureAwait(false);
+                    if (!TryBuildAnchorContext(out var anchorContext, logError: true))
+                    {
+                        TraceBatch("[batch-repos] skip: anchors unavailable for reposition");
+                        return;
+                    }
+
+                    RepositionInspectionRois(anchorContext);
                     TraceBatch(FormattableString.Invariant($"[batch-repos] reposition layout DONE stepId={stepId}"));
                 }
                 else if (_repositionInspectionRoisAsyncExternal != null)
@@ -6282,6 +6368,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 dispatcher.Invoke(action);
             }
+        }
+
+        private void ShowSnackbar(string message)
+        {
+            if (_showSnackbar == null)
+            {
+                return;
+            }
+
+            InvokeOnUi(() => _showSnackbar?.Invoke(message));
         }
 
         private void UpdateInferenceSummary()

@@ -3334,7 +3334,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     CreateMasterRoiFromWorkflowAsync,
                     ToggleEditSaveMasterRoiFromWorkflowAsync,
                     RemoveMasterRoiFromWorkflowAsync,
-                    CanEditMasterRoiFromWorkflow);
+                    CanEditMasterRoiFromWorkflow,
+                    Snack);
 
                 _workflowViewModel.SetLayoutName(GetCurrentLayoutName());
 
@@ -6204,7 +6205,6 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             DrawCross(c1Canvas.X, c1Canvas.Y, 20, Brushes.LimeGreen, 2);
             DrawCross(c2Canvas.X, c2Canvas.Y, 20, Brushes.Orange, 2);
-            DrawCross(midCanvas.X, midCanvas.Y, 24, Brushes.Red, 2);
         }
 
         private SWPoint ImageToCanvasPoint(SWPoint imagePoint)

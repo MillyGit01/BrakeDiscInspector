@@ -3212,7 +3212,10 @@ namespace BrakeDiscInspector_GUI_ROI
         private void SyncRecipeIdWithLayout(string layoutName)
         {
             var effective = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
-            _backendClient?.RecipeId = effective;
+            if (_backendClient != null)
+            {
+                _backendClient.RecipeId = effective;
+            }
             BackendAPI.SetRecipeId(effective);
         }
 

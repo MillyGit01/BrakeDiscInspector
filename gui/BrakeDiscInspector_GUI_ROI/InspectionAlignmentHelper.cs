@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Util;
@@ -84,14 +85,30 @@ internal static class InspectionAlignmentHelper
             heightScaled);
 
         LogAlign(trace,
-            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} anchor_master={(int)anchor} " +
-            $"pivot_base=({pivotBaseline.X:0.###},{pivotBaseline.Y:0.###}) pivot_det=({pivotCurrent.X:0.###},{pivotCurrent.Y:0.###})");
+            FormattableStringFactory.Create(
+                "[ROI] roi={0} anchor_master={1} pivot_base=({2:0.###},{3:0.###}) pivot_det=({4:0.###},{5:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                (int)anchor,
+                pivotBaseline.X,
+                pivotBaseline.Y,
+                pivotCurrent.X,
+                pivotCurrent.Y));
         LogAlign(trace,
-            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} roi_base_center=({baseCx:0.###},{baseCy:0.###}) " +
-            $"v_base=({vBase.X:0.###},{vBase.Y:0.###})");
+            FormattableStringFactory.Create(
+                "[ROI] roi={0} roi_base_center=({1:0.###},{2:0.###}) v_base=({3:0.###},{4:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                baseCx,
+                baseCy,
+                vBase.X,
+                vBase.Y));
         LogAlign(trace,
-            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} applied rot_deg={angleEffective * 180.0 / Math.PI:0.###} " +
-            $"scale={scaleEffective:0.####} tx={tx:0.###} ty={ty:0.###}");
+            FormattableStringFactory.Create(
+                "[ROI] roi={0} applied rot_deg={1:0.###} scale={2:0.####} tx={3:0.###} ty={4:0.###}",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                angleEffective * 180.0 / Math.PI,
+                scaleEffective,
+                tx,
+                ty));
 
         switch (baselineInspection.Shape)
         {
@@ -133,8 +150,16 @@ internal static class InspectionAlignmentHelper
         }
 
         LogAlign(trace,
-            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} roi_new_center=({roiNewCenter.X:0.###},{roiNewCenter.Y:0.###}) " +
-            $"roi_new_angle={roiNewAngleDeg:0.###} roi_new_rect=({finalRect.Left:0.###},{finalRect.Top:0.###},{finalRect.Right:0.###},{finalRect.Bottom:0.###})");
+            FormattableStringFactory.Create(
+                "[ROI] roi={0} roi_new_center=({1:0.###},{2:0.###}) roi_new_angle={3:0.###} roi_new_rect=({4:0.###},{5:0.###},{6:0.###},{7:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                roiNewCenter.X,
+                roiNewCenter.Y,
+                roiNewAngleDeg,
+                finalRect.Left,
+                finalRect.Top,
+                finalRect.Right,
+                finalRect.Bottom));
     }
 }
 

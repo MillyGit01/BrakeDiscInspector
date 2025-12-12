@@ -5349,7 +5349,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var vBase = new Point2d(m2BaselineCenter.X - m1BaselineCenter.X, m2BaselineCenter.Y - m1BaselineCenter.Y);
             var vCurr = new Point2d(m2DetectedCenter.X - m1DetectedCenter.X, m2DetectedCenter.Y - m1DetectedCenter.Y);
 
-            var scale = vCurr.Length / Math.Max(vBase.Length, 1e-3);
+            static double VectorLength(Point2d p) => Math.Sqrt(p.X * p.X + p.Y * p.Y);
+
+            var scale = VectorLength(vCurr) / Math.Max(VectorLength(vBase), 1e-3);
 
             var angBase = Math.Atan2(vBase.Y, vBase.X);
             var angCurr = Math.Atan2(vCurr.Y, vCurr.X);

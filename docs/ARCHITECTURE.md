@@ -4,9 +4,9 @@ This document summarises how the current codebase is wired: which processes exis
 
 ## Components
 ### WPF front-end (`gui/BrakeDiscInspector_GUI_ROI`)
-- `MainWindow` hosts the ROI canvas, dataset panes and batch grid. It loads `MasterLayout`/`InspectionRoiConfig` records from `Layouts/*.layout.json`, wires `WorkflowViewModel` to XAML commands and forwards log messages to `GuiLog`. Layout names double as recipe identifiers for on-disk folders under `<exe>/Recipes/`.
-- `WorkflowViewModel` coordinates user actions: exporting canonical ROIs (`_exportRoiAsync` delegates to `RoiCropUtils`), calling the backend through `Workflow.BackendClient`, refreshing dataset previews and driving manual/batch inference while keeping the active layout name in sync with `DatasetManager`.
-- `RoiOverlay` plus the `RoiAdorner`/`ResizeAdorner`/`RoiRotateAdorner` family render and edit ROI shapes. `InspectionAlignmentHelper.MoveInspectionTo` is responsible for transforming inspection ROIs based on detected Master 1/2 anchors.
+- `MainWindow` hosts the ROI canvas, dataset panes and batch grid. It loads `MasterLayout`/`InspectionRoiConfig` records from `Layouts/*.layout.json`, wires `WorkflowViewModel` to XAML commands and forwards log messages to `GuiLog`. Layout names double as recipe identifiers for on-disk folders under `<exe>/Recipes/`. The **Clear canvas** command now resets masters, inspection slots, cached baselines and overlays, disables every inspection ROI and reinitialises the wizard state before persisting the empty layout.
+- `WorkflowViewModel` coordinates user actions: exporting canonical ROIs (`_exportRoiAsync` delegates to `RoiCropUtils`), calling the backend through `Workflow.BackendClient`, refreshing dataset previews and driving manual/batch inference while keeping the active layout name in sync with `DatasetManager`. Analyze search options (rotation range, scale min/max, matcher thresholds) are synchronised from the layout back into the preset UI so the search sliders mirror what was persisted with the layout instead of reverting to defaults.
+- `RoiOverlay` plus the `RoiAdorner`/`ResizeAdorner`/`RoiRotateAdorner` family render and edit ROI shapes. `InspectionAlignmentHelper.MoveInspectionTo` transforms each inspection ROI using the detected Master 1/2 centers and the ROI’s configured anchor (`InspectionRoiConfig.AnchorMaster`), applying translation/rotation/scale per ROI instead of a single global transform.
 
 ### Python backend (`backend/`)
 - `app.py` is the FastAPI entry point exposing `GET /health`, `POST /fit_ok`, `POST /calibrate_ng` and `POST /infer`.
@@ -16,13 +16,13 @@ This document summarises how the current codebase is wired: which processes exis
 ## Manual data flow
 1. The operator loads a single image; `WorkflowViewModel.BeginManualInspection` keeps track of the current file.
 2. When **Evaluate** is triggered, `WorkflowViewModel.EvaluateRoiAsync` calls `_exportRoiAsync`, which crops and rotates the ROI (`RoiCropUtils.TryBuildRoiCropInfo` + `TryGetRotatedCrop`) and serialises the ROI mask as JSON.
-3. The resulting PNG bytes, ROI-specific `role_id`/`roi_id` and `mm_per_px` are sent to `BackendClient.InferAsync`, which builds a multipart request for `/infer`.
+3. The resulting PNG bytes, ROI-specific `role_id`/`roi_id` and `mm_per_px` are sent to `BackendClient.InferAsync`, which builds a multipart request for `/infer`. If the memory was not fitted yet, `EnsureFittedAsync` runs `/fit_ok` first using the OK samples already present for that ROI so manual evaluation can proceed without manual retries.
 4. `backend/app.py` loads the requested memory via `ModelStore`, reconstructs the coreset, runs `InferenceEngine.run` and returns `{score, threshold?, token_shape, regions[], heatmap_png_base64?}`.
 5. The GUI updates `Regions`, `InferenceScore` and repaints the overlay through `ShowHeatmapAsync`, which writes the decoded heatmap into the `HeatmapOverlay` image.
 
 ## Batch data flow
 1. The user selects a folder; `WorkflowViewModel.LoadBatchListFromFolder` enumerates every image recursively and creates `BatchRow` entries.
-2. `RunBatchAsync` loops through the snapshot. For each image it calls `RepositionInspectionRoisForImageAsync`, which invokes `InspectionAlignmentHelper` to align the saved inspection ROIs using Master 1/2 baselines.
+2. `RunBatchAsync` loops through the snapshot. For each image it calls `RepositionInspectionRoisForImageAsync`, which invokes `InspectionAlignmentHelper` to align the saved inspection ROIs using Master 1/2 baselines. Each inspection slot uses its own anchor selection (`AnchorMaster`), and the transform derives scale/rotation from the vector between the detected master centers; when anchors are missing the ROI is left at its saved position.
 3. For each enabled inspection slot: `ExportRoiFromFileAsync` crops the ROI from the batch image, `BackendClient.EnsureFittedAsync` ensures `/fit_ok` was run at least once, and `/infer` is executed. `BatchCellStatus` is set to `Ok` or `Nok` based on the returned score vs. the calibrated threshold.
 4. Batch heatmaps share the same overlay control; `SetBatchHeatmapForRoi` and `UpdateBatchHeatmapIndex` keep manual and batch canvases aligned while logging placement metadata.
 
@@ -32,7 +32,7 @@ This document summarises how the current codebase is wired: which processes exis
 - Batch results can be exported through whatever pipeline consumes the GUI logs; no intermediate CSV is written by the code.
 
 ## Configuration and contracts
-- GUI: `AppConfig` merges `config/appsettings.json`, `appsettings.json` and environment variables (`BDI_BACKEND_BASEURL`, `BDI_ANALYZE_*`, `BDI_HEATMAP_OPACITY`). Dataset roots are derived from the active layout name, not from `BDI_DATASET_ROOT`.
+- GUI: `AppConfig` merges `config/appsettings.json`, `appsettings.json` and environment variables (`BDI_BACKEND_BASEURL`, `BDI_ANALYZE_*`, `BDI_HEATMAP_OPACITY`). Dataset roots are derived from the active layout name, not from `BDI_DATASET_ROOT`. Every backend call carries `role_id`, `roi_id`, `mm_per_px` and the ROI mask (`shape` JSON) so backend regions/heatmaps line up with the GUI overlay without extra transforms.
 - Backend: `_env_var` in `app.py` plus `backend/config.py` read the `BDI_*` environment variables. No API keys, manifests or `/metrics` routes are implemented in the checked-in code.
 
 ## Logging overview

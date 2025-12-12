@@ -27,7 +27,7 @@ There is no API-key enforcement or TLS termination inside the app; use a reverse
 ## GUI configuration
 - The executable reads `config/appsettings.json` first, then `appsettings.json`, then environment overrides (see `AppConfigLoader`).
 - Dataset root is derived from the current layout name and always expands to `<exe>/Recipes/<LayoutName or DefaultLayout>/`; `BDI_DATASET_ROOT` is parsed by `AppConfig` but not used by the current recipe pipeline.
-- The GUI sends HTTP requests asynchronously; no additional services are required.
+- The GUI sends HTTP requests asynchronously; no additional services are required. Each inference/training call includes `role_id`, `roi_id`, `mm_per_px` and the ROI `shape`, so make sure the backend address is reachable from the workstation to keep overlays aligned with backend heatmaps/regions.
 
 ## Verification checklist
 1. Start the backend and run `curl http://<host>:8000/health`.

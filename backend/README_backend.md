@@ -13,4 +13,4 @@ uvicorn backend.app:app --host 0.0.0.0 --port 8000
 Environment variables such as `BDI_MODELS_DIR`, `BDI_CORESET_RATE` and `BDI_BACKEND_HOST` override defaults (see `app.py`/`config.py`).
 
 ## Endpoints
-`/health`, `/fit_ok`, `/calibrate_ng`, `/infer` — payloads and responses exactly match [`docs/API_CONTRACTS.md`](../docs/API_CONTRACTS.md).
+`/health`, `/fit_ok`, `/calibrate_ng`, `/infer` — payloads and responses exactly match [`docs/API_CONTRACTS.md`](../docs/API_CONTRACTS.md). The GUI always supplies `role_id`, `roi_id`, `mm_per_px` and the ROI `shape` mask so `roi_mask.py` can apply the same crop geometry used on the WPF side.

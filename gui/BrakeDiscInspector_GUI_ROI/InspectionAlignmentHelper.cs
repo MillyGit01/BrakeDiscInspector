@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Util;
 using OpenCvSharp;
 

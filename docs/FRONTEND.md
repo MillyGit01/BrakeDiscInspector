@@ -16,7 +16,8 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
 - **Shapes:** `RoiModel` supports `Rectangle`, `Circle` and `Annulus`. Each ROI tracks both geometric data (center, radii, angle) and frozen state.
 - **Overlay/adorner:** `RoiOverlay` renders active shapes; `RoiAdorner`/`ResizeAdorner`/`RoiRotateAdorner` manipulate them. The adorner code is shared between manual and batch canvases and must stay untouched per `agents.md`.
 - **Master layouts:** `MasterLayoutManager` reads/writes `Layouts/*.layout.json`. `MasterLayout` includes Master 1/2 pattern/search ROIs, inspection baselines and UI/analyse options. When loading a layout, `MainWindow` calls `EnsureInspectionDatasetStructure`, which assigns `Inspection_<n>` directories under the recipe’s `Dataset` folder to each slot.
-- **Alignment:** `InspectionAlignmentHelper.MoveInspectionTo` applies translation/rotation/scale from the saved Master anchors (`Master1Pattern`/`Master2Pattern`) to the currently detected anchors before batch inspection. If the transform fails the ROI falls back to the midpoint between the anchors.
+- **Alignment:** `InspectionAlignmentHelper.MoveInspectionTo` applies translation/rotation/scale from the saved Master anchors (`Master1Pattern`/`Master2Pattern`) to the currently detected anchors before batch inspection. Every inspection slot stores its preferred anchor in `InspectionRoiConfig.AnchorMaster`, and the transform derives scale and rotation from the vector between the detected master centers. If anchors are missing the ROI keeps its saved position; inner/outer radii stay clamped when annulus shapes are scaled.
+- **Canvas reset:** The **Clear canvas** button now clears adorners/overlays, removes persisted inspection ROIs from the canvas, empties cached inspection baselines and disables every inspection slot inside the current `MasterLayout` before reinitialising the wizard in `MainWindow`. Use it to avoid mixing new masters with stale inspection geometry.
 
 ## Dataset layout
 - Root per layout: `RecipePathHelper` creates `<AppContext.BaseDirectory>/Recipes/<LayoutName or DefaultLayout>/` with `Dataset/`, `Model/` and `Master/` subfolders. `WorkflowViewModel.SetLayoutName` propagates the layout name to `DatasetManager` so every command reads/writes inside that recipe tree.
@@ -29,6 +30,7 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
 ## Manual vs batch inspection
 ### Manual
 1. Load an image through the toolbar. `WorkflowViewModel.BeginManualInspection` remembers the path.
+   Analyze search sliders for rotation/scale are populated from the layout’s persisted `AnalyzeOptions` via `SyncPresetUiFromLayoutAnalyzeOptions`, so reloading a layout reuses the tuned search window instead of resetting to defaults.
 2. Select an inspection ROI; the canvas shows adorners so it can be edited/frozen.
 3. Click **Evaluate** (or **Evaluate all enabled ROIs**). `EvaluateRoiAsync` exports the canonical ROI via `_exportRoiAsync`, builds `InferRequest` with `RoleId`, `RoiId`, `MmPerPx` and `ShapeJson`, calls `BackendClient.InferAsync` (multipart POST to `/infer`), then updates `Regions`, `InferenceScore` and the heatmap overlay.
 4. `BackendMemoryNotFittedException` triggers an automatic `/fit_ok` using the OK samples already present under that ROI’s dataset path, so the UI can recover without manual intervention.
@@ -45,7 +47,7 @@ The GUI only calls the four routes implemented in `backend/app.py`. Every reques
 - `roi_id`: inspection slot key (default `inspection-<n>`).
 - `mm_per_px`: resolved from `Preset` or the override UI field.
 - `shape`: JSON string describing the ROI in canonical coordinates (rectangles use `{kind:"rect", x, y, w, h}`, circles `{kind:"circle", cx, cy, r}`, annulus `{kind:"annulus", cx, cy, r, r_inner}`).
-`BackendClient` serialises these fields into multipart (`/fit_ok`, `/infer`) or JSON (`/calibrate_ng`) using `HttpClient`.
+`BackendClient` serialises these fields into multipart (`/fit_ok`, `/infer`) or JSON (`/calibrate_ng`) using `HttpClient`. Batch mode builds a separate payload per enabled inspection ROI, honouring each slot’s anchor-based transform, and always sends the mask so backend heatmaps/regions align with the GUI overlay.
 
 ## Error handling
 - All HTTP calls run on background threads (`AsyncCommand`, `await`). Failure paths call `ShowMessageAsync` and clear heatmap/region state via `ResetAfterFailureAsync`.

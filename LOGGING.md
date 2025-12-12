@@ -13,6 +13,8 @@ The repository already contains concrete logging utilities. This page summarises
 - Usage tips:
   - Search for `[eval]`, `[batch]`, `[dataset]` prefixes when investigating inference/batch/dataset flows.
   - Heatmap alignment issues always write a `[heatmap:tag] ...` line into `gui_heatmap.log` before showing the overlay.
+  - Anchor transforms during batch repositioning emit `[ANCHORS] scale=... angleDeltaGlobal=...` from `WorkflowViewModel`; use them to confirm Master1/Master2 detections before aligning inspection ROIs.
+  - The **Clear canvas** action logs `[align] Reset solicitado...` / `[align] Reset completado...` around the full wipe of masters and inspection slots, which helps verify the layout was intentionally reset.
 
 ## Backend logs (`backend/app.py`)
 - Implemented through the helper `slog(event, **kw)` which simply prints `json.dumps` to stdout/stderr.

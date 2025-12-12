@@ -7,6 +7,8 @@ This checklist is derived from the current GUI/Backend code.
 - **Dataset path rejected:** dataset panels read from the active recipe (`Recipes/<LayoutName>/Dataset/`). If folders were deleted manually, `RefreshDatasetCommand` will show `Select a dataset`; recreate `Inspection_<n>/ok` and `Inspection_<n>/ng` under the recipe or reload the layout to let `EnsureInspectionDatasetStructure` rebuild them.
 - **Cannot add sample:** `AddRoiToDatasetAsync` logs `AddToDataset aborted: ...`. Usually no image is loaded (`_getSourceImagePath()` null) or the ROI is not frozen; fix the ROI, re-export and retry.
 - **Heatmap missing or misaligned:** check `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` for the `[heatmap:tag]` entry. If `Transform Img→Canvas` shows `sx=0`, wait for the canvas to finish measuring (resize window or trigger a redraw). Batch mode also waits for `_batchAnchorReadyForStep`; ensure Master ROIs are visible.
+- **ROIs not moving during batch:** `RepositionInspectionRoisForImageAsync` now skips repositioning when Master anchors are missing or below threshold. Inspect `%LocalAppData%/BrakeDiscInspector/logs/roi_analyze_master.log` and `[ANCHORS] scale=` lines in `gui.log` to confirm detections, and verify each `InspectionRoiConfig.AnchorMaster` matches the intended anchor.
+- **Stale geometry after changing masters:** use **Clear canvas** to wipe masters, inspection slots and cached baselines. The command logs `[align] Reset solicitado/completado` and reinitialises the layout so new anchors do not inherit previous inspection ROIs.
 
 ## Backend-side issues
 - **`400` with "Memoria no encontrada":** `/infer` could not load `<role>__<roi>.npz`. Run `/fit_ok` again via the GUI or copy the expected file into `BDI_MODELS_DIR`.

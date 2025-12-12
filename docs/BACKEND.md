@@ -42,7 +42,7 @@ File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_
   - Uses `choose_threshold`, writes the result via `ModelStore.save_calib` and returns `{threshold, ok_mean, ng_mean?, p99_ok?, p5_ng?, mm_per_px, area_mm2_thr, score_percentile}`.
 - `POST /infer`:
   - Multipart form with `role_id`, `roi_id`, `mm_per_px`, single `image`, optional `shape` JSON string. The server decodes the image with OpenCV, verifies the token grid matches the stored memory, reconstructs the coreset (optionally loading FAISS) and runs `InferenceEngine.run`.
-  - Response: `{score, threshold?, token_shape, heatmap_png_base64?, regions[]}`. `heatmap_png_base64` is the grayscale PNG produced by encoding `heatmap_u8`.
+  - Response: `{score, threshold?, token_shape, heatmap_png_base64?, regions[]}`. `heatmap_png_base64` is the grayscale PNG produced by encoding `heatmap_u8`. The GUI always sends the ROI mask (`shape`) and `mm_per_px`, so `roi_mask.py` uses the exact crop geometry while `infer` converts `area_px` to `area_mm2` for the returned regions.
   - Errors: `400` for missing memory or token mismatch (message in the `error` field); `500` responses include `{error, trace}`.
 
 ## Logging

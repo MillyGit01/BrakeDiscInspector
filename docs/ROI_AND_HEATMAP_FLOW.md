@@ -21,8 +21,8 @@ Values are expressed in pixels of the *canonical crop* (after rotation). Backend
 
 ## 3. Master anchors and inspection alignment
 - `MasterLayout` keeps baseline ROIs for Master 1/2 (`Master1Pattern`, `Master1Search`, etc.) and the inspection slots (`Inspection1..4` plus `InspectionBaselinesByImage`).
-- During batch analysis `RepositionInspectionRoisForImageAsync` passes the saved baselines and the detected Master anchor positions into `InspectionAlignmentHelper.MoveInspectionTo`. The helper computes the vector from Master1→Master2 in both baseline and current images, extracts scale and rotation deltas, and applies them to each inspection ROI.
-- If both anchors are not available, the ROI falls back to the midpoint between the anchors with scale=1.0 and original angle (`fallback` flag inside `ApplyShapeTransform`).
+- During batch analysis `RepositionInspectionRoisForImageAsync` passes the saved baselines and the detected Master anchor positions into `InspectionAlignmentHelper.MoveInspectionTo`. The helper computes the vector from Master1→Master2 in both baseline and current images, extracts scale and rotation deltas, and applies them to each inspection ROI according to its `AnchorMaster` preference (per-slot anchor selection).
+- If anchors are missing or below threshold no repositioning occurs (ROI stays at its saved position) instead of applying a midpoint fallback. Scale now relies on explicit vector length math (no `Point2d.Length` dependency) to keep anchor transforms stable on older .NET builds.
 - Annulus and circle radii are scaled with the same factor; inner radii are clamped so they remain smaller than the outer radius.
 
 ## 4. Manual overlays

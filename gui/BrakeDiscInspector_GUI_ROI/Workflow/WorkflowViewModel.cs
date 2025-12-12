@@ -1637,10 +1637,51 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Inspection4 = inspection4;
         }
 
+        private void LogLayoutAlignmentSnapshot(MasterLayout layout)
+        {
+            var m1Center = layout.Master1Pattern?.GetCenter() ?? (double.NaN, double.NaN);
+            var m2Center = layout.Master2Pattern?.GetCenter() ?? (double.NaN, double.NaN);
+            var m1Angle = layout.Master1Pattern?.AngleDeg ?? double.NaN;
+            var m2Angle = layout.Master2Pattern?.AngleDeg ?? double.NaN;
+
+            LogAlign(FormattableString.Invariant(
+                $"[LAYOUT] M1_base=({m1Center.Item1:0.###},{m1Center.Item2:0.###}) M2_base=({m2Center.Item1:0.###},{m2Center.Item2:0.###}) " +
+                $"m1_base_angle={m1Angle:0.###} m2_base_angle={m2Angle:0.###}"));
+
+            if (layout.InspectionRois == null)
+            {
+                return;
+            }
+
+            foreach (var cfg in layout.InspectionRois.OrderBy(r => r.Index))
+            {
+                var baseline = cfg.Index switch
+                {
+                    1 => layout.Inspection1,
+                    2 => layout.Inspection2,
+                    3 => layout.Inspection3,
+                    4 => layout.Inspection4,
+                    _ => null
+                };
+
+                var center = baseline?.GetCenter() ?? (double.NaN, double.NaN);
+                var angle = baseline?.AngleDeg ?? double.NaN;
+
+                LogAlign(FormattableString.Invariant(
+                    $"[LAYOUT] roi_index={cfg.Index} id={cfg.Id} model_key={cfg.ModelKey} enabled={cfg.Enabled} " +
+                    $"anchor_master={(int)cfg.AnchorMaster} baseline_center=({center.Item1:0.###},{center.Item2:0.###}) baseline_angle={angle:0.###}"));
+            }
+        }
+
         public void SetMasterLayout(MasterLayout? layout)
         {
             _layout = layout;
             _layoutOriginal = layout?.DeepClone();
+
+            if (_layoutOriginal != null)
+            {
+                LogLayoutAlignmentSnapshot(_layoutOriginal);
+            }
 
             if (layout != null)
             {
@@ -5364,7 +5405,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (logSummary)
             {
-                _trace?.Invoke(FormattableString.Invariant($"[ANCHORS] scale={scale:F3} angleDeltaGlobal={angleDeltaGlobal * 180.0 / Math.PI:F1}deg"));
+                var angleDeltaGlobalDeg = angleDeltaGlobal * 180.0 / Math.PI;
+                var rotEffective = disableRot ? 0.0 : angleDeltaGlobal;
+                var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
+                var scaleEffective = scaleLock ? 1.0 : scale;
+
+                LogAlign(FormattableString.Invariant(
+                    $"[MASTERS] M1_det=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) M2_det=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###}) " +
+                    $"angle_delta_global_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####}"));
+
+                var tM1 = InspectionAlignmentHelper.ComputeTranslation(m1BaselineCenter, m1DetectedCenter, rotEffective, scaleEffective);
+                var tM2 = InspectionAlignmentHelper.ComputeTranslation(m2BaselineCenter, m2DetectedCenter, rotEffective, scaleEffective);
+
+                LogAlign(FormattableString.Invariant(
+                    $"[XFORM] anchor_for_translation=M1 tx={tM1.Tx:0.###} ty={tM1.Ty:0.###} rot_deg={rotEffectiveDeg:0.###} scale={scaleEffective:0.####}"));
+                LogAlign(FormattableString.Invariant(
+                    $"[XFORM_ALT] tx_m1={tM1.Tx:0.###} ty_m1={tM1.Ty:0.###} tx_m2={tM2.Tx:0.###} ty_m2={tM2.Ty:0.###} " +
+                    $"dtx={(tM2.Tx - tM1.Tx):0.###} dty={(tM2.Ty - tM1.Ty):0.###}"));
             }
 
             context = new AnchorTransformContext(
@@ -6631,6 +6688,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        private void LogAlign(string message)
+        {
+            var payload = "[ALIGN]" + message;
+            GuiLog.Info(payload);
+            _trace?.Invoke(payload);
         }
 
         public void TraceBatch(string message)

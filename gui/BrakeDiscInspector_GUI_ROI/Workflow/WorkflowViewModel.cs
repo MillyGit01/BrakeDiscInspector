@@ -5470,17 +5470,32 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
                 var baselineModel = BuildBaselineModel(roi, baseline);
-                var pivotBase = rcfg.AnchorMaster == MasterAnchorChoice.Master1
+                var anchor = rcfg.AnchorMaster;
+                var pivotBase = anchor == MasterAnchorChoice.Master1
                     ? anchorContext.M1BaselineCenter
                     : anchorContext.M2BaselineCenter;
-                var pivotDet = rcfg.AnchorMaster == MasterAnchorChoice.Master1
+                var pivotDet = anchor == MasterAnchorChoice.Master1
                     ? anchorContext.M1DetectedCenter
                     : anchorContext.M2DetectedCenter;
 
-                LogAlign(FormattableString.Invariant(
-                    $"[APPLY] roi_index={rcfg.Index} using_anchor_master={(int)rcfg.AnchorMaster} pivot_base=({pivotBase.X:0.###},{pivotBase.Y:0.###}) pivot_det=({pivotDet.X:0.###},{pivotDet.Y:0.###})"));
+                var (baselineCx, baselineCy) = baselineModel.GetCenter();
+                var angleDeltaDeg = anchorContext.AngleDeltaGlobal * 180.0 / Math.PI;
+                var rotEffective = anchorContext.DisableRot ? 0.0 : anchorContext.AngleDeltaGlobal;
+                var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
+                var scaleEffective = anchorContext.ScaleLock ? 1.0 : anchorContext.Scale;
 
-                InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, rcfg.AnchorMaster, anchorContext, _trace);
+                LogAlign(FormattableString.Invariant(
+                    $"[CALL] roi_index={rcfg.Index} cfg_anchor={(int)rcfg.AnchorMaster} used_anchor={(int)anchor} baseline_center=({baselineCx:0.###},{baselineCy:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###}) angΔ_deg={angleDeltaDeg:0.###} rot_eff_deg={rotEffectiveDeg:0.###} scale={anchorContext.Scale:0.####} scale_eff={scaleEffective:0.####} disableRot={anchorContext.DisableRot} scaleLock={anchorContext.ScaleLock}"));
+
+                InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, anchor, anchorContext, _trace);
+
+                var (newCx, newCy) = roi.GetCenter();
+                var roiRect = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus
+                    ? new Rect(roi.CX - roi.R, roi.CY - roi.R, roi.R * 2.0, roi.R * 2.0)
+                    : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
+
+                LogAlign(FormattableString.Invariant(
+                    $"[RESULT] roi_index={rcfg.Index} new_center=({newCx:0.###},{newCy:0.###}) new_angle={roi.AngleDeg:0.###} rect=({roiRect.Left:0.###},{roiRect.Top:0.###},{roiRect.Right:0.###},{roiRect.Bottom:0.###})"));
             }
         }
 

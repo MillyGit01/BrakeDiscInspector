@@ -115,7 +115,8 @@ def health(request: Request):
         cuda_available = False
 
     request_id, recipe_id = _resolve_request_context(request)
-    status = "ok" if cuda_available else "error"
+    # CPU-only deployments are valid: report OK while surfacing CUDA absence separately.
+    status = "ok"
     resp = {
         "status": status,
         "device": "cuda" if cuda_available else "cpu",

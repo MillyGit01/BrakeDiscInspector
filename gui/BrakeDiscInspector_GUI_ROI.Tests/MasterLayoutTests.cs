@@ -37,4 +37,15 @@ public class MasterLayoutTests
         Assert.Equal(25, roundTrip.Inspection.RInner);
         Assert.Equal(60, roundTrip.Inspection.R);
     }
+
+    [Fact]
+    public void AnalyzeDisableRot_DefaultsToFalse_WhenMissing()
+    {
+        const string json = "{\"Analyze\":{\"ScaleLock\":true}}";
+
+        var layout = JsonSerializer.Deserialize<MasterLayout>(json);
+
+        Assert.NotNull(layout);
+        Assert.False(layout!.Analyze.DisableRot);
+    }
 }

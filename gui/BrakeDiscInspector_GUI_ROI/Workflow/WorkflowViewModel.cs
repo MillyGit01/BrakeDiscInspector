@@ -5358,6 +5358,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var angCurr = Math.Atan2(vCurr.Y, vCurr.X);
             var angleDeltaGlobal = angCurr - angBase;
 
+            var analyzeOpts = _layoutOriginal.Analyze ?? new AnalyzeOptions();
+            bool scaleLock = analyzeOpts.ScaleLock;
+            bool disableRot = analyzeOpts.DisableRot;
+
             if (logSummary)
             {
                 _trace?.Invoke(FormattableString.Invariant($"[ANCHORS] scale={scale:F3} angleDeltaGlobal={angleDeltaGlobal * 180.0 / Math.PI:F1}deg"));
@@ -5373,7 +5377,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _m1Detection.AngleDeg,
                 _m2Detection.AngleDeg,
                 scale,
-                angleDeltaGlobal);
+                angleDeltaGlobal,
+                scaleLock,
+                disableRot);
 
             return true;
         }

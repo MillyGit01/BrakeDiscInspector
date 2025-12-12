@@ -778,6 +778,22 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        public bool DisableRot
+        {
+            get => _disableRot;
+            set
+            {
+                if (_disableRot == value)
+                {
+                    return;
+                }
+
+                _disableRot = value;
+                OnPropertyChanged();
+                PersistAnalyzeOptions();
+            }
+        }
+
         public double AnalyzePosTolerancePx
         {
             get => _analyzePosTolPx;
@@ -948,6 +964,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _layout.Analyze.PosTolPx = _analyzePosTolPx;
             _layout.Analyze.AngTolDeg = _analyzeAngTolDeg;
             _layout.Analyze.ScaleLock = _scaleLock;
+            _layout.Analyze.DisableRot = _disableRot;
             _layout.Analyze.UseLocalMatcher = (ChkUseLocalMatcher?.IsChecked == true);
             _layout.Analyze.FeatureM1 = _analyzeFeatureM1;
             _layout.Analyze.FeatureM2 = _analyzeFeatureM2;
@@ -1511,6 +1528,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private int _analyzeThrM2 = 85;
 
         private bool _scaleLock = true;                  // Size lock already in use; keep it true
+        private bool _disableRot = false;
 
         // ============================
         // Global switches / options
@@ -3109,6 +3127,7 @@ namespace BrakeDiscInspector_GUI_ROI
             double defaultPosTol = _appConfig.Analyze?.PosTolPx > 0 ? _appConfig.Analyze.PosTolPx : 1.0;
             double defaultAngTol = _appConfig.Analyze?.AngTolDeg > 0 ? _appConfig.Analyze.AngTolDeg : 0.5;
             bool defaultScaleLock = _appConfig.Analyze?.ScaleLockDefault ?? true;
+            const bool defaultDisableRot = false;
             double defaultOpacity = _appConfig.UI?.HeatmapOverlayOpacity ?? 0.6;
             defaultOpacity = Math.Max(0.0, Math.Min(1.0, defaultOpacity));
 
@@ -3120,6 +3139,7 @@ namespace BrakeDiscInspector_GUI_ROI
             double posTol = layoutAnalyze != null && layoutAnalyze.PosTolPx > 0 ? layoutAnalyze.PosTolPx : defaultPosTol;
             double angTol = layoutAnalyze != null && layoutAnalyze.AngTolDeg > 0 ? layoutAnalyze.AngTolDeg : defaultAngTol;
             bool scaleLock = layoutAnalyze?.ScaleLock ?? defaultScaleLock;
+            bool disableRot = layoutAnalyze?.DisableRot ?? defaultDisableRot;
             string featureM1 = NormalizeFeature(layoutAnalyze?.FeatureM1);
             string featureM2 = NormalizeFeature(layoutAnalyze?.FeatureM2);
             int thrM1 = layoutAnalyze?.ThrM1 ?? 85;
@@ -3157,6 +3177,7 @@ namespace BrakeDiscInspector_GUI_ROI
             try
             {
                 ScaleLock = scaleLock;
+                DisableRot = disableRot;
                 AnalyzePosTolerancePx = posTol;
                 AnalyzeAngToleranceDeg = angTol;
                 AnalyzeFeatureM1 = featureM1;
@@ -10406,6 +10427,7 @@ namespace BrakeDiscInspector_GUI_ROI
             double scale = 1.0;
             double effectiveScale = 1.0;
             double angDelta = 0.0;
+            double angDeltaEffective = 0.0;
             bool __canTransform = baselineInspection != null && _mastersSeededForImage;
             SWVector eB = new SWVector(0, 0);
             SWVector eN = new SWVector(0, 0);
@@ -10435,9 +10457,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 double deg = angDelta * 180.0 / Math.PI;
                 deg = (deg + 540.0) % 360.0 - 180.0;
                 angDelta = deg * Math.PI / 180.0;
+                angDeltaEffective = _disableRot ? 0.0 : angDelta;
 
                 InspLog($"[Transform] BASE→NEW: M1_base=({m1OldX:F3},{m1OldY:F3}) → M1_new=({m1NewX:F3},{m1NewY:F3}); " +
-                        $"M2_base=({m2OldX:F3},{m2OldY:F3}) → M2_new=({m2NewX:F3},{m2NewY:F3}); angΔ={angDelta * 180 / Math.PI:F3}°, effScale={effectiveScale:F6}");
+                        $"M2_base=({m2OldX:F3},{m2OldY:F3}) → M2_new=({m2NewX:F3},{m2NewY:F3}); angΔ={angDelta * 180 / Math.PI:F3}° effAng={angDeltaEffective * 180 / Math.PI:F3}°, effScale={effectiveScale:F6}");
             }
 
             if (!__canTransform && ScaleLock && insp != null)
@@ -10479,10 +10502,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (!FREEZE_MASTER_SEARCH_ON_ANALYZE)
                     {
                         if (_layout.Master1Search != null && __baseM1S != null)
-                            ApplyRoiTransform(_layout.Master1Search,  __baseM1S, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDelta);
+                            ApplyRoiTransform(_layout.Master1Search,  __baseM1S, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDeltaEffective);
 
                         if (_layout.Master2Search != null && __baseM2S != null)
-                            ApplyRoiTransform(_layout.Master2Search,  __baseM2S, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDelta);
+                            ApplyRoiTransform(_layout.Master2Search,  __baseM2S, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDeltaEffective);
                     }
                     else
                     {
@@ -10491,7 +10514,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
 
                     if (_lastHeatmapRoi != null && __baseHeat != null)
-                        ApplyRoiTransform(_lastHeatmapRoi, __baseHeat, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDelta);
+                        ApplyRoiTransform(_lastHeatmapRoi, __baseHeat, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDeltaEffective);
 
                     try
                     {
@@ -11727,6 +11750,7 @@ namespace BrakeDiscInspector_GUI_ROI
             snapshot.Analyze.PosTolPx = source.Analyze?.PosTolPx ?? _analyzePosTolPx;
             snapshot.Analyze.AngTolDeg = source.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
             snapshot.Analyze.ScaleLock = source.Analyze?.ScaleLock ?? _scaleLock;
+            snapshot.Analyze.DisableRot = source.Analyze?.DisableRot ?? _disableRot;
             snapshot.Analyze.UseLocalMatcher = source.Analyze?.UseLocalMatcher ?? (ChkUseLocalMatcher?.IsChecked == true);
             snapshot.Analyze.FeatureM1 = source.Analyze?.FeatureM1 ?? _analyzeFeatureM1;
             snapshot.Analyze.FeatureM2 = source.Analyze?.FeatureM2 ?? _analyzeFeatureM2;

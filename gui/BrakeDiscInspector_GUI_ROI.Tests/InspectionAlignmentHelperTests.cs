@@ -60,6 +60,128 @@ public class InspectionAlignmentHelperTests
         AssertClose(firstResult, target, shape);
     }
 
+    [Fact]
+    public void MoveInspectionTo_AppliesRotationAndScale_WhenNotDisabled()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: false, disableRot: false);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(-9, target.X, 6);
+        Assert.Equal(12, target.Y, 6);
+        Assert.Equal(8, target.Width, 6);
+        Assert.Equal(12, target.Height, 6);
+        Assert.Equal(100, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_DisableRot_TranslatesWithoutRotation()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: false, disableRot: true);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(11, target.X, 6);
+        Assert.Equal(12, target.Y, 6);
+        Assert.Equal(8, target.Width, 6);
+        Assert.Equal(12, target.Height, 6);
+        Assert.Equal(10, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_ScaleLock_KeepsSizeAndOffsetScale()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: true, disableRot: false);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
+        Assert.Equal(100, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_DisableRotAndScaleLock_TranslatesOnly()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: true, disableRot: true);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(6, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
+        Assert.Equal(10, target.AngleDeg, 6);
+    }
+
+    private static AnchorTransformContext CreateAnchorContext(bool scaleLock, bool disableRot)
+    {
+        var baselineM1 = new Point2d(0, 0);
+        var baselineM2 = new Point2d(10, 0);
+        var detectedM1 = new Point2d(1, 2);
+        var detectedM2 = new Point2d(1, 22);
+
+        return new AnchorTransformContext(
+            baselineM1,
+            baselineM2,
+            detectedM1,
+            detectedM2,
+            0,
+            0,
+            0,
+            0,
+            2.0,
+            Math.PI / 2.0,
+            scaleLock,
+            disableRot);
+    }
+
     private static RoiModel CreateBaselineInspection(RoiShape shape)
     {
         return shape switch

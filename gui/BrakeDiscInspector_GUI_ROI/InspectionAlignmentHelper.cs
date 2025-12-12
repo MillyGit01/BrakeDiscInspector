@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Windows;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Util;
@@ -8,9 +9,14 @@ namespace BrakeDiscInspector_GUI_ROI;
 
 internal static class InspectionAlignmentHelper
 {
-    private static void LogAlign(Action<string>? trace, string message)
+    private static void LogAlign(Action<string>? trace, FormattableString message)
     {
-        var payload = "[ALIGN]" + message;
+        if (message == null)
+        {
+            return;
+        }
+
+        var payload = "[ALIGN]" + message.ToString(CultureInfo.InvariantCulture);
         GuiLog.Info(payload);
         trace?.Invoke(payload);
     }
@@ -78,17 +84,14 @@ internal static class InspectionAlignmentHelper
             heightScaled);
 
         LogAlign(trace,
-            FormattableString.Invariant(
-                $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} anchor_master={(int)anchor} " +
-                $"pivot_base=({pivotBaseline.X:0.###},{pivotBaseline.Y:0.###}) pivot_det=({pivotCurrent.X:0.###},{pivotCurrent.Y:0.###})"));
+            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} anchor_master={(int)anchor} " +
+            $"pivot_base=({pivotBaseline.X:0.###},{pivotBaseline.Y:0.###}) pivot_det=({pivotCurrent.X:0.###},{pivotCurrent.Y:0.###})");
         LogAlign(trace,
-            FormattableString.Invariant(
-                $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} roi_base_center=({baseCx:0.###},{baseCy:0.###}) " +
-                $"v_base=({vBase.X:0.###},{vBase.Y:0.###})"));
+            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} roi_base_center=({baseCx:0.###},{baseCy:0.###}) " +
+            $"v_base=({vBase.X:0.###},{vBase.Y:0.###})");
         LogAlign(trace,
-            FormattableString.Invariant(
-                $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} applied rot_deg={angleEffective * 180.0 / Math.PI:0.###} " +
-                $"scale={scaleEffective:0.####} tx={tx:0.###} ty={ty:0.###}"));
+            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} applied rot_deg={angleEffective * 180.0 / Math.PI:0.###} " +
+            $"scale={scaleEffective:0.####} tx={tx:0.###} ty={ty:0.###}");
 
         switch (baselineInspection.Shape)
         {
@@ -130,9 +133,8 @@ internal static class InspectionAlignmentHelper
         }
 
         LogAlign(trace,
-            FormattableString.Invariant(
-                $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} roi_new_center=({roiNewCenter.X:0.###},{roiNewCenter.Y:0.###}) " +
-                $"roi_new_angle={roiNewAngleDeg:0.###} roi_new_rect=({finalRect.Left:0.###},{finalRect.Top:0.###},{finalRect.Right:0.###},{finalRect.Bottom:0.###})"));
+            $"[ROI] roi={inspectionTarget.Label ?? inspectionTarget.Id} roi_new_center=({roiNewCenter.X:0.###},{roiNewCenter.Y:0.###}) " +
+            $"roi_new_angle={roiNewAngleDeg:0.###} roi_new_rect=({finalRect.Left:0.###},{finalRect.Top:0.###},{finalRect.Right:0.###},{finalRect.Bottom:0.###})");
     }
 }
 

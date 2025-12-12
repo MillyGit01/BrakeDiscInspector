@@ -6782,6 +6782,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 RoiDiag($"[save-slot] idx={index} configId={config.Id} shape={config.Shape} base=({config.BaseImgW}x{config.BaseImgH}) name='{config.Name}'");
             }
 
+            var anchorMaster = config?.AnchorMaster ?? MasterAnchorChoice.Master1;
+            GuiLog.Info(FormattableString.Invariant($"[ALIGN][SAVE] roi_index={index} saved_anchor_master={(int)anchorMaster}"));
+
             GuiLog.Info($"[inspection] save slot={index} roi={roiModel.Label ?? roiModel.Id} shape={roiModel.Shape}");
 
             RoiDiag($"[save-slot] idx={index} persist base=({roiModel.BaseImgW}x{roiModel.BaseImgH})");

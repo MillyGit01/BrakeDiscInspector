@@ -2552,6 +2552,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void InspectionRoiPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(InspectionRoiConfig.AnchorMaster) && sender is InspectionRoiConfig anchorChanged)
+            {
+                LogAlign(FormattableString.Invariant(
+                    $"[UI] roi_index={anchorChanged.Index} anchor_master_changed_to={(int)anchorChanged.AnchorMaster}"));
+            }
+
             if (e.PropertyName == nameof(InspectionRoiConfig.Enabled))
             {
                 EvaluateAllRoisCommand.RaiseCanExecuteChanged();
@@ -5464,6 +5470,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
                 var baselineModel = BuildBaselineModel(roi, baseline);
+                var pivotBase = rcfg.AnchorMaster == MasterAnchorChoice.Master1
+                    ? anchorContext.M1BaselineCenter
+                    : anchorContext.M2BaselineCenter;
+                var pivotDet = rcfg.AnchorMaster == MasterAnchorChoice.Master1
+                    ? anchorContext.M1DetectedCenter
+                    : anchorContext.M2DetectedCenter;
+
+                LogAlign(FormattableString.Invariant(
+                    $"[APPLY] roi_index={rcfg.Index} using_anchor_master={(int)rcfg.AnchorMaster} pivot_base=({pivotBase.X:0.###},{pivotBase.Y:0.###}) pivot_det=({pivotDet.X:0.###},{pivotDet.Y:0.###})"));
+
                 InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, rcfg.AnchorMaster, anchorContext, _trace);
             }
         }

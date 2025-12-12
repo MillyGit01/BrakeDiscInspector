@@ -155,10 +155,12 @@
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                             <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                             <ComboBox Width="90"
-                                                      SelectedValuePath="Content"
+                                                      SelectedValuePath="Tag"
                                                       SelectedValue="{Binding AnchorMaster, Mode=TwoWay}">
-                                                <ComboBoxItem Content="Master1" />
-                                                <ComboBoxItem Content="Master2" />
+                                                <ComboBoxItem Content="Master1"
+                                                              Tag="{x:Static m:MasterAnchorChoice.Master1}" />
+                                                <ComboBoxItem Content="Master2"
+                                                              Tag="{x:Static m:MasterAnchorChoice.Master2}" />
                                             </ComboBox>
                                         </StackPanel>
                                     </StackPanel>

@@ -3083,6 +3083,29 @@ namespace BrakeDiscInspector_GUI_ROI
             var layoutAnalyze = _layout?.Analyze;
             var layoutUi = _layout?.Ui;
 
+            // Keep the preset/UI rotation/scale fields aligned with the layout's stored analyze options
+            // so that subsequent Analyze actions do not overwrite tuned values with stale defaults.
+            if (_preset != null && layoutAnalyze != null)
+            {
+                if (layoutAnalyze.RotRange > 0)
+                {
+                    _preset.RotRange = layoutAnalyze.RotRange;
+                    TxtRot.Text = layoutAnalyze.RotRange.ToString(CultureInfo.InvariantCulture);
+                }
+
+                if (layoutAnalyze.ScaleMin > 0)
+                {
+                    _preset.ScaleMin = layoutAnalyze.ScaleMin;
+                    TxtSMin.Text = layoutAnalyze.ScaleMin.ToString(CultureInfo.InvariantCulture);
+                }
+
+                if (layoutAnalyze.ScaleMax > 0)
+                {
+                    _preset.ScaleMax = layoutAnalyze.ScaleMax;
+                    TxtSMax.Text = layoutAnalyze.ScaleMax.ToString(CultureInfo.InvariantCulture);
+                }
+            }
+
             double posTol = layoutAnalyze != null && layoutAnalyze.PosTolPx > 0 ? layoutAnalyze.PosTolPx : defaultPosTol;
             double angTol = layoutAnalyze != null && layoutAnalyze.AngTolDeg > 0 ? layoutAnalyze.AngTolDeg : defaultAngTol;
             bool scaleLock = layoutAnalyze?.ScaleLock ?? defaultScaleLock;

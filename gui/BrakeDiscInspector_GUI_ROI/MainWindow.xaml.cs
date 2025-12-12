@@ -11331,6 +11331,8 @@ namespace BrakeDiscInspector_GUI_ROI
             TxtSMin.Text = preset.ScaleMin.ToString(CultureInfo.InvariantCulture);
             TxtSMax.Text = preset.ScaleMax.ToString(CultureInfo.InvariantCulture);
             SetFeatureSelection(preset.Feature);
+
+            UpdateAnalyzeOptionsFromPreset(preset);
         }
 
         private void ApplyInspectionPresetToUI(Preset preset)
@@ -11379,6 +11381,23 @@ namespace BrakeDiscInspector_GUI_ROI
             _preset.ScaleMin = ParseDoubleOrDefault(TxtSMin.Text, _preset.ScaleMin);
             _preset.ScaleMax = ParseDoubleOrDefault(TxtSMax.Text, _preset.ScaleMax);
             _preset.Feature = ReadFeatureFromUI();
+
+            UpdateAnalyzeOptionsFromPreset(_preset);
+        }
+
+        private void UpdateAnalyzeOptionsFromPreset(Preset? preset)
+        {
+            if (_layout == null || preset == null)
+            {
+                return;
+            }
+
+            _layout.Analyze ??= new AnalyzeOptions();
+            _layout.Analyze.RotRange = preset.RotRange;
+            _layout.Analyze.ScaleMin = preset.ScaleMin;
+            _layout.Analyze.ScaleMax = preset.ScaleMax;
+
+            TryPersistLayout();
         }
 
         private void BtnSavePreset_Click(object sender, RoutedEventArgs e)

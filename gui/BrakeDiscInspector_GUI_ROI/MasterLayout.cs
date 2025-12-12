@@ -503,6 +503,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     return candidate;
                 }
 
+                if (!File.Exists(field))
+                {
+                    Debug.WriteLine(FormattableString.Invariant(
+                        $"[layout:path] Redirecting {tag} to recipe folder even if file is missing: '{candidate}' (layout='{layoutFilePath}')"));
+                    return candidate;
+                }
+
                 Debug.WriteLine(FormattableString.Invariant(
                     $"[layout:path] WARNING {tag}: candidate missing for layout '{recipeName}' -> '{candidate}' (layout='{layoutFilePath}')"));
 

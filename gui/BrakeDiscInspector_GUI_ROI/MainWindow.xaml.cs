@@ -1088,6 +1088,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[layout] saving ROI-model snapshot ({context})"); // CODEX: persist layout straight from ROI models, never from batch visuals.
                 MasterLayoutManager.Save(_preset, snapshot);
                 _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                SyncRecipeIdWithLayout(GetCurrentLayoutName());
                 _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                 AppendLog($"{prefix} layout saved ({context})");
                 return true;
@@ -1144,6 +1145,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var layoutName = GetCurrentLayoutName();
             AppendLog($"[layout] apply '{layoutName}' source={sourceContext} path='{_currentLayoutFilePath}'");
             _workflowViewModel?.SetLayoutName(layoutName);
+            SyncRecipeIdWithLayout(layoutName);
             EnsureInspectionDatasetStructure();
 
             FreezeAllRois(_layout);
@@ -3207,6 +3209,13 @@ namespace BrakeDiscInspector_GUI_ROI
             return string.IsNullOrWhiteSpace(name) ? "DefaultLayout" : name;
         }
 
+        private void SyncRecipeIdWithLayout(string layoutName)
+        {
+            var effective = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
+            _backendClient?.RecipeId = effective;
+            BackendAPI.SetRecipeId(effective);
+        }
+
         private static void CopyDirectory(string sourceDir, string destinationDir)
         {
             if (string.Equals(sourceDir, destinationDir, StringComparison.OrdinalIgnoreCase))
@@ -3339,6 +3348,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     backendClient.BaseUrl = BackendAPI.BaseUrl;
                 }
+                backendClient.RecipeId = GetCurrentLayoutName();
+                BackendAPI.SetRecipeId(backendClient.RecipeId);
 
                 _backendClient = backendClient;
 
@@ -3370,6 +3381,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     Snack);
 
                 _workflowViewModel.SetLayoutName(GetCurrentLayoutName());
+                SyncRecipeIdWithLayout(GetCurrentLayoutName());
 
                 _workflowViewModel.AnchorScoreMin = Math.Max(1, _appConfig.Analyze.AnchorScoreMin);
                 _sharedHeatmapGuardLogged = false;
@@ -11606,6 +11618,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 MasterLayoutManager.Save(preset, snapshot);
                 AppendLog($"[layout-save] ok -> {targetPath}");
                 _workflowViewModel?.SetLayoutName(GetCurrentLayoutName());
+                SyncRecipeIdWithLayout(GetCurrentLayoutName());
                 _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                 Snack($"Layout guardado ✅"); // CODEX: string interpolation compatibility.
             }
@@ -11670,6 +11683,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     _currentLayoutFilePath = finalPath;
                     _workflowViewModel?.SetLayoutName(newLayoutName);
+                    SyncRecipeIdWithLayout(newLayoutName);
                     _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
                     _dataRoot = EnsureDataRoot();
                     EnsureInspectionDatasetStructure();

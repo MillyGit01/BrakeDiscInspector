@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
@@ -14,6 +15,24 @@ class ModelStore:
     def __init__(self, root: Path):
         self.root = Path(root)
         ensure_dir(self.root)
+
+    # --- Path helpers -------------------------------------------------
+
+    @staticmethod
+    def _sanitize_recipe_id(recipe_id: Optional[str]) -> str:
+        if not recipe_id:
+            return "default"
+        cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", recipe_id).strip()
+        cleaned = cleaned[:80]
+        return cleaned or "default"
+
+    @staticmethod
+    def _sanitize_model_key(model_key: Optional[str]) -> str:
+        if not model_key:
+            return "default"
+        cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", model_key).strip()
+        cleaned = cleaned[:80]
+        return cleaned or "default"
 
     def _sanitize(self, value: str) -> str:
         cleaned = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in value.strip())
@@ -36,14 +55,21 @@ class ModelStore:
     def _legacy_dir(self, role_id: str, roi_id: str) -> Path:
         return self.root / self._sanitize(role_id) / self._sanitize(roi_id)
 
-    def _memory_path(self, role_id: str, roi_id: str) -> Path:
-        return self.root / f"{self._base_name(role_id, roi_id)}.npz"
+    def resolve_models_dir(self, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        key_safe = self._sanitize_model_key(model_key)
+        base = self.root / "recipes" / recipe_safe / key_safe
+        ensure_dir(base)
+        return base
 
-    def _index_path(self, role_id: str, roi_id: str) -> Path:
-        return self.root / f"{self._base_name(role_id, roi_id)}_index.faiss"
+    def _memory_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
+        return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}.npz"
 
-    def _calib_path(self, role_id: str, roi_id: str) -> Path:
-        return self.root / f"{self._base_name(role_id, roi_id)}_calib.json"
+    def _index_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
+        return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}_index.faiss"
+
+    def _calib_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
+        return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}_calib.json"
 
     def _load_memory_from_path(self, path: Path):
         with np.load(path, allow_pickle=False) as z:
@@ -70,6 +96,9 @@ class ModelStore:
         embeddings: np.ndarray,
         token_hw: Tuple[int, int],
         metadata: Optional[Dict[str, Any]] = None,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
     ):
         """
         Guarda la memoria (embeddings coreset L2-normalizados) y la forma del grid de tokens.
@@ -82,15 +111,21 @@ class ModelStore:
         }
         if metadata:
             payload["metadata"] = json.dumps(metadata)
-        np.savez_compressed(self._memory_path(role_id, roi_id), **payload)
+        np.savez_compressed(self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id), **payload)
 
-    def load_memory(self, role_id: str, roi_id: str):
+    def load_memory(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         """
         Carga (embeddings, (Ht, Wt)) o None si no existe.
         """
-        new_path = self._memory_path(role_id, roi_id)
+        new_path = self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id)
         if new_path.exists():
             return self._load_memory_from_path(new_path)
+
+        # fallback: default recipe path
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            default_path = self._memory_path(role_id, roi_id, "default", model_key or roi_id)
+            if default_path.exists():
+                return self._load_memory_from_path(default_path)
 
         flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}.npz"
         if flat_legacy_path.exists():
@@ -102,14 +137,19 @@ class ModelStore:
 
         return None
 
-    def save_index_blob(self, role_id: str, roi_id: str, blob: bytes):
+    def save_index_blob(self, role_id: str, roi_id: str, blob: bytes, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         ensure_dir(self.root)
-        self._index_path(role_id, roi_id).write_bytes(blob)
+        self._index_path(role_id, roi_id, recipe_id, model_key or roi_id).write_bytes(blob)
 
-    def load_index_blob(self, role_id: str, roi_id: str) -> Optional[bytes]:
-        new_path = self._index_path(role_id, roi_id)
+    def load_index_blob(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None) -> Optional[bytes]:
+        new_path = self._index_path(role_id, roi_id, recipe_id, model_key or roi_id)
         if new_path.exists():
             return new_path.read_bytes()
+
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            default_path = self._index_path(role_id, roi_id, "default", model_key or roi_id)
+            if default_path.exists():
+                return default_path.read_bytes()
 
         flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_index.faiss"
         if flat_legacy_path.exists():
@@ -120,13 +160,18 @@ class ModelStore:
             return legacy_path.read_bytes()
         return None
 
-    def save_calib(self, role_id: str, roi_id: str, data: dict):
-        save_json(self._calib_path(role_id, roi_id), data)
+    def save_calib(self, role_id: str, roi_id: str, data: dict, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
+        save_json(self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id), data)
 
-    def load_calib(self, role_id: str, roi_id: str, default=None):
-        new_path = self._calib_path(role_id, roi_id)
+    def load_calib(self, role_id: str, roi_id: str, default=None, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
+        new_path = self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id)
         if new_path.exists():
             return load_json(new_path, default=default)
+
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            default_path = self._calib_path(role_id, roi_id, "default", model_key or roi_id)
+            if default_path.exists():
+                return load_json(default_path, default=default)
 
         flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_calib.json"
         if flat_legacy_path.exists():

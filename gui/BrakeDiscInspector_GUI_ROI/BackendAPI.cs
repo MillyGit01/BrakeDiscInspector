@@ -97,6 +97,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         public static double DefaultMmPerPx { get; private set; } = 0.20;
 
+        public static void SetRecipeId(string? recipeId)
+        {
+            s_client.RecipeId = recipeId;
+        }
+
         static BackendAPI()
         {
             try

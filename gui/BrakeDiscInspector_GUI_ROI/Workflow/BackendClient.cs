@@ -27,6 +27,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly HttpClient _httpClient;
         private readonly HttpClient _httpTrainClient;
 
+        public string? RecipeId { get; set; }
+
         public readonly struct FitImage
         {
             public FitImage(byte[] bytes, string fileName, string? mediaType = null)
@@ -121,6 +123,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Options, relativePath);
+                AddCommonHeaders(request);
                 using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
                 if (response.StatusCode == HttpStatusCode.NotFound)
                 {
@@ -187,6 +190,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             form.Add(new StringContent(roiId), "roi_id");
             form.Add(new StringContent(mmPerPx.ToString(CultureInfo.InvariantCulture)), "mm_per_px");
             form.Add(new StringContent(memoryFit ? "true" : "false"), "memory_fit");
+            form.Add(new StringContent(roiId), "model_key");
 
             bool hasImage = false;
             foreach (var image in okImages)
@@ -214,7 +218,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                using var response = await _httpTrainClient.PostAsync("fit_ok", form, ct).ConfigureAwait(false);
+                using var request = new HttpRequestMessage(HttpMethod.Post, "fit_ok")
+                {
+                    Content = form
+                };
+                AddCommonHeaders(request);
+                using var response = await _httpTrainClient.SendAsync(request, ct).ConfigureAwait(false);
                 GuiLog.Info($"[backend] /fit_ok response StatusCode={(int)response.StatusCode} Reason='{response.ReasonPhrase}'");
                 var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
@@ -255,6 +264,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 role_id = effectiveRoleId,
                 roi_id = roiId,
+                model_key = roiId,
                 mm_per_px = mmPerPx,
                 ok_scores = okScores,
                 ng_scores = ngScores,
@@ -263,7 +273,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             };
 
             using var content = JsonContent.Create(body, options: JsonOptions);
-            using var response = await _httpClient.PostAsync("calibrate_ng", content, ct).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "calibrate_ng")
+            {
+                Content = content
+            };
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
             var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"/calibrate_ng {response.StatusCode}: {raw}");
@@ -364,7 +379,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 form.Add(new StringContent(shapeJson, Encoding.UTF8), "shape");
             }
 
-            using var response = await _httpClient.PostAsync("infer", form, ct).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "infer")
+            {
+                Content = form
+            };
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
             var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
@@ -425,7 +445,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             try
             {
-                using var response = await _httpClient.GetAsync("health", ct).ConfigureAwait(false);
+                using var request = new HttpRequestMessage(HttpMethod.Get, "health");
+                AddCommonHeaders(request);
+                using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode) return null;
 
                 var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -499,7 +521,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 var query = $"state?role_id={Uri.EscapeDataString(roleId)}&roi_id={Uri.EscapeDataString(roiId)}";
-                using var response = await _httpClient.GetAsync(query, ct).ConfigureAwait(false);
+                using var request = new HttpRequestMessage(HttpMethod.Get, query);
+                AddCommonHeaders(request);
+                using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
                     return null;
@@ -532,6 +556,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return null;
+        }
+
+        private void AddCommonHeaders(HttpRequestMessage request)
+        {
+            var requestId = Guid.NewGuid().ToString();
+            request.Headers.Remove("X-Request-Id");
+            request.Headers.TryAddWithoutValidation("X-Request-Id", requestId);
+
+            if (!string.IsNullOrWhiteSpace(RecipeId))
+            {
+                request.Headers.Remove("X-Recipe-Id");
+                request.Headers.TryAddWithoutValidation("X-Recipe-Id", RecipeId);
+            }
         }
 
         private static string? ExtractDetail(string raw)
@@ -691,6 +728,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public double? threshold { get; set; }      // << ahora nullable
         public string? heatmap_png_base64 { get; set; }
         public Region[]? regions { get; set; }
+        public string? request_id { get; set; }
+        public string? recipe_id { get; set; }
     }
 
     public sealed class Region
@@ -701,6 +740,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public double h { get; set; }
         public double area_px { get; set; }
         public double area_mm2 { get; set; }
+        public double[]? bbox { get; set; }
     }
 
     public sealed class HealthInfo
@@ -709,5 +749,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public string? device { get; set; }
         public string? model { get; set; }
         public string? version { get; set; }
+        public string? reason { get; set; }
+        public string? request_id { get; set; }
+        public string? recipe_id { get; set; }
     }
 }

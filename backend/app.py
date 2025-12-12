@@ -5,14 +5,15 @@ import os
 import sys
 import traceback
 import time
+import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import cv2
 
 try:
-    from fastapi import FastAPI, UploadFile, File, Form
+    from fastapi import FastAPI, UploadFile, File, Form, Request
     from fastapi.responses import JSONResponse
 except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     missing = exc.name or "fastapi"
@@ -51,6 +52,14 @@ def slog(event: str, **kw):
     rec = {"ts": time.time(), "event": event}
     rec.update(kw)
     print(json.dumps(rec, ensure_ascii=False), flush=True)
+
+
+def _resolve_request_context(request: Request, recipe_id_hint: Optional[str] = None) -> Tuple[str, str]:
+    headers = request.headers
+    request_id = headers.get("x-request-id") or str(uuid.uuid4())
+    recipe_raw = headers.get("x-recipe-id") or recipe_id_hint or "default"
+    recipe_id = ModelStore._sanitize_recipe_id(recipe_raw)
+    return request_id, recipe_id
 
 # Carpeta para artefactos persistentes por (role_id, roi_id)
 def _env_var(name: str, *, legacy: str | None = None, default: str | None = None) -> str | None:
@@ -97,32 +106,62 @@ def _read_image_file(file: UploadFile) -> np.ndarray:
     return img
 
 @app.get("/health")
-def health():
-    import torch
-    return {
-        "status": "ok",
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
+def health(request: Request):
+    try:
+        import torch
+
+        cuda_available = torch.cuda.is_available()
+    except Exception:
+        cuda_available = False
+
+    request_id, recipe_id = _resolve_request_context(request)
+    status = "ok" if cuda_available else "error"
+    resp = {
+        "status": status,
+        "device": "cuda" if cuda_available else "cpu",
         "model": "vit_small_patch14_dinov2.lvd142m",
         "version": "0.1.0",
+        "request_id": request_id,
+        "recipe_id": recipe_id,
     }
+    if not cuda_available:
+        resp["reason"] = "cuda_not_available"
+    return resp
 
 @app.post("/fit_ok")
 def fit_ok(
+    request: Request,
     role_id: str = Form(...),
     roi_id: str = Form(...),
     mm_per_px: float = Form(...),
     images: List[UploadFile] = File(...),
     memory_fit: bool = Form(False),
+    recipe_id: Optional[str] = Form(None),
+    model_key: Optional[str] = Form(None),
 ):
     """
     Acumula OKs para construir la memoria PatchCore (coreset + kNN).
     Guarda (role_id, roi_id): memoria (embeddings), token grid y, si hay FAISS, el índice.
     """
     try:
-        slog("fit_ok.request", role_id=role_id, roi_id=roi_id, n_files=len(images), memory_fit=bool(memory_fit))
+        request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+        model_key_effective = model_key or roi_id
+        slog(
+            "fit_ok.request",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            request_id=request_id,
+            n_files=len(images),
+            memory_fit=bool(memory_fit),
+        )
         t0 = time.time()
         if not images:
-            return JSONResponse(status_code=400, content={"error": "No images provided"})
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No images provided", "request_id": request_id},
+            )
 
         all_emb: List[np.ndarray] = []
         token_hw: Optional[tuple[int, int]] = None
@@ -136,12 +175,12 @@ def fit_ok(
                 if (int(hw[0]), int(hw[1])) != token_hw:
                     return JSONResponse(
                         status_code=400,
-                        content={"error": f"Token grid mismatch: got {hw}, expected {token_hw}"},
+                        content={"error": f"Token grid mismatch: got {hw}, expected {token_hw}", "request_id": request_id},
                     )
             all_emb.append(emb)
 
         if not all_emb:
-            return JSONResponse(status_code=400, content={"error": "No valid images"})
+            return JSONResponse(status_code=400, content={"error": "No valid images", "request_id": request_id})
 
         E = np.concatenate(all_emb, axis=0)  # (N, D)
 
@@ -162,6 +201,8 @@ def fit_ok(
                 "coreset_rate": float(coreset_rate),
                 "applied_rate": float(applied_rate),
             },
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
         )
 
         # Persistir índice FAISS si está disponible
@@ -169,7 +210,7 @@ def fit_ok(
             import faiss  # type: ignore
             if mem.index is not None:
                 buf = faiss.serialize_index(mem.index)
-                store.save_index_blob(role_id, roi_id, bytes(buf))
+                store.save_index_blob(role_id, roi_id, bytes(buf), recipe_id=recipe_resolved, model_key=model_key_effective)
         except Exception:
             pass
 
@@ -179,22 +220,39 @@ def fit_ok(
             "token_shape": [int(token_hw[0]), int(token_hw[1])],
             "coreset_rate_requested": float(coreset_rate),
             "coreset_rate_applied": float(applied_rate),
+            "request_id": request_id,
+            "recipe_id": recipe_resolved,
         }
         slog(
             "fit_ok.response",
             role_id=role_id,
             roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            request_id=request_id,
             elapsed_ms=int(1000 * (time.time() - t0)),
             n_embeddings=int(E.shape[0]),
             coreset_size=int(mem.emb.shape[0]),
         )
         return response
     except Exception as e:
-        slog("fit_ok.error", role_id=role_id, roi_id=roi_id, error=str(e))
-        return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
+        slog(
+            "fit_ok.error",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id=_resolve_request_context(request, recipe_id)[1],
+            model_key=model_key or roi_id,
+            request_id=_resolve_request_context(request, recipe_id)[0],
+            error=str(e),
+        )
+        request_id_fallback, recipe_fallback = _resolve_request_context(request, recipe_id)
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": traceback.format_exc(), "request_id": request_id_fallback, "recipe_id": recipe_fallback},
+        )
 
 @app.post("/calibrate_ng")
-async def calibrate_ng(payload: Dict[str, Any]):
+async def calibrate_ng(payload: Dict[str, Any], request: Request):
     """
     Fija umbral por ROI/rol con 0–3 NG.
     Si hay NG: umbral entre p99(OK) y p5(NG). Si no: p99(OK).
@@ -203,6 +261,9 @@ async def calibrate_ng(payload: Dict[str, Any]):
     try:
         role_id = payload["role_id"]
         roi_id = payload["roi_id"]
+        model_key = payload.get("model_key") or roi_id
+        payload_recipe = payload.get("recipe_id")
+        request_id, recipe_resolved = _resolve_request_context(request, payload_recipe)
         mm_per_px = float(payload.get("mm_per_px", 0.2))
         ok_scores = np.asarray(payload.get("ok_scores", []), dtype=float)
         ng_scores = np.asarray(payload.get("ng_scores", []), dtype=float) if "ng_scores" in payload else None
@@ -213,6 +274,9 @@ async def calibrate_ng(payload: Dict[str, Any]):
             "calibrate_ng.request",
             role_id=role_id,
             roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key,
+            request_id=request_id,
             ok_count=int(ok_scores.size),
             ng_count=int(ng_scores.size) if ng_scores is not None else 0,
         )
@@ -242,31 +306,58 @@ async def calibrate_ng(payload: Dict[str, Any]):
             "mm_per_px": float(mm_per_px),
             "area_mm2_thr": float(area_mm2_thr),
             "score_percentile": int(p_score),
+            "request_id": request_id,
+            "recipe_id": recipe_resolved,
         }
-        store.save_calib(role_id, roi_id, calib)
+        store.save_calib(role_id, roi_id, calib, recipe_id=recipe_resolved, model_key=model_key)
         slog(
             "calibrate_ng.response",
             role_id=role_id,
             roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key,
+            request_id=request_id,
             elapsed_ms=int(1000 * (time.time() - t0)),
             threshold=float(t),
         )
         return calib
     except Exception as e:
-        slog("calibrate_ng.error", error=str(e), payload_keys=list(payload.keys()))
-        return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
+        req_id, recipe_resolved = _resolve_request_context(request, payload.get("recipe_id") if isinstance(payload, dict) else None)
+        slog(
+            "calibrate_ng.error",
+            error=str(e),
+            payload_keys=list(payload.keys()),
+            request_id=req_id,
+            recipe_id=recipe_resolved,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": traceback.format_exc(), "request_id": req_id, "recipe_id": recipe_resolved},
+        )
 
 
 @app.post("/infer")
 def infer(
+    request: Request,
     role_id: str = Form(...),
     roi_id: str = Form(...),
     mm_per_px: float = Form(...),
     image: UploadFile = File(...),
     shape: Optional[str] = Form(None),
+    recipe_id: Optional[str] = Form(None),
+    model_key: Optional[str] = Form(None),
 ):
     try:
-        slog("infer.request", role_id=role_id, roi_id=roi_id)
+        request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+        model_key_effective = model_key or roi_id
+        slog(
+            "infer.request",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            request_id=request_id,
+        )
         t0 = time.time()
         import json, base64, numpy as np
         try:
@@ -282,23 +373,30 @@ def infer(
         emb, token_hw = _extractor.extract(img)
 
         # 2) Cargar memoria/coreset
-        loaded = store.load_memory(role_id, roi_id)
+        loaded = store.load_memory(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         if loaded is None:
-            return JSONResponse(status_code=400, content={"error": "Memoria no encontrada. Ejecuta /fit_ok primero."})
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Memoria no encontrada. Ejecuta /fit_ok primero.", "request_id": request_id, "recipe_id": recipe_resolved},
+            )
         emb_mem, token_hw_mem, metadata = loaded
 
         # 3) Validación de grid aquí (clara al usuario)
         if tuple(map(int, token_hw)) != tuple(map(int, token_hw_mem)):
             return JSONResponse(
                 status_code=400,
-                content={"error": f"Token grid mismatch: got {tuple(map(int,token_hw))}, expected {tuple(map(int,token_hw_mem))}"},
+                content={
+                    "error": f"Token grid mismatch: got {tuple(map(int,token_hw))}, expected {tuple(map(int,token_hw_mem))}",
+                    "request_id": request_id,
+                    "recipe_id": recipe_resolved,
+                },
             )
 
         # 4) Reconstruir memoria (+FAISS si existe)
         mem = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=metadata.get("coreset_rate"))
         try:
             import faiss  # type: ignore
-            blob = store.load_index_blob(role_id, roi_id)
+            blob = store.load_index_blob(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
             if blob is not None:
                 idx = faiss.deserialize_index(np.frombuffer(blob, dtype=np.uint8))
                 mem.index = idx
@@ -307,7 +405,7 @@ def infer(
             pass
 
         # 5) Calibración (puede faltar)
-        calib = store.load_calib(role_id, roi_id, default=None)
+        calib = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective)
         thr = calib.get("threshold") if calib else None
         area_mm2_thr = calib.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)) if calib else SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)
         p_score = calib.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)) if calib else SETTINGS.get("inference", {}).get("score_percentile", 99)
@@ -382,17 +480,38 @@ def infer(
                 heatmap_png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
         # 10) Respuesta (threshold puede ser None → se serializa como null)
+        normalized_regions = []
+        for r in regions or []:
+            if isinstance(r, dict):
+                region = dict(r)
+                bbox = region.get("bbox")
+                if bbox and len(bbox) == 4:
+                    region.setdefault("x", float(bbox[0]))
+                    region.setdefault("y", float(bbox[1]))
+                    region.setdefault("w", float(bbox[2]))
+                    region.setdefault("h", float(bbox[3]))
+                elif {"x", "y", "w", "h"}.issubset(region.keys()):
+                    region["bbox"] = [region.get("x"), region.get("y"), region.get("w"), region.get("h")]
+                normalized_regions.append(region)
+            else:
+                normalized_regions.append(r)
+
         response = {
             "score": float(score),
             "threshold": (float(thr) if thr is not None else None),
             "token_shape": [int(token_shape_out[0]), int(token_shape_out[1])],
             "heatmap_png_base64": heatmap_png_b64,
-            "regions": regions or [],
+            "regions": normalized_regions,
+            "request_id": request_id,
+            "recipe_id": recipe_resolved,
         }
         slog(
             "infer.response",
             role_id=role_id,
             roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            request_id=request_id,
             elapsed_ms=int(1000 * (time.time() - t0)),
             score=float(score),
             threshold=(float(thr) if thr is not None else None),
@@ -400,8 +519,20 @@ def infer(
         return response
 
     except Exception as e:
-        slog("infer.error", role_id=role_id, roi_id=roi_id, error=str(e))
-        return JSONResponse(status_code=500, content={"error": str(e), "trace": traceback.format_exc()})
+        req_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+        slog(
+            "infer.error",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key or roi_id,
+            request_id=req_id,
+            error=str(e),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "trace": traceback.format_exc(), "request_id": req_id, "recipe_id": recipe_resolved},
+        )
 
 
 

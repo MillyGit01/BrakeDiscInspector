@@ -539,6 +539,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public void SetLayoutName(string layoutName)
         {
             _currentLayoutName = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
+            _client.RecipeId = _currentLayoutName;
             _datasetManager.SetLayoutName(_currentLayoutName);
         }
 

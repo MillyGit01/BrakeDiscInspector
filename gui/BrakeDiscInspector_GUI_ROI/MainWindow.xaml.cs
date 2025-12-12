@@ -13919,6 +13919,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (_layout != null)
                 {
+                    for (int i = 1; i <= 4; i++)
+                    {
+                        RemoveInspectionRoi(i);
+                    }
+
                     _layout.Master1Pattern = null;
                     _layout.Master1PatternImagePath = null;
                     _layout.Master1Search = null;
@@ -13927,25 +13932,24 @@ namespace BrakeDiscInspector_GUI_ROI
                     _layout.Master2Search = null;
                     _layout.Inspection = null;
                     _layout.InspectionBaseline = null;
-                    _layout.Inspection1 = null;
-                    _layout.Inspection2 = null;
-                    _layout.Inspection3 = null;
-                    _layout.Inspection4 = null;
                     _layout.InspectionBaselinesByImage?.Clear();
+
+                    if (_layout.InspectionRois != null)
+                    {
+                        foreach (var cfg in _layout.InspectionRois)
+                        {
+                            if (cfg != null)
+                            {
+                                cfg.Enabled = false;
+                            }
+                        }
+                    }
                 }
 
-                for (int i = 1; i <= 4; i++)
-                {
-                    SetInspectionSlotModel(i, null, updateActive: false);
-                }
-
-                Inspection1 = null;
-                Inspection2 = null;
-                Inspection3 = null;
-                Inspection4 = null;
+                ResetInspectionEditingFlags();
+                ResetInspectionSlotsUi();
 
                 _workflowViewModel?.SetMasterLayout(_layout);
-                _workflowViewModel?.SetInspectionRoiModels(null, null, null, null);
                 _workflowViewModel?.ResetModelStates();
 
                 _state = MasterState.DrawM1_Pattern;

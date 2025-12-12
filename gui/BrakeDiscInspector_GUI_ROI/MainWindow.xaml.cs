@@ -1149,6 +1149,7 @@ namespace BrakeDiscInspector_GUI_ROI
             FreezeAllRois(_layout);
             RemoveAllRoiAdorners();
 
+            SyncPresetUiFromLayoutAnalyzeOptions();
             InitializeOptionsFromConfig();
             _workflowViewModel?.SetMasterLayout(_layout);
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
@@ -3072,6 +3073,35 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private void SyncPresetUiFromLayoutAnalyzeOptions()
+        {
+            var layoutAnalyze = _layout?.Analyze;
+            if (_preset == null || layoutAnalyze == null)
+            {
+                return;
+            }
+
+            // Keep the preset/UI rotation/scale fields aligned with the layout's stored analyze options
+            // so that subsequent Analyze actions do not overwrite tuned values with stale defaults.
+            if (layoutAnalyze.RotRange > 0)
+            {
+                _preset.RotRange = layoutAnalyze.RotRange;
+                TxtRot.Text = layoutAnalyze.RotRange.ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (layoutAnalyze.ScaleMin > 0)
+            {
+                _preset.ScaleMin = layoutAnalyze.ScaleMin;
+                TxtSMin.Text = layoutAnalyze.ScaleMin.ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (layoutAnalyze.ScaleMax > 0)
+            {
+                _preset.ScaleMax = layoutAnalyze.ScaleMax;
+                TxtSMax.Text = layoutAnalyze.ScaleMax.ToString(CultureInfo.InvariantCulture);
+            }
+        }
+
         private void InitializeOptionsFromConfig()
         {
             double defaultPosTol = _appConfig.Analyze?.PosTolPx > 0 ? _appConfig.Analyze.PosTolPx : 1.0;
@@ -3083,28 +3113,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var layoutAnalyze = _layout?.Analyze;
             var layoutUi = _layout?.Ui;
 
-            // Keep the preset/UI rotation/scale fields aligned with the layout's stored analyze options
-            // so that subsequent Analyze actions do not overwrite tuned values with stale defaults.
-            if (_preset != null && layoutAnalyze != null)
-            {
-                if (layoutAnalyze.RotRange > 0)
-                {
-                    _preset.RotRange = layoutAnalyze.RotRange;
-                    TxtRot.Text = layoutAnalyze.RotRange.ToString(CultureInfo.InvariantCulture);
-                }
-
-                if (layoutAnalyze.ScaleMin > 0)
-                {
-                    _preset.ScaleMin = layoutAnalyze.ScaleMin;
-                    TxtSMin.Text = layoutAnalyze.ScaleMin.ToString(CultureInfo.InvariantCulture);
-                }
-
-                if (layoutAnalyze.ScaleMax > 0)
-                {
-                    _preset.ScaleMax = layoutAnalyze.ScaleMax;
-                    TxtSMax.Text = layoutAnalyze.ScaleMax.ToString(CultureInfo.InvariantCulture);
-                }
-            }
+            SyncPresetUiFromLayoutAnalyzeOptions();
 
             double posTol = layoutAnalyze != null && layoutAnalyze.PosTolPx > 0 ? layoutAnalyze.PosTolPx : defaultPosTol;
             double angTol = layoutAnalyze != null && layoutAnalyze.AngTolDeg > 0 ? layoutAnalyze.AngTolDeg : defaultAngTol;

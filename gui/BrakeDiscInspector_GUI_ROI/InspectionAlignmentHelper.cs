@@ -30,13 +30,16 @@ internal static class InspectionAlignmentHelper
         var (baseCx, baseCy) = baselineInspection.GetCenter();
         var vBase = new Point2d(baseCx - pivotBaseline.X, baseCy - pivotBaseline.Y);
 
-        var cosA = Math.Cos(anchors.AngleDeltaGlobal);
-        var sinA = Math.Sin(anchors.AngleDeltaGlobal);
-        var vx = (vBase.X * cosA - vBase.Y * sinA) * anchors.Scale;
-        var vy = (vBase.X * sinA + vBase.Y * cosA) * anchors.Scale;
+        var angleEffective = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
+        var scaleEffective = anchors.ScaleLock ? 1.0 : anchors.Scale;
+
+        var cosA = Math.Cos(angleEffective);
+        var sinA = Math.Sin(angleEffective);
+        var vx = (vBase.X * cosA - vBase.Y * sinA) * scaleEffective;
+        var vy = (vBase.X * sinA + vBase.Y * cosA) * scaleEffective;
 
         var roiNewCenter = new Point2d(pivotCurrent.X + vx, pivotCurrent.Y + vy);
-        var roiNewAngleDeg = baselineInspection.AngleDeg + anchors.AngleDeltaGlobal * 180.0 / Math.PI;
+        var roiNewAngleDeg = baselineInspection.AngleDeg + angleEffective * 180.0 / Math.PI;
 
         trace?.Invoke(
             $"[ROI] name={inspectionTarget.Label} anchor={anchor} " +
@@ -47,8 +50,8 @@ internal static class InspectionAlignmentHelper
         {
             case RoiShape.Rectangle:
                 inspectionTarget.Shape = RoiShape.Rectangle;
-                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * anchors.Scale);
-                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * anchors.Scale);
+                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * scaleEffective);
+                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * scaleEffective);
                 inspectionTarget.X = roiNewCenter.X;
                 inspectionTarget.Y = roiNewCenter.Y;
                 inspectionTarget.Left = roiNewCenter.X - inspectionTarget.Width * 0.5;
@@ -61,23 +64,23 @@ internal static class InspectionAlignmentHelper
                 inspectionTarget.Shape = RoiShape.Circle;
                 inspectionTarget.CX = roiNewCenter.X;
                 inspectionTarget.CY = roiNewCenter.Y;
-                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * anchors.Scale);
-                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * anchors.Scale);
+                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * scaleEffective);
+                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * scaleEffective);
                 inspectionTarget.Left = roiNewCenter.X - inspectionTarget.Width * 0.5;
                 inspectionTarget.Top = roiNewCenter.Y - inspectionTarget.Height * 0.5;
-                inspectionTarget.R = Math.Max(1, baselineInspection.R * anchors.Scale);
+                inspectionTarget.R = Math.Max(1, baselineInspection.R * scaleEffective);
                 inspectionTarget.AngleDeg = roiNewAngleDeg;
                 break;
             case RoiShape.Annulus:
                 inspectionTarget.Shape = RoiShape.Annulus;
                 inspectionTarget.CX = roiNewCenter.X;
                 inspectionTarget.CY = roiNewCenter.Y;
-                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * anchors.Scale);
-                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * anchors.Scale);
+                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * scaleEffective);
+                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * scaleEffective);
                 inspectionTarget.Left = roiNewCenter.X - inspectionTarget.Width * 0.5;
                 inspectionTarget.Top = roiNewCenter.Y - inspectionTarget.Height * 0.5;
-                inspectionTarget.R = Math.Max(1, baselineInspection.R * anchors.Scale);
-                inspectionTarget.RInner = Math.Max(0, baselineInspection.RInner * anchors.Scale);
+                inspectionTarget.R = Math.Max(1, baselineInspection.R * scaleEffective);
+                inspectionTarget.RInner = Math.Max(0, baselineInspection.RInner * scaleEffective);
                 if (inspectionTarget.RInner >= inspectionTarget.R)
                 {
                     inspectionTarget.RInner = Math.Max(0, inspectionTarget.R - 1);
@@ -98,4 +101,6 @@ internal readonly record struct AnchorTransformContext(
     double M1DetectedAngleDeg,
     double M2DetectedAngleDeg,
     double Scale,
-    double AngleDeltaGlobal);
+    double AngleDeltaGlobal,
+    bool ScaleLock,
+    bool DisableRot);

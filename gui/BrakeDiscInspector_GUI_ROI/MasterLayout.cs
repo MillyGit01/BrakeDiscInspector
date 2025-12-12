@@ -64,6 +64,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     PosTolPx = Analyze?.PosTolPx ?? new AnalyzeOptions().PosTolPx,
                     AngTolDeg = Analyze?.AngTolDeg ?? new AnalyzeOptions().AngTolDeg,
                     ScaleLock = Analyze?.ScaleLock ?? new AnalyzeOptions().ScaleLock,
+                    DisableRot = Analyze?.DisableRot ?? new AnalyzeOptions().DisableRot,
                     UseLocalMatcher = Analyze?.UseLocalMatcher ?? new AnalyzeOptions().UseLocalMatcher,
                     FeatureM1 = Analyze?.FeatureM1 ?? new AnalyzeOptions().FeatureM1,
                     FeatureM2 = Analyze?.FeatureM2 ?? new AnalyzeOptions().FeatureM2,
@@ -106,6 +107,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public double PosTolPx { get; set; } = 1.0;
         public double AngTolDeg { get; set; } = 0.5;
         public bool ScaleLock { get; set; } = true;
+        public bool DisableRot { get; set; } = false;
         public bool UseLocalMatcher { get; set; } = true;
         public string FeatureM1 { get; set; } = "auto";
         public int ThrM1 { get; set; } = 85;

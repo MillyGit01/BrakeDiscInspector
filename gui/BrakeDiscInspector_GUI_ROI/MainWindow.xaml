@@ -237,6 +237,10 @@
                     <CheckBox x:Name="ChkScaleLock"
                               Content="Lock scale"
                               IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
+                    <CheckBox x:Name="ChkDisableRot"
+                              Content="Disable rot"
+                              Margin="8,0,0,0"
+                              IsChecked="{Binding DisableRot, Mode=TwoWay}"/>
                     <CheckBox x:Name="ChkUseLocalMatcher"
                               Content="Use local matcher"
                               Margin="8,0,0,0"

@@ -1645,8 +1645,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var m2Angle = layout.Master2Pattern?.AngleDeg ?? double.NaN;
 
             LogAlign(FormattableString.Invariant(
-                $"[LAYOUT] M1_base=({m1Center.Item1:0.###},{m1Center.Item2:0.###}) M2_base=({m2Center.Item1:0.###},{m2Center.Item2:0.###}) " +
-                $"m1_base_angle={m1Angle:0.###} m2_base_angle={m2Angle:0.###}"));
+                $"[LAYOUT] M1_base=({m1Center.Item1:0.###},{m1Center.Item2:0.###}) M2_base=({m2Center.Item1:0.###},{m2Center.Item2:0.###}) m1_base_angle={m1Angle:0.###} m2_base_angle={m2Angle:0.###}"));
 
             if (layout.InspectionRois == null)
             {
@@ -1668,8 +1667,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var angle = baseline?.AngleDeg ?? double.NaN;
 
                 LogAlign(FormattableString.Invariant(
-                    $"[LAYOUT] roi_index={cfg.Index} id={cfg.Id} model_key={cfg.ModelKey} enabled={cfg.Enabled} " +
-                    $"anchor_master={(int)cfg.AnchorMaster} baseline_center=({center.Item1:0.###},{center.Item2:0.###}) baseline_angle={angle:0.###}"));
+                    $"[LAYOUT] roi_index={cfg.Index} id={cfg.Id} model_key={cfg.ModelKey} enabled={cfg.Enabled} anchor_master={(int)cfg.AnchorMaster} baseline_center=({center.Item1:0.###},{center.Item2:0.###}) baseline_angle={angle:0.###}"));
             }
         }
 
@@ -5411,8 +5409,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var scaleEffective = scaleLock ? 1.0 : scale;
 
                 LogAlign(FormattableString.Invariant(
-                    $"[MASTERS] M1_det=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) M2_det=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###}) " +
-                    $"angle_delta_global_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####}"));
+                    $"[MASTERS] M1_det=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) M2_det=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###}) angle_delta_global_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####}"));
 
                 var tM1 = InspectionAlignmentHelper.ComputeTranslation(m1BaselineCenter, m1DetectedCenter, rotEffective, scaleEffective);
                 var tM2 = InspectionAlignmentHelper.ComputeTranslation(m2BaselineCenter, m2DetectedCenter, rotEffective, scaleEffective);
@@ -5420,8 +5417,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 LogAlign(FormattableString.Invariant(
                     $"[XFORM] anchor_for_translation=M1 tx={tM1.Tx:0.###} ty={tM1.Ty:0.###} rot_deg={rotEffectiveDeg:0.###} scale={scaleEffective:0.####}"));
                 LogAlign(FormattableString.Invariant(
-                    $"[XFORM_ALT] tx_m1={tM1.Tx:0.###} ty_m1={tM1.Ty:0.###} tx_m2={tM2.Tx:0.###} ty_m2={tM2.Ty:0.###} " +
-                    $"dtx={(tM2.Tx - tM1.Tx):0.###} dty={(tM2.Ty - tM1.Ty):0.###}"));
+                    $"[XFORM_ALT] tx_m1={tM1.Tx:0.###} ty_m1={tM1.Ty:0.###} tx_m2={tM2.Tx:0.###} ty_m2={tM2.Ty:0.###} dtx={(tM2.Tx - tM1.Tx):0.###} dty={(tM2.Ty - tM1.Ty):0.###}"));
             }
 
             context = new AnchorTransformContext(

@@ -783,13 +783,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var rotRad = angN - angO;
             var rotDeg = rotRad * 180.0 / Math.PI;
 
-            double x = cx1Old, y = cy1Old;
-            double xr = (x * Math.Cos(rotRad) - y * Math.Sin(rotRad)) * scale;
-            double yr = (x * Math.Sin(rotRad) + y * Math.Cos(rotRad)) * scale;
-            double tx = cx1New - xr;
-            double ty = cy1New - yr;
-
-            return (scale, tx, ty, rotDeg);
+            // Translation is anchor-specific at placement time; keep identity offsets here
+            // to avoid suggesting a single global anchor. Values retained for legacy logging.
+            return (scale, 0.0, 0.0, rotDeg);
         }
 
         private static Rect ApplyBatchTransformToRect(Rect r, (double s, double dx, double dy, double rot) xf)
@@ -5414,16 +5410,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
                 var scaleEffective = scaleLock ? 1.0 : scale;
 
+                var deltaM1 = new Point2d(m1DetectedCenter.X - m1BaselineCenter.X, m1DetectedCenter.Y - m1BaselineCenter.Y);
+                var deltaM2 = new Point2d(m2DetectedCenter.X - m2BaselineCenter.X, m2DetectedCenter.Y - m2BaselineCenter.Y);
+
                 LogAlign(FormattableString.Invariant(
-                    $"[MASTERS] M1_det=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) M2_det=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###}) angle_delta_global_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####}"));
+                    $"[BATCH][MASTERS] baseline_m1=({m1BaselineCenter.X:0.###},{m1BaselineCenter.Y:0.###}) baseline_m2=({m2BaselineCenter.X:0.###},{m2BaselineCenter.Y:0.###}) det_m1=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) det_m2=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###})"));
+                LogAlign(FormattableString.Invariant(
+                    $"[BATCH][MASTERS] delta_m1=({deltaM1.X:0.###},{deltaM1.Y:0.###}) delta_m2=({deltaM2.X:0.###},{deltaM2.Y:0.###}) angle_delta_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####} scale_lock={scaleLock} disable_rot={disableRot}"));
 
                 var tM1 = InspectionAlignmentHelper.ComputeTranslation(m1BaselineCenter, m1DetectedCenter, rotEffective, scaleEffective);
                 var tM2 = InspectionAlignmentHelper.ComputeTranslation(m2BaselineCenter, m2DetectedCenter, rotEffective, scaleEffective);
 
                 LogAlign(FormattableString.Invariant(
-                    $"[XFORM] anchor_for_translation=M1 tx={tM1.Tx:0.###} ty={tM1.Ty:0.###} rot_deg={rotEffectiveDeg:0.###} scale={scaleEffective:0.####}"));
-                LogAlign(FormattableString.Invariant(
-                    $"[XFORM_ALT] tx_m1={tM1.Tx:0.###} ty_m1={tM1.Ty:0.###} tx_m2={tM2.Tx:0.###} ty_m2={tM2.Ty:0.###} dtx={(tM2.Tx - tM1.Tx):0.###} dty={(tM2.Ty - tM1.Ty):0.###}"));
+                    $"[BATCH][MASTERS] anchor_tx_m1=({tM1.Tx:0.###},{tM1.Ty:0.###}) anchor_tx_m2=({tM2.Tx:0.###},{tM2.Ty:0.###}) rot_deg={rotEffectiveDeg:0.###} scale_eff={scaleEffective:0.####}"));
             }
 
             context = new AnchorTransformContext(

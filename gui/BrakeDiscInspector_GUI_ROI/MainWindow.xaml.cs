@@ -564,7 +564,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 add(_layout.InspectionBaseline);
             }
 
-            add(_inspectionBaselineFixed);
+            foreach (var baseline in _inspectionBaselineFixedById.Values)
+            {
+                add(baseline);
+            }
 
             if (_preset?.Inspection1 != null)
             {
@@ -1635,8 +1638,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private HeatmapRoiModel _lastHeatmapRoi;              // ROI (image-space) that defines the heatmap clipping area
         // --- Fixed baseline per image (no drift) ---
         private bool _useFixedInspectionBaseline = true;        // keep using fixed baseline (must be true)
-        private RoiModel? _inspectionBaselineFixed = null;      // the fixed baseline for the current image
-        private bool _inspectionBaselineSeededForImage = false; // has the baseline been seeded for the current image?
+        private readonly Dictionary<string, RoiModel> _inspectionBaselineFixedById =
+            new(StringComparer.OrdinalIgnoreCase);              // fixed baselines per inspection id for the current image
+        private readonly HashSet<string> _inspectionBaselineSeededIds =
+            new(StringComparer.OrdinalIgnoreCase);
+        private bool _inspectionBaselineSeededForImage = false; // has ANY baseline been seeded for the current image?
         private readonly Dictionary<string, List<RoiModel>> _inspectionBaselinesByImage
             = new(StringComparer.OrdinalIgnoreCase);
         private string _currentImageHash = string.Empty;
@@ -4454,8 +4460,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 // New image => reset and seed
                 if (!string.Equals(seedKey, _lastImageSeedKey, System.StringComparison.Ordinal))
                 {
-                    _inspectionBaselineFixed = null;
-                    _inspectionBaselineSeededForImage = false;
+                      _inspectionBaselineFixedById.Clear();
+                      _inspectionBaselineSeededIds.Clear();
+                      _inspectionBaselineSeededForImage = false;
                     InspLog($"[Seed] New image detected, oldKey='{_lastImageSeedKey}' newKey='{seedKey}' -> reset baseline.");
                     try
                     {
@@ -10365,29 +10372,31 @@ namespace BrakeDiscInspector_GUI_ROI
         private void SeedInspectionBaselineOnce(RoiModel? insp, string seedKey)
         {
             if (!_useFixedInspectionBaseline) return;
-            if (_inspectionBaselineSeededForImage)
+            var roiId = insp?.Id;
+            if (string.IsNullOrWhiteSpace(roiId))
             {
-                InspLog($"[Seed] Skip: already seeded for key='{_lastImageSeedKey}'");
+                InspLog("[Seed] Skip: missing insp.Id");
                 return;
             }
-            // Always prefer the persisted inspection baseline when seeding.
-            var baseline = _layout?.InspectionBaseline;
-            if (baseline == null)
+
+            if (_inspectionBaselineSeededIds.Contains(roiId) && string.Equals(_lastImageSeedKey, seedKey, StringComparison.Ordinal))
             {
-                // Fallback only if the persisted baseline is not available yet.
-                baseline = insp ?? _layout?.Inspection;
+                InspLog($"[Seed] Skip: already seeded for id='{roiId}' key='{_lastImageSeedKey}'");
+                return;
             }
 
+            var baseline = GetInspectionBaselineClone(roiId) ?? insp;
             if (baseline == null)
             {
                 InspLog("[Seed] Skip: baseline is null");
                 return;
             }
 
-            _inspectionBaselineFixed = baseline.Clone();
+            _inspectionBaselineFixedById[roiId] = baseline.Clone();
+            _inspectionBaselineSeededIds.Add(roiId);
             _inspectionBaselineSeededForImage = true;
             _lastImageSeedKey = seedKey;
-            InspLog($"[Seed] Fixed baseline SEEDED (key='{seedKey}') from: {FInsp(_inspectionBaselineFixed)}");
+            InspLog($"[Seed] Fixed baseline SEEDED (key='{seedKey}' id='{roiId}') from: {FInsp(baseline)}");
         }
 
         private void ReseedInspectionBaselineFromLayout(string context)
@@ -10400,7 +10409,8 @@ namespace BrakeDiscInspector_GUI_ROI
             var seedKey = ComputeImageSeedKey();
             _currentImageHash = seedKey;
             _inspectionBaselineSeededForImage = false;
-            _inspectionBaselineFixed = null;
+            _inspectionBaselineFixedById.Clear();
+            _inspectionBaselineSeededIds.Clear();
 
             var seedRoi = GetInspectionSlotModel(_activeInspectionIndex)
                 ?? GetFirstInspectionRoi();
@@ -10577,20 +10587,24 @@ namespace BrakeDiscInspector_GUI_ROI
             _currentImageHash = __seedKeyNow;
             InspLog($"[Analyze] Key='{__seedKeyNow}' BEFORE insp: {FInsp(insp)}  M1=({master1.X:F3},{master1.Y:F3}) M2=({master2.X:F3},{master2.Y:F3})");
 
-            // DEFENSIVE: do NOT re-seed here if already seeded for this image
-            var fallbackBaseline = _layout?.InspectionBaseline ?? insp;
-            if (useFixedBaseline && !_inspectionBaselineSeededForImage && fallbackBaseline != null)
+            // DEFENSIVE: do NOT re-seed here if already seeded for this image/id
+            var fallbackBaseline = GetInspectionBaselineClone(insp?.Id) ?? insp;
+            if (useFixedBaseline && fallbackBaseline != null)
             {
-                // Only seed if the image key is different (should not happen if [3] ran properly)
-                if (!string.Equals(__seedKeyNow, _lastImageSeedKey, System.StringComparison.Ordinal))
+                var roiId = insp?.Id ?? string.Empty;
+                if (!_inspectionBaselineSeededIds.Contains(roiId))
                 {
-                    SeedInspectionBaselineOnce(fallbackBaseline, __seedKeyNow);
-                    InspLog("[Analyze] Fallback seed performed (unexpected), key differed.");
-                }
-                else
-                {
-                    InspLog("[Analyze] Fallback seed skipped (already seeded for current image key).");
-                    _inspectionBaselineSeededForImage = true;
+                    // Only seed if the image key is different (should not happen if [3] ran properly)
+                    if (!string.Equals(__seedKeyNow, _lastImageSeedKey, System.StringComparison.Ordinal))
+                    {
+                        SeedInspectionBaselineOnce(fallbackBaseline, __seedKeyNow);
+                        InspLog("[Analyze] Fallback seed performed (unexpected), key differed.");
+                    }
+                    else
+                    {
+                        InspLog("[Analyze] Fallback seed skipped (already seeded for current image key).");
+                        _inspectionBaselineSeededForImage = true;
+                    }
                 }
             }
 
@@ -10603,30 +10617,65 @@ namespace BrakeDiscInspector_GUI_ROI
             if (insp == null)
                 return;
 
-            RoiModel? baselineInspection;
-            if (useFixedBaseline)
+            string baselineSource = "none";
+            RoiModel? baselineInspection = SelectBaselineForInspection();
+
+            RoiModel? SelectBaselineForInspection()
             {
-                baselineInspection = _inspectionBaselineFixed;
-                if (baselineInspection == null)
+                if (insp == null)
                 {
-                    var persistedBaseline = GetInspectionBaselineClone();
+                    return null;
+                }
+
+                var roiId = insp.Id ?? string.Empty;
+
+                if (useFixedBaseline)
+                {
+                    if (_inspectionBaselineFixedById.TryGetValue(roiId, out var seeded))
+                    {
+                        baselineSource = "fixed-seeded";
+                        return seeded.Clone();
+                    }
+
+                    var persistedBaseline = GetInspectionBaselineClone(roiId);
                     if (persistedBaseline != null)
                     {
-                        _inspectionBaselineFixed = persistedBaseline;
-                        baselineInspection = _inspectionBaselineFixed;
-                        if (!_inspectionBaselineSeededForImage)
-                        {
-                            _inspectionBaselineSeededForImage = true;
-                            _lastImageSeedKey = __seedKeyNow;
-                            InspLog("[Analyze] Fallback seed from persisted baseline.");
-                        }
+                        baselineSource = "fixed-persisted";
+                        _inspectionBaselineFixedById[roiId] = persistedBaseline.Clone();
+                        _inspectionBaselineSeededIds.Add(roiId);
+                        _inspectionBaselineSeededForImage = true;
+                        _lastImageSeedKey = __seedKeyNow;
+                        InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=persisted base={FInsp(persistedBaseline)}");
+                        return persistedBaseline.Clone();
                     }
+
+                    baselineSource = "fixed-self";
+                    var clone = insp.Clone();
+                    _inspectionBaselineFixedById[roiId] = clone.Clone();
+                    _inspectionBaselineSeededIds.Add(roiId);
+                    _inspectionBaselineSeededForImage = true;
+                    _lastImageSeedKey = __seedKeyNow;
+                    InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=self base={FInsp(clone)}");
+                    return clone;
                 }
+
+                var nonFixed = GetInspectionBaselineClone(roiId) ?? insp.Clone();
+                baselineSource = nonFixed == null ? "none" : "persisted-or-self";
+                return nonFixed;
             }
-            else
+
+            if (baselineInspection != null
+                && !string.IsNullOrWhiteSpace(baselineInspection.Id)
+                && !string.IsNullOrWhiteSpace(insp.Id)
+                && !string.Equals(baselineInspection.Id, insp.Id, StringComparison.OrdinalIgnoreCase))
             {
-                baselineInspection = GetInspectionBaselineClone() ?? insp.Clone();
+                AppendLog($"[Analyze][WARN] baseline id mismatch: roiId={insp.Id} baselineId={baselineInspection.Id}; fallback to active ROI geometry.");
+                baselineSource += "|fallback-mismatch";
+                baselineInspection = insp.Clone();
             }
+
+            AppendLog(FormattableString.Invariant(
+                $"[InspectBaseline] activeIdx={activeInspectionIndex} roiId={insp.Id ?? "<null>"} fixed={useFixedBaseline} baselineSource={baselineSource} chosenBaselineId={baselineInspection?.Id ?? "<null>"} persistedBaselineId={_layout?.InspectionBaseline?.Id ?? "<null>"}"));
 
             RoiModel? __baseM1S = _layout?.Master1Search ?.Clone();
             RoiModel? __baseM2S = _layout?.Master2Search ?.Clone();
@@ -10833,18 +10882,38 @@ namespace BrakeDiscInspector_GUI_ROI
                 double dAng = insp.AngleDeg - inspBefore.AngleDeg;
                 InspLog($"[Transform] ROI before={FInsp(inspBefore)} after={FInsp(insp)} dCX={dCx:F3} dCY={dCy:F3} dAng={dAng:F3}");
             }
-            if (_inspectionBaselineFixed != null)
+            RoiModel? baselineForLog = null;
+            if (useFixedBaseline && insp != null && !string.IsNullOrWhiteSpace(insp.Id))
             {
-                InspLog($"[Analyze] DELTA  : dCX={(insp.CX - _inspectionBaselineFixed.CX):F3}, dCY={(insp.CY - _inspectionBaselineFixed.CY):F3}  (fixedBaseline={useFixedBaseline})");
+                _inspectionBaselineFixedById.TryGetValue(insp.Id, out baselineForLog);
+            }
+
+            if (baselineForLog != null)
+            {
+                InspLog($"[Analyze] DELTA  : dCX={(insp.CX - baselineForLog.CX):F3}, dCY={(insp.CY - baselineForLog.CY):F3}  (fixedBaseline={useFixedBaseline})");
             }
 
             _lastAccM1X = m1NewX; _lastAccM1Y = m1NewY;
             _lastAccM2X = m2NewX; _lastAccM2Y = m2NewY;
         }
 
-        private RoiModel? GetInspectionBaselineClone()
+        private RoiModel? GetInspectionBaselineClone(string? roiId = null)
         {
-            return _layout?.InspectionBaseline?.Clone();
+            var baseline = _layout?.InspectionBaseline;
+            if (baseline != null)
+            {
+                if (string.IsNullOrWhiteSpace(roiId) || string.Equals(baseline.Id, roiId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return baseline.Clone();
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(roiId))
+            {
+                return FindInspectionBaselineById(roiId);
+            }
+
+            return null;
         }
 
         private void SetInspectionBaseline(RoiModel? source)

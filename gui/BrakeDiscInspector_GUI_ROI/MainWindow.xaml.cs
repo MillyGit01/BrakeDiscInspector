@@ -104,6 +104,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _inspectionBaselineRestorePending;
         private volatile bool _suspendManualOverlayInvalidations;
         private bool _layoutAutosaveEnabled;
+        private bool _hasAppliedLayoutSnapshot;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
@@ -309,6 +310,52 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 // Logging must not throw.
             }
+        }
+
+        private void LogInspectionRoiAnchors(string tag)
+        {
+            var vmRois = ViewModel?.InspectionRois;
+            if (vmRois == null || vmRois.Count == 0)
+            {
+                AppendLog($"[ANCHOR][VM] {tag} count=0 entries=<null>");
+                return;
+            }
+
+            for (int i = 1; i <= 4; i++)
+            {
+                var cfg = vmRois.FirstOrDefault(r => r?.Index == i);
+                if (cfg == null)
+                {
+                    AppendLog($"[ANCHOR][VM] {tag} idx={i} cfg=NULL anchor=? enabled=? shape=?");
+                }
+                else
+                {
+                    AppendLog(FormattableString.Invariant(
+                        $"[ANCHOR][VM] {tag} idx={cfg.Index} id={cfg.Id} anchor={(int)cfg.AnchorMaster} enabled={cfg.Enabled} shape={cfg.Shape}"));
+                }
+            }
+        }
+
+        private string FormatInspectionAnchorList(IEnumerable<InspectionRoiConfig?>? rois)
+        {
+            if (rois == null)
+            {
+                return string.Empty;
+            }
+
+            var parts = new List<string>();
+            foreach (var cfg in rois)
+            {
+                if (cfg == null)
+                {
+                    parts.Add("null");
+                    continue;
+                }
+
+                parts.Add(FormattableString.Invariant($"{cfg.Index}:{cfg.Id}:{(int)cfg.AnchorMaster}"));
+            }
+
+            return string.Join(",", parts);
         }
 
         private void SetInspectionSlotModel(int index, RoiModel? model, bool updateActive = true)
@@ -1237,6 +1284,10 @@ namespace BrakeDiscInspector_GUI_ROI
             ResetInspectionSlotsUi();
 
             _layout = layout;
+            _hasAppliedLayoutSnapshot = true;
+
+            AppendLog(FormattableString.Invariant(
+                $"[ANCHOR][LAYOUT] count={_layout?.InspectionRois?.Count ?? 0} items={FormatInspectionAnchorList(_layout?.InspectionRois)}"));
 
             InitializeFixedMastersBaseline($"layout:{sourceContext}");
 
@@ -1253,6 +1304,8 @@ namespace BrakeDiscInspector_GUI_ROI
             InitializeOptionsFromConfig();
             _workflowViewModel?.SetMasterLayout(_layout);
             _workflowViewModel?.SetInspectionRoisCollection(_layout?.InspectionRois);
+            AppendLog(FormattableString.Invariant(
+                $"[ANCHOR][VM-AFTER-LAYOUT] count={_workflowViewModel?.InspectionRois?.Count ?? 0} items={FormatInspectionAnchorList(_workflowViewModel?.InspectionRois)}"));
             _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
             AppendLog(FormattableString.Invariant(
                 $"[layout] Master1PatternImagePath='{_layout?.Master1PatternImagePath}'"));
@@ -3208,12 +3261,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 OnPropertyChanged(nameof(LayoutProfiles));
                 LayoutProfiles.RefreshCommand.Execute(null);
                 ApplyInspectionPresetToUI(_preset);
+                LogInspectionRoiAnchors("startup:after-preset");
                 InitializeOptionsFromConfig();
 
                 InitUI();
                 InitTrainPollingTimer();
                 HookCanvasInput();
                 InitWorkflow();
+                LogInspectionRoiAnchors("startup:after-init-workflow");
 
                 ImgMain.SizeChanged += ImgMain_SizeChanged;
                 this.SizeChanged += MainWindow_SizeChanged;
@@ -3512,6 +3567,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 backendClient.RecipeId = GetCurrentLayoutName();
                 BackendAPI.SetRecipeId(backendClient.RecipeId);
 
+                if ((_layout?.InspectionRois == null || _layout.InspectionRois.Count == 0) && !_hasAppliedLayoutSnapshot)
+                {
+                    _layout ??= new MasterLayout();
+                }
+
                 _backendClient = backendClient;
 
                 var datasetManager = new DatasetManager(GetCurrentLayoutName());
@@ -3619,10 +3679,21 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (ViewModel?.InspectionRois == null)
             {
+                AppendLog($"[ANCHOR][CFG] idx={index} cfg=NULL vmCount={ViewModel?.InspectionRois?.Count ?? -1}");
                 return null;
             }
 
-            return ViewModel.InspectionRois.FirstOrDefault(r => r.Index == index);
+            var cfg = ViewModel.InspectionRois.FirstOrDefault(r => r.Index == index);
+            if (cfg == null)
+            {
+                AppendLog($"[ANCHOR][CFG] idx={index} cfg=NULL vmCount={ViewModel?.InspectionRois?.Count ?? -1}");
+            }
+            else
+            {
+                AppendLog(FormattableString.Invariant($"[ANCHOR][CFG] idx={index} id={cfg.Id} anchor={cfg.AnchorMaster}"));
+            }
+
+            return cfg;
         }
 
         private bool GetShowMaster1Pattern() => ViewModel?.ShowMaster1Pattern ?? true;
@@ -10423,6 +10494,10 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (target == null || baseline == null) return;
 
+            var inRef = RuntimeHelpers.GetHashCode(target);
+            var baselineRef = RuntimeHelpers.GetHashCode(baseline);
+            var before = target.Clone();
+
             // Baseline center (image space)
             var (baseCx, baseCy) = GetCenterShapeAware(baseline);
             double relX = baseCx - pivotOldX;
@@ -10456,6 +10531,19 @@ namespace BrakeDiscInspector_GUI_ROI
             // Apply angle rotation for rectangular ROIs
             double dAngDeg = (angleDeltaRad * 180.0 / Math.PI);
             target.AngleDeg = baseline.AngleDeg + dAngDeg;
+
+            var outRef = RuntimeHelpers.GetHashCode(target);
+            bool mutated = before == null
+                || Math.Abs(target.CX - before.CX) > double.Epsilon
+                || Math.Abs(target.CY - before.CY) > double.Epsilon
+                || Math.Abs(target.AngleDeg - before.AngleDeg) > double.Epsilon
+                || Math.Abs(target.Width - before.Width) > double.Epsilon
+                || Math.Abs(target.Height - before.Height) > double.Epsilon
+                || Math.Abs(target.R - before.R) > double.Epsilon
+                || Math.Abs(target.RInner - before.RInner) > double.Epsilon;
+
+            GuiLog.Info(FormattableString.Invariant(
+                $"[XFORM][FN] inRef={inRef} outRef={outRef} baselineRef={baselineRef} mutated={mutated}"));
         }
 
         private void MoveInspectionTo(RoiModel insp, SWPoint master1, SWPoint master2)
@@ -10477,6 +10565,12 @@ namespace BrakeDiscInspector_GUI_ROI
             double oldTop = insp?.Top ?? 0;
             double oldWidth = insp?.Width ?? 0;
             double oldHeight = insp?.Height ?? 0;
+
+            int activeInspectionIndex = ResolveActiveInspectionIndex();
+            var config = GetInspectionConfigByIndex(activeInspectionIndex);
+            var anchorMaster = config?.AnchorMaster ?? MasterAnchorChoice.Master1;
+            AppendLog(FormattableString.Invariant(
+                $"[ANCHOR][ALIGN] roiId={insp?.Id ?? "<null>"} idx={activeInspectionIndex} cfgAnchor={(config != null ? (int)config.AnchorMaster : -1)} resolved={anchorMaster}"));
 
             // === Analyze: BEFORE state & current image key ===
             var __seedKeyNow = ComputeImageSeedKey();
@@ -10576,6 +10670,16 @@ namespace BrakeDiscInspector_GUI_ROI
             var baseM1ForLog = baseM1Snap ?? _layout?.Master1Pattern;
             var baseM2ForLog = baseM2Snap ?? _layout?.Master2Pattern;
             string baselineSourceLabel = baseFromFixed ? "fixed" : "layout-fallback";
+            var pivotBaseline = anchorMaster == MasterAnchorChoice.Master2 ? m2_base : m1_base;
+            var pivotDetected = anchorMaster == MasterAnchorChoice.Master2 ? m2_new : m1_new;
+            var pivotLabel = anchorMaster == MasterAnchorChoice.Master2 ? "Master2" : "Master1";
+
+            AppendLog(FormattableString.Invariant(
+                $"[XFORM][CFG] roiId={insp?.Id ?? "<null>"} idx={activeInspectionIndex} anchor={(int)anchorMaster} pivot={pivotLabel}"));
+            AppendLog(FormattableString.Invariant(
+                $"[XFORM][BASE] m1=({m1OldX:0.###},{m1OldY:0.###}) m2=({m2OldX:0.###},{m2OldY:0.###})"));
+            AppendLog(FormattableString.Invariant(
+                $"[XFORM][NEW ] m1=({m1NewX:0.###},{m1NewY:0.###}) m2=({m2NewX:0.###},{m2NewY:0.###})"));
 
             if (__canTransform)
             {
@@ -10604,10 +10708,35 @@ namespace BrakeDiscInspector_GUI_ROI
                 angDelta = deg * Math.PI / 180.0;
                 angDeltaEffective = _disableRot ? 0.0 : angDelta;
 
-                InspLog($"[Transform] imgKey='{__seedKeyNow}' roiId='{insp.Id ?? "<null>"}' anchorMaster=Master1 baseline_source={baselineSourceLabel} " +
+                double pivotOldX = pivotBaseline.X;
+                double pivotOldY = pivotBaseline.Y;
+                double pivotNewX = pivotDetected.X;
+                double pivotNewY = pivotDetected.Y;
+
+                void ApplyTransformWithLog(string tag, RoiModel? target, RoiModel? baseline, double pOldX, double pOldY, double pNewX, double pNewY, int indexForLog)
+                {
+                    if (target == null || baseline == null)
+                    {
+                        AppendLog($"[XFORM][APPLY] tag={tag} roiId=<null> targetRef=<null> idx={indexForLog} before=<null>");
+                        return;
+                    }
+
+                    var before = target.Clone();
+                    var refId = RuntimeHelpers.GetHashCode(target);
+                    AppendLog($"[XFORM][APPLY] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} idx={indexForLog} before={DescribeRoi(before)}");
+                    ApplyRoiTransform(target, baseline, pOldX, pOldY, pNewX, pNewY, effectiveScale, angDeltaEffective);
+                    double dCx = target.CX - (before?.CX ?? target.CX);
+                    double dCy = target.CY - (before?.CY ?? target.CY);
+                    double dAng = target.AngleDeg - (before?.AngleDeg ?? target.AngleDeg);
+                    AppendLog($"[XFORM][APPLIED] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} after={DescribeRoi(target)} d=({dCx:F3},{dCy:F3},{dAng:F3})");
+                }
+
+                InspLog($"[Transform] imgKey='{__seedKeyNow}' roiId='{insp.Id ?? "<null>"}' anchorMaster={anchorMaster} baseline_source={baselineSourceLabel} " +
                         $"BASE:{DescribeMasterForLog("M1_base", baseM1ForLog)} {DescribeMasterForLog("M2_base", baseM2ForLog)} " +
-                        $"NEW:M1=({m1NewX:F3},{m1NewY:F3}) M2=({m2NewX:F3},{m2NewY:F3}) effScale={effectiveScale:F6} angΔ={angDeltaEffective * 180 / Math.PI:F3}° pivot=Master1 " +
-                        $"translation=({m1NewX - m1OldX:F3},{m1NewY - m1OldY:F3})");
+                        $"NEW:M1=({m1NewX:F3},{m1NewY:F3}) M2=({m2NewX:F3},{m2NewY:F3}) effScale={effectiveScale:F6} angΔ={angDeltaEffective * 180 / Math.PI:F3}° pivot={pivotLabel} " +
+                        $"translation=({pivotNewX - pivotOldX:F3},{pivotNewY - pivotOldY:F3})");
+
+                ApplyTransformWithLog("inspection", insp, baselineInspection, pivotOldX, pivotOldY, pivotNewX, pivotNewY, activeInspectionIndex);
             }
 
             if (!__canTransform && ScaleLock && insp != null)
@@ -10649,10 +10778,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (!FREEZE_MASTER_SEARCH_ON_ANALYZE)
                     {
                         if (_layout.Master1Search != null && __baseM1S != null)
-                            ApplyRoiTransform(_layout.Master1Search,  __baseM1S, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDeltaEffective);
+                            ApplyTransformWithLog("m1-search", _layout.Master1Search, __baseM1S, m1OldX, m1OldY, m1NewX, m1NewY, 0);
 
                         if (_layout.Master2Search != null && __baseM2S != null)
-                            ApplyRoiTransform(_layout.Master2Search,  __baseM2S, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDeltaEffective);
+                            ApplyTransformWithLog("m2-search", _layout.Master2Search, __baseM2S, m1OldX, m1OldY, m1NewX, m1NewY, 0);
                     }
                     else
                     {
@@ -10661,7 +10790,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
 
                     if (_lastHeatmapRoi != null && __baseHeat != null)
-                        ApplyRoiTransform(_lastHeatmapRoi, __baseHeat, m1OldX, m1OldY, m1NewX, m1NewY, effectiveScale, angDeltaEffective);
+                        ApplyTransformWithLog("heatmap", _lastHeatmapRoi, __baseHeat, m1OldX, m1OldY, m1NewX, m1NewY, -1);
 
                     try
                     {
@@ -10683,6 +10812,12 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[UI] Unified transform failed: {ex.Message}");
+            }
+
+            if (__canTransform && insp != null)
+            {
+                SetInspectionSlotModel(activeInspectionIndex, insp.Clone(), updateActive: true);
+                insp = _layout?.Inspection ?? insp;
             }
 
             SyncCurrentRoiFromInspection(insp);
@@ -11567,6 +11702,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             bool applied = false;
+            var anchorSnapshot = ViewModel?.InspectionRois?
+                .Select(r => new { r.Index, r.AnchorMaster })
+                .ToList();
 
             for (int slot = 1; slot <= 2; slot++)
             {
@@ -11595,6 +11733,20 @@ namespace BrakeDiscInspector_GUI_ROI
                 RefreshInspectionRoiSlots();
                 RedrawAllRois();
                 DumpUiShapesMap("preset-apply");
+            }
+
+            if (anchorSnapshot != null)
+            {
+                foreach (var snap in anchorSnapshot)
+                {
+                    var cfg = ViewModel?.InspectionRois?.FirstOrDefault(r => r.Index == snap.Index);
+                    if (cfg != null && cfg.AnchorMaster != snap.AnchorMaster)
+                    {
+                        cfg.AnchorMaster = snap.AnchorMaster;
+                        AppendLog(FormattableString.Invariant(
+                            $"[ANCHOR][VM] restore idx={cfg.Index} anchor={(int)cfg.AnchorMaster} after=preset-apply"));
+                    }
+                }
             }
         }
 

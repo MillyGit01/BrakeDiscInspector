@@ -18,7 +18,7 @@ namespace BrakeDiscInspector_GUI_ROI
     {
         public MasterLayout()
         {
-            EnsureInspectionRoiDefaults(this);
+            MasterLayoutManager.EnsureInspectionRoiDefaults(this);
         }
 
         public RoiModel? Master1Pattern { get; set; }
@@ -391,7 +391,7 @@ namespace BrakeDiscInspector_GUI_ROI
             prop?.SetValue(roi, index);
         }
 
-        private static InspectionRoiNormalizationResult EnsureInspectionRoiDefaults(MasterLayout layout)
+        internal static InspectionRoiNormalizationResult EnsureInspectionRoiDefaults(MasterLayout layout)
         {
             layout.InspectionRois ??= new ObservableCollection<InspectionRoiConfig>();
             var originalCount = layout.InspectionRois.Count;

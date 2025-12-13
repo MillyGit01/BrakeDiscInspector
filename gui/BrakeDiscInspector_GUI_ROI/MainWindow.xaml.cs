@@ -10681,6 +10681,24 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog(FormattableString.Invariant(
                 $"[XFORM][NEW ] m1=({m1NewX:0.###},{m1NewY:0.###}) m2=({m2NewX:0.###},{m2NewY:0.###})"));
 
+            void ApplyTransformWithLog(string tag, RoiModel? target, RoiModel? baseline, double pOldX, double pOldY, double pNewX, double pNewY, int indexForLog)
+            {
+                if (target == null || baseline == null)
+                {
+                    AppendLog($"[XFORM][APPLY] tag={tag} roiId=<null> targetRef=<null> idx={indexForLog} before=<null>");
+                    return;
+                }
+
+                var before = target.Clone();
+                var refId = RuntimeHelpers.GetHashCode(target);
+                AppendLog($"[XFORM][APPLY] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} idx={indexForLog} before={DescribeRoi(before)}");
+                ApplyRoiTransform(target, baseline, pOldX, pOldY, pNewX, pNewY, effectiveScale, angDeltaEffective);
+                double dCx = target.CX - (before?.CX ?? target.CX);
+                double dCy = target.CY - (before?.CY ?? target.CY);
+                double dAng = target.AngleDeg - (before?.AngleDeg ?? target.AngleDeg);
+                AppendLog($"[XFORM][APPLIED] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} after={DescribeRoi(target)} d=({dCx:F3},{dCy:F3},{dAng:F3})");
+            }
+
             if (__canTransform)
             {
                 double dxOld = m2OldX - m1OldX;
@@ -10712,24 +10730,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 double pivotOldY = pivotBaseline.Y;
                 double pivotNewX = pivotDetected.X;
                 double pivotNewY = pivotDetected.Y;
-
-                void ApplyTransformWithLog(string tag, RoiModel? target, RoiModel? baseline, double pOldX, double pOldY, double pNewX, double pNewY, int indexForLog)
-                {
-                    if (target == null || baseline == null)
-                    {
-                        AppendLog($"[XFORM][APPLY] tag={tag} roiId=<null> targetRef=<null> idx={indexForLog} before=<null>");
-                        return;
-                    }
-
-                    var before = target.Clone();
-                    var refId = RuntimeHelpers.GetHashCode(target);
-                    AppendLog($"[XFORM][APPLY] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} idx={indexForLog} before={DescribeRoi(before)}");
-                    ApplyRoiTransform(target, baseline, pOldX, pOldY, pNewX, pNewY, effectiveScale, angDeltaEffective);
-                    double dCx = target.CX - (before?.CX ?? target.CX);
-                    double dCy = target.CY - (before?.CY ?? target.CY);
-                    double dAng = target.AngleDeg - (before?.AngleDeg ?? target.AngleDeg);
-                    AppendLog($"[XFORM][APPLIED] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} after={DescribeRoi(target)} d=({dCx:F3},{dCy:F3},{dAng:F3})");
-                }
 
                 InspLog($"[Transform] imgKey='{__seedKeyNow}' roiId='{insp.Id ?? "<null>"}' anchorMaster={anchorMaster} baseline_source={baselineSourceLabel} " +
                         $"BASE:{DescribeMasterForLog("M1_base", baseM1ForLog)} {DescribeMasterForLog("M2_base", baseM2ForLog)} " +

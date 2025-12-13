@@ -340,7 +340,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return match.Success ? $"inspection-{match.Groups[1].Value}" : key.Trim();
         }
 
-        private sealed record InspectionRoiNormalizationResult(int OriginalCount, int NormalizedCount, bool DuplicatesRemoved);
+        public sealed record InspectionRoiNormalizationResult(int OriginalCount, int NormalizedCount, bool DuplicatesRemoved);
 
         private static int TryParseInspectionIndex(string? key)
         {
@@ -391,7 +391,7 @@ namespace BrakeDiscInspector_GUI_ROI
             prop?.SetValue(roi, index);
         }
 
-        internal static InspectionRoiNormalizationResult EnsureInspectionRoiDefaults(MasterLayout layout)
+        public static InspectionRoiNormalizationResult EnsureInspectionRoiDefaults(MasterLayout layout)
         {
             layout.InspectionRois ??= new ObservableCollection<InspectionRoiConfig>();
             var originalCount = layout.InspectionRois.Count;

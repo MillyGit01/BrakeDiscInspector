@@ -2431,8 +2431,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             var baselineModel = BuildBaselineModel(clone, baseline);
-            var anchor = config?.AnchorMaster ?? MasterAnchorChoice.Master1;
+            var anchor = ResolveAnchorMaster(config, source, "batch-export");
+
+            var (baselineCx, baselineCy) = baselineModel.GetCenter();
+            LogAlign(FormattableString.Invariant(
+                $"[CALL] roi_id={source.Id ?? "<null>"} roi_index={config?.Index ?? TryParseInspectionIndex(source.Id) ?? -1} cfg_anchor={(int?)(config?.AnchorMaster) ?? -1} anchor_passed={(int)anchor} base_center=({baselineCx:0.###},{baselineCy:0.###}) m1_base=({anchorContext.M1BaselineCenter.X:0.###},{anchorContext.M1BaselineCenter.Y:0.###}) m2_base=({anchorContext.M2BaselineCenter.X:0.###},{anchorContext.M2BaselineCenter.Y:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###})"));
+
+            var (prevCx, prevCy) = clone.GetCenter();
             InspectionAlignmentHelper.MoveInspectionTo(clone, baselineModel, anchor, anchorContext, _trace);
+            var (newCx, newCy) = clone.GetCenter();
+            LogAlign(FormattableString.Invariant(
+                $"[RESULT] roi_id={source.Id ?? "<null>"} roi_index={config?.Index ?? TryParseInspectionIndex(source.Id) ?? -1} new_center=({newCx:0.###},{newCy:0.###}) new_angle={clone.AngleDeg:0.###} delta=({newCx - prevCx:0.###},{newCy - prevCy:0.###})"));
             return clone;
         }
 
@@ -5469,7 +5478,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
                 var baselineModel = BuildBaselineModel(roi, baseline);
-                var anchor = rcfg.AnchorMaster;
+                var anchor = ResolveAnchorMaster(rcfg, roi, "batch-align");
                 var pivotBase = anchor == MasterAnchorChoice.Master1
                     ? anchorContext.M1BaselineCenter
                     : anchorContext.M2BaselineCenter;
@@ -5484,8 +5493,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var scaleEffective = anchorContext.ScaleLock ? 1.0 : anchorContext.Scale;
 
                 LogAlign(FormattableString.Invariant(
-                    $"[CALL] roi_index={rcfg.Index} cfg_anchor={(int)rcfg.AnchorMaster} used_anchor={(int)anchor} baseline_center=({baselineCx:0.###},{baselineCy:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###}) angΔ_deg={angleDeltaDeg:0.###} rot_eff_deg={rotEffectiveDeg:0.###} scale={anchorContext.Scale:0.####} scale_eff={scaleEffective:0.####} disableRot={anchorContext.DisableRot} scaleLock={anchorContext.ScaleLock}"));
+                    $"[CALL] roi_index={rcfg.Index} cfg_anchor={(int)rcfg.AnchorMaster} anchor_passed={(int)anchor} base_center=({baselineCx:0.###},{baselineCy:0.###}) m1_base=({anchorContext.M1BaselineCenter.X:0.###},{anchorContext.M1BaselineCenter.Y:0.###}) m2_base=({anchorContext.M2BaselineCenter.X:0.###},{anchorContext.M2BaselineCenter.Y:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###}) angΔ_deg={angleDeltaDeg:0.###} rot_eff_deg={rotEffectiveDeg:0.###} scale={anchorContext.Scale:0.####} scale_eff={scaleEffective:0.####} disableRot={anchorContext.DisableRot} scaleLock={anchorContext.ScaleLock}"));
 
+                var (prevCx, prevCy) = roi.GetCenter();
                 InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, anchor, anchorContext, _trace);
 
                 var (newCx, newCy) = roi.GetCenter();
@@ -5494,8 +5504,66 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
 
                 LogAlign(FormattableString.Invariant(
-                    $"[RESULT] roi_index={rcfg.Index} new_center=({newCx:0.###},{newCy:0.###}) new_angle={roi.AngleDeg:0.###} rect=({roiRect.Left:0.###},{roiRect.Top:0.###},{roiRect.Right:0.###},{roiRect.Bottom:0.###})"));
+                    $"[RESULT] roi_index={rcfg.Index} new_center=({newCx:0.###},{newCy:0.###}) new_angle={roi.AngleDeg:0.###} delta=({newCx - prevCx:0.###},{newCy - prevCy:0.###}) rect=({roiRect.Left:0.###},{roiRect.Top:0.###},{roiRect.Right:0.###},{roiRect.Bottom:0.###})"));
             }
+        }
+
+        private MasterAnchorChoice ResolveAnchorMaster(InspectionRoiConfig? config, RoiModel roi, string caller)
+        {
+            if (config != null)
+            {
+                return config.AnchorMaster;
+            }
+
+            MasterAnchorChoice? resolved = null;
+            var roiIndex = TryParseInspectionIndex(roi.Id) ?? TryParseInspectionIndex(roi.Label);
+
+            if (roiIndex.HasValue)
+            {
+                resolved = GetInspectionConfigByIndex(roiIndex.Value)?.AnchorMaster
+                           ?? _layoutOriginal?.InspectionRois.FirstOrDefault(r => r.Index == roiIndex.Value)?.AnchorMaster;
+            }
+
+            resolved ??= _layoutOriginal?.InspectionRois.FirstOrDefault(r =>
+                string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.ModelKey, roi.Id, StringComparison.OrdinalIgnoreCase))?.AnchorMaster;
+
+            var anchor = resolved ?? MasterAnchorChoice.Master1;
+
+            if (!resolved.HasValue)
+            {
+                LogAlign(FormattableString.Invariant(
+                    $"[WARN] roi_id={roi.Id ?? "<null>"} caller={caller} cfg_anchor=<null> anchor_fallback={(int)anchor} reason=no_config"));
+            }
+
+            return anchor;
+        }
+
+        private static int? TryParseInspectionIndex(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            var trimmed = key.Trim();
+            if (trimmed.StartsWith("Inspection_", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("Inspection", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = trimmed.Split('_', StringSplitOptions.RemoveEmptyEntries);
+                var last = parts.LastOrDefault();
+                if (last != null && int.TryParse(last, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                {
+                    return parsed;
+                }
+            }
+
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var direct))
+            {
+                return direct;
+            }
+
+            return null;
         }
 
         private async Task RepositionInspectionRoisForImageCoreAsync(string imagePath, CancellationToken ct)

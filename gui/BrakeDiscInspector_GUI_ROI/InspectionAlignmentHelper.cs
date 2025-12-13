@@ -57,18 +57,19 @@ internal static class InspectionAlignmentHelper
         var (baseCx, baseCy) = baselineInspection.GetCenter();
         var vBase = new Point2d(baseCx - pivotBaseline.X, baseCy - pivotBaseline.Y);
 
-        var angleEffective = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
+        var rotForCenter = anchors.AngleDeltaGlobal;
+        var rotForAngle = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
         var scaleEffective = anchors.ScaleLock ? 1.0 : anchors.Scale;
 
-        var cosA = Math.Cos(angleEffective);
-        var sinA = Math.Sin(angleEffective);
+        var cosA = Math.Cos(rotForCenter);
+        var sinA = Math.Sin(rotForCenter);
         var vx = (vBase.X * cosA - vBase.Y * sinA) * scaleEffective;
         var vy = (vBase.X * sinA + vBase.Y * cosA) * scaleEffective;
 
         var roiNewCenter = new Point2d(pivotCurrent.X + vx, pivotCurrent.Y + vy);
-        var roiNewAngleDeg = baselineInspection.AngleDeg + angleEffective * 180.0 / Math.PI;
+        var roiNewAngleDeg = baselineInspection.AngleDeg + rotForAngle * 180.0 / Math.PI;
 
-        var (tx, ty) = ComputeTranslation(pivotBaseline, pivotCurrent, angleEffective, scaleEffective);
+        var (tx, ty) = ComputeTranslation(pivotBaseline, pivotCurrent, rotForCenter, scaleEffective);
         var widthScaled = Math.Max(1, baselineInspection.Width * scaleEffective);
         var heightScaled = Math.Max(1, baselineInspection.Height * scaleEffective);
         var radiusScaled = Math.Max(1, baselineInspection.R * scaleEffective);
@@ -86,7 +87,7 @@ internal static class InspectionAlignmentHelper
 
         LogAlign(trace,
             FormattableStringFactory.Create(
-                "[ROI] roi={0} anchor_master={1} pivot_base=({2:0.###},{3:0.###}) pivot_det=({4:0.###},{5:0.###})",
+                "[BATCH][ROI] roi={0} anchor_master={1} pivot_base=({2:0.###},{3:0.###}) pivot_det=({4:0.###},{5:0.###})",
                 inspectionTarget.Label ?? inspectionTarget.Id,
                 (int)anchor,
                 pivotBaseline.X,
@@ -95,7 +96,7 @@ internal static class InspectionAlignmentHelper
                 pivotCurrent.Y));
         LogAlign(trace,
             FormattableStringFactory.Create(
-                "[ROI] roi={0} roi_base_center=({1:0.###},{2:0.###}) v_base=({3:0.###},{4:0.###})",
+                "[BATCH][ROI] roi={0} roi_base_center=({1:0.###},{2:0.###}) v_base=({3:0.###},{4:0.###})",
                 inspectionTarget.Label ?? inspectionTarget.Id,
                 baseCx,
                 baseCy,
@@ -103,12 +104,21 @@ internal static class InspectionAlignmentHelper
                 vBase.Y));
         LogAlign(trace,
             FormattableStringFactory.Create(
-                "[ROI] roi={0} applied rot_deg={1:0.###} scale={2:0.####} tx={3:0.###} ty={4:0.###}",
+                "[BATCH][ROI] roi={0} center_delta=({1:0.###},{2:0.###})",
                 inspectionTarget.Label ?? inspectionTarget.Id,
-                angleEffective * 180.0 / Math.PI,
+                roiNewCenter.X - baseCx,
+                roiNewCenter.Y - baseCy));
+        LogAlign(trace,
+            FormattableStringFactory.Create(
+                "[BATCH][ROI] roi={0} applied rot_deg_center={1:0.###} rot_deg_angle={2:0.###} scale={3:0.####} tx={4:0.###} ty={5:0.###} scaleLock={6} disableRot={7}",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                rotForCenter * 180.0 / Math.PI,
+                rotForAngle * 180.0 / Math.PI,
                 scaleEffective,
                 tx,
-                ty));
+                ty,
+                anchors.ScaleLock,
+                anchors.DisableRot));
 
         switch (baselineInspection.Shape)
         {
@@ -151,7 +161,7 @@ internal static class InspectionAlignmentHelper
 
         LogAlign(trace,
             FormattableStringFactory.Create(
-                "[ROI] roi={0} roi_new_center=({1:0.###},{2:0.###}) roi_new_angle={3:0.###} roi_new_rect=({4:0.###},{5:0.###},{6:0.###},{7:0.###})",
+                "[BATCH][ROI] roi={0} roi_new_center=({1:0.###},{2:0.###}) roi_new_angle={3:0.###} roi_new_rect=({4:0.###},{5:0.###},{6:0.###},{7:0.###})",
                 inspectionTarget.Label ?? inspectionTarget.Id,
                 roiNewCenter.X,
                 roiNewCenter.Y,

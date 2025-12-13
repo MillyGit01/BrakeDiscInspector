@@ -1001,6 +1001,78 @@ namespace BrakeDiscInspector_GUI_ROI
             TryAutosaveLayout("persist layout options");
         }
 
+        private string DescribeMasterForLog(string label, RoiModel? roi)
+        {
+            if (roi == null)
+            {
+                return $"{label}=<null>";
+            }
+
+            string corners = string.Empty;
+            if (roi.Shape == RoiShape.Rectangle)
+            {
+                var halfW = roi.Width * 0.5;
+                var halfH = roi.Height * 0.5;
+                double rad = roi.AngleDeg * Math.PI / 180.0;
+                double cos = Math.Cos(rad);
+                double sin = Math.Sin(rad);
+                SWPoint Corner(double sx, double sy)
+                {
+                    double x = roi.CX + (sx * halfW * cos - sy * halfH * sin);
+                    double y = roi.CY + (sx * halfW * sin + sy * halfH * cos);
+                    return new SWPoint(x, y);
+                }
+
+                var c1 = Corner(-1, -1);
+                var c2 = Corner(1, -1);
+                var c3 = Corner(1, 1);
+                var c4 = Corner(-1, 1);
+                corners = $" corners=({c1.X:F3},{c1.Y:F3})|({c2.X:F3},{c2.Y:F3})|({c3.X:F3},{c3.Y:F3})|({c4.X:F3},{c4.Y:F3})";
+            }
+
+            return $"{label}:cx={roi.CX:F3},cy={roi.CY:F3},ang={roi.AngleDeg:F3},w={roi.Width:F3},h={roi.Height:F3}{corners}";
+        }
+
+        private void InitializeFixedMastersBaseline(string reason)
+        {
+            if (_layout?.Master1Pattern == null || _layout.Master2Pattern == null)
+            {
+                _fixedMastersBaseline = null;
+                _fixedMastersBaselineKey = null;
+                InspLog($"[Seed-M] Fixed baseline NOT set (reason={reason}) missing masters");
+                return;
+            }
+
+            _fixedMastersBaselineKey = $"{GetCurrentLayoutName()}|{_currentLayoutFilePath ?? string.Empty}";
+            _fixedMastersBaseline = new FixedMastersBaseline
+            {
+                Master1 = _layout.Master1Pattern.Clone(),
+                Master2 = _layout.Master2Pattern.Clone(),
+                BaseAngle1 = _layout.Master1Pattern.AngleDeg,
+                BaseAngle2 = _layout.Master2Pattern.AngleDeg,
+                LayoutName = GetCurrentLayoutName(),
+                LayoutPath = _currentLayoutFilePath,
+                SeedReason = reason,
+                SeededAtUtc = DateTime.UtcNow,
+            };
+
+            InspLog($"[Seed-M] Fixed baseline SNAPSHOT (reason={reason}) key='{_fixedMastersBaselineKey}' " +
+                    $"{DescribeMasterForLog("M1_base", _fixedMastersBaseline.Master1)} " +
+                    $"{DescribeMasterForLog("M2_base", _fixedMastersBaseline.Master2)}");
+        }
+
+        private (RoiModel? master1, RoiModel? master2, bool fromFixed) GetMastersBaselineSnapshot()
+        {
+            if (_fixedMastersBaseline?.Master1 != null && _fixedMastersBaseline.Master2 != null)
+            {
+                return (_fixedMastersBaseline.Master1.Clone(), _fixedMastersBaseline.Master2.Clone(), true);
+            }
+
+            var fallbackM1 = _layout?.Master1Pattern?.Clone();
+            var fallbackM2 = _layout?.Master2Pattern?.Clone();
+            return (fallbackM1, fallbackM2, false);
+        }
+
         private static bool MastersReady(MasterLayout? layout)
             => layout?.Master1Pattern != null && layout.Master1Search != null;
 
@@ -1014,7 +1086,8 @@ namespace BrakeDiscInspector_GUI_ROI
             string key = ComputeImageSeedKey();
             _currentImageHash = key;
 
-            if (force || !string.Equals(key, _imageKeyForMasters, System.StringComparison.Ordinal))
+            bool imgKeyChanged = !string.Equals(key, _imageKeyForMasters, System.StringComparison.Ordinal);
+            if (force || imgKeyChanged)
             {
                 _imageKeyForMasters = key;
                 _mastersSeededForImage = false;
@@ -1027,29 +1100,35 @@ namespace BrakeDiscInspector_GUI_ROI
                 InspLog($"[Seed-M] Same image key='{key}', keep current masters baseline.");
             }
 
+            var (baselineM1, baselineM2, fromFixed) = GetMastersBaselineSnapshot();
+            bool hasBaseline = baselineM1 != null && baselineM2 != null;
             bool hasPatterns = _layout.Master1Pattern != null && _layout.Master2Pattern != null;
             bool hasSearch   = _layout.Master1Search  != null && _layout.Master2Search  != null;
 
-            if (!_mastersSeededForImage && hasPatterns && hasSearch)
+            InspLog($"[Seed-M] enter reason={reason} imgKey='{key}' lastImgKey='{_imageKeyForMasters}' baselineSeeded={_mastersSeededForImage} " +
+                    $"baselineKey='{_fixedMastersBaselineKey ?? "<null>"}' baseline_source={(fromFixed ? "fixed" : "layout-fallback")} " +
+                    $"{DescribeMasterForLog("M1_layout", _layout.Master1Pattern)} {DescribeMasterForLog("M2_layout", _layout.Master2Pattern)}");
+
+            if (!_mastersSeededForImage && hasBaseline && hasSearch)
             {
-                var (m1cx, m1cy) = GetCenterShapeAware(_layout.Master1Pattern);
-                var (m2cx, m2cy) = GetCenterShapeAware(_layout.Master2Pattern);
+                var (m1cx, m1cy) = GetCenterShapeAware(baselineM1!);
+                var (m2cx, m2cy) = GetCenterShapeAware(baselineM2!);
 
                 _m1BaseX = m1cx; _m1BaseY = m1cy;
                 _m2BaseX = m2cx; _m2BaseY = m2cy;
                 _mastersSeededForImage = true;
 
-                InspLog($"[Seed-M] Masters baseline SEEDED (reason={reason}, layout='{GetCurrentLayoutName()}', imageKey='{key}') " +
-                        $"M1_base=({m1cx:F3},{m1cy:F3}) M2_base=({m2cx:F3},{m2cy:F3})");
+                InspLog($"[Seed-M] Masters baseline SEEDED (reason={reason}, baseline_source={(fromFixed ? "fixed_snapshot" : "layout_clone")}, layout='{GetCurrentLayoutName()}', imageKey='{key}') " +
+                        $"baseline_fijo: M1=({m1cx:F3},{m1cy:F3}) M2=({m2cx:F3},{m2cy:F3})");
             }
 
             if (!_mastersSeededForImage)
             {
-                string missing = hasPatterns && !hasSearch
+                string missing = hasBaseline
                     ? "Master1Search/Master2Search"
-                    : (!hasPatterns && hasSearch ? "Master1Pattern/Master2Pattern" : "Master1Pattern/Master2Pattern/Master1Search/Master2Search");
+                    : "Master1Pattern/Master2Pattern";
 
-                InspLog($"[Seed-M] Cannot seed masters baseline (missing {missing}).");
+                InspLog($"[Seed-M] Cannot seed masters baseline (missing {missing}). baseline_source={(fromFixed ? "fixed" : "layout-fallback")}");
             }
 
             return _mastersSeededForImage;
@@ -1158,6 +1237,8 @@ namespace BrakeDiscInspector_GUI_ROI
             ResetInspectionSlotsUi();
 
             _layout = layout;
+
+            InitializeFixedMastersBaseline($"layout:{sourceContext}");
 
             var layoutName = GetCurrentLayoutName();
             AppendLog($"[layout] apply '{layoutName}' source={sourceContext} path='{_currentLayoutFilePath}'");
@@ -1508,6 +1589,21 @@ namespace BrakeDiscInspector_GUI_ROI
         private string _currentImageHash = string.Empty;
         private string _lastImageSeedKey = "";                  // “signature” of the currently loaded image
 
+        private sealed class FixedMastersBaseline
+        {
+            public RoiModel? Master1 { get; init; }
+            public RoiModel? Master2 { get; init; }
+            public double BaseAngle1 { get; init; }
+            public double BaseAngle2 { get; init; }
+            public string LayoutName { get; init; } = string.Empty;
+            public string? LayoutPath { get; init; }
+            public string SeedReason { get; init; } = string.Empty;
+            public DateTime SeededAtUtc { get; init; }
+        }
+
+        private FixedMastersBaseline? _fixedMastersBaseline;
+        private string? _fixedMastersBaselineKey;
+
         // --- Per-image master baselines (seeded on load) ---
         private string _imageKeyForMasters = "";
         private bool _mastersSeededForImage = false;
@@ -1756,8 +1852,18 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_layout == null)
                 return;
 
-            var baselineM1 = master1Baseline ?? _layout.Master1Pattern?.Clone();
-            var baselineM2 = master2Baseline ?? _layout.Master2Pattern?.Clone();
+            var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
+            var baselineM1 = master1Baseline ?? snapshotM1;
+            var baselineM2 = master2Baseline ?? snapshotM2;
+            bool baselineSnapshotUsed = master1Baseline != null || master2Baseline != null || fromFixed;
+
+            var beforeM1 = _layout.Master1Pattern?.Clone();
+            var beforeM2 = _layout.Master2Pattern?.Clone();
+            bool mutatingLayoutMasters = _layout.Master1Pattern != null || _layout.Master2Pattern != null;
+
+            InspLog($"[RepositionM] before mutating_layout_masters={mutatingLayoutMasters} baseline_snapshot_used={baselineSnapshotUsed} " +
+                    $"{DescribeMasterForLog("M1_layout_before", beforeM1)} {DescribeMasterForLog("M2_layout_before", beforeM2)} " +
+                    $"det:M1=({m1Cross.X:F3},{m1Cross.Y:F3}) M2=({m2Cross.X:F3},{m2Cross.Y:F3}) baseline_source={(fromFixed ? "fixed" : "layout-fallback")}");
 
             if (_layout.Master1Pattern != null)
                 SetRoiCenterImg(_layout.Master1Pattern, m1Cross.X, m1Cross.Y);
@@ -1765,7 +1871,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 SetRoiCenterImg(_layout.Master2Pattern, m2Cross.X, m2Cross.Y);
 
             if (baselineM1 == null || baselineM2 == null)
+            {
+                InspLog("[RepositionM] baseline missing; angles not updated.");
                 return;
+            }
 
             var (m1bX, m1bY) = GetCenterShapeAware(baselineM1);
             var (m2bX, m2bY) = GetCenterShapeAware(baselineM2);
@@ -1779,6 +1888,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (_layout.Master2Pattern != null && _layout.Master2Pattern.Shape == RoiShape.Rectangle)
                 _layout.Master2Pattern.AngleDeg = baselineM2.AngleDeg + dAng * (180.0 / Math.PI);
+
+            InspLog($"[RepositionM] after mutating_layout_masters={mutatingLayoutMasters} baseline_snapshot_used={baselineSnapshotUsed} " +
+                    $"{DescribeMasterForLog("M1_layout_after", _layout.Master1Pattern)} {DescribeMasterForLog("M2_layout_after", _layout.Master2Pattern)}");
         }
 
         private void RepositionInspectionUsingSt(SWPoint m1Cross, SWPoint m2Cross, bool scaleLock,
@@ -1787,10 +1899,15 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_layout == null)
                 return;
 
-            var baselineM1 = master1Baseline ?? _layout.Master1Pattern?.Clone();
-            var baselineM2 = master2Baseline ?? _layout.Master2Pattern?.Clone();
+            var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
+            var baselineM1 = master1Baseline ?? snapshotM1;
+            var baselineM2 = master2Baseline ?? snapshotM2;
+            bool baselineSnapshotUsed = master1Baseline != null || master2Baseline != null || fromFixed;
             if (baselineM1 == null || baselineM2 == null)
+            {
+                InspLog($"[RepositionInsp] baseline missing; baseline_snapshot_used={baselineSnapshotUsed} baseline_source={(fromFixed ? "fixed" : "layout-fallback")}");
                 return;
+            }
 
             var (m1bX, m1bY) = GetCenterShapeAware(baselineM1);
             var (m2bX, m2bY) = GetCenterShapeAware(baselineM2);
@@ -1896,22 +2013,27 @@ namespace BrakeDiscInspector_GUI_ROI
                 return false;
             }
 
-            var baselineM1 = master1Baseline ?? _layout.Master1Pattern?.Clone();
-            var baselineM2 = master2Baseline ?? _layout.Master2Pattern?.Clone();
+            var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
+            var baselineM1 = master1Baseline ?? snapshotM1;
+            var baselineM2 = master2Baseline ?? snapshotM2;
+            string baselineSource = master1Baseline != null || master2Baseline != null
+                ? "explicit"
+                : (fromFixed ? "fixed" : "layout-fallback");
 
             bool hasLast = !double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X);
             double posTol = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
             double angTol = _layout?.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
 
             bool accept = !hasLast;
+            double dM1 = double.NaN, dM2 = double.NaN, dAng = double.NaN;
 
             if (hasLast)
             {
-                double dM1 = Dist(newM1.X, newM1.Y, _lastAccM1X, _lastAccM1Y);
-                double dM2 = Dist(newM2.X, newM2.Y, _lastAccM2X, _lastAccM2Y);
+                dM1 = Dist(newM1.X, newM1.Y, _lastAccM1X, _lastAccM1Y);
+                dM2 = Dist(newM2.X, newM2.Y, _lastAccM2X, _lastAccM2Y);
                 double angOld = AngleDeg(_lastAccM2Y - _lastAccM1Y, _lastAccM2X - _lastAccM1X);
                 double angNew = AngleDeg(newM2.Y - newM1.Y, newM2.X - newM1.X);
-                double dAng = Math.Abs(angNew - angOld);
+                dAng = Math.Abs(angNew - angOld);
                 if (dAng > 180.0)
                     dAng = 360.0 - dAng;
 
@@ -1921,10 +2043,25 @@ namespace BrakeDiscInspector_GUI_ROI
                 accept = acceptByPos || acceptByAng;
             }
 
+            InspLog($"[Accept] ΔM1={dM1:F3}px ΔM2={dM2:F3}px ΔAng={dAng:F3}° posTol={posTol:F3} angTol={angTol:F3} hasLast={hasLast} accepted={accept} baseline_source={baselineSource}");
+
             var m1ToApply = (!hasLast || accept) ? newM1 : new SWPoint(_lastAccM1X, _lastAccM1Y);
             var m2ToApply = (!hasLast || accept) ? newM2 : new SWPoint(_lastAccM2X, _lastAccM2Y);
 
+            InspLog($"[Accept] decision accepted={accept} anchorsToApply=M1({m1ToApply.X:F3},{m1ToApply.Y:F3}) M2({m2ToApply.X:F3},{m2ToApply.Y:F3}) acceptedAnchors={(accept ? "M1,M2" : "reuse_last")}");
+
+            if (accept)
+            {
+                InspLog($"[Accept] calling RepositionMastersToCrosses baseline_source={baselineSource}");
+            }
+
             RepositionMastersToCrosses(m1ToApply, m2ToApply, scaleLock, baselineM1, baselineM2);
+
+            if (accept)
+            {
+                InspLog($"[Accept] calling RepositionInspectionUsingSt baseline_source={baselineSource}");
+            }
+
             RepositionInspectionUsingSt(m1ToApply, m2ToApply, scaleLock, baselineM1, baselineM2);
 
             RedrawAllRois();
@@ -10434,6 +10571,11 @@ namespace BrakeDiscInspector_GUI_ROI
             bool __canTransform = baselineInspection != null && _mastersSeededForImage;
             SWVector eB = new SWVector(0, 0);
             SWVector eN = new SWVector(0, 0);
+            var inspBefore = insp.Clone();
+            var (baseM1Snap, baseM2Snap, baseFromFixed) = GetMastersBaselineSnapshot();
+            var baseM1ForLog = baseM1Snap ?? _layout?.Master1Pattern;
+            var baseM2ForLog = baseM2Snap ?? _layout?.Master2Pattern;
+            string baselineSourceLabel = baseFromFixed ? "fixed" : "layout-fallback";
 
             if (__canTransform)
             {
@@ -10462,8 +10604,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 angDelta = deg * Math.PI / 180.0;
                 angDeltaEffective = _disableRot ? 0.0 : angDelta;
 
-                InspLog($"[Transform] BASE→NEW: M1_base=({m1OldX:F3},{m1OldY:F3}) → M1_new=({m1NewX:F3},{m1NewY:F3}); " +
-                        $"M2_base=({m2OldX:F3},{m2OldY:F3}) → M2_new=({m2NewX:F3},{m2NewY:F3}); angΔ={angDelta * 180 / Math.PI:F3}° effAng={angDeltaEffective * 180 / Math.PI:F3}°, effScale={effectiveScale:F6}");
+                InspLog($"[Transform] imgKey='{__seedKeyNow}' roiId='{insp.Id ?? "<null>"}' anchorMaster=Master1 baseline_source={baselineSourceLabel} " +
+                        $"BASE:{DescribeMasterForLog("M1_base", baseM1ForLog)} {DescribeMasterForLog("M2_base", baseM2ForLog)} " +
+                        $"NEW:M1=({m1NewX:F3},{m1NewY:F3}) M2=({m2NewX:F3},{m2NewY:F3}) effScale={effectiveScale:F6} angΔ={angDeltaEffective * 180 / Math.PI:F3}° pivot=Master1 " +
+                        $"translation=({m1NewX - m1OldX:F3},{m1NewY - m1OldY:F3})");
             }
 
             if (!__canTransform && ScaleLock && insp != null)
@@ -10547,6 +10691,13 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // === AnalyzeMaster: AFTER state + delta (vs FIXED baseline) ===
             InspLog($"[Analyze] AFTER  insp: {FInsp(insp)}");
+            if (inspBefore != null)
+            {
+                double dCx = insp.CX - inspBefore.CX;
+                double dCy = insp.CY - inspBefore.CY;
+                double dAng = insp.AngleDeg - inspBefore.AngleDeg;
+                InspLog($"[Transform] ROI before={FInsp(inspBefore)} after={FInsp(insp)} dCX={dCx:F3} dCY={dCy:F3} dAng={dAng:F3}");
+            }
             if (_inspectionBaselineFixed != null)
             {
                 InspLog($"[Analyze] DELTA  : dCX={(insp.CX - _inspectionBaselineFixed.CX):F3}, dCY={(insp.CY - _inspectionBaselineFixed.CY):F3}  (fixedBaseline={useFixedBaseline})");

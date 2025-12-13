@@ -16,6 +16,11 @@ namespace BrakeDiscInspector_GUI_ROI
 {
     public class MasterLayout
     {
+        public MasterLayout()
+        {
+            EnsureInspectionRoiDefaults(this);
+        }
+
         public RoiModel? Master1Pattern { get; set; }
         public string? Master1PatternImagePath { get; set; }
         public RoiModel? Master1Search { get; set; }

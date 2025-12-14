@@ -28,6 +28,17 @@
                 </Content>
         </ItemGroup>
 
+        <ItemGroup>
+                <Compile Update="Converters\BoolToEditSaveTextConverter.cs" />
+                <Compile Update="Converters\BoolToBrushConverter.cs" />
+                <Compile Update="Converters\BatchCellStatusToBrushConverter.cs" />
+                <Compile Update="RoiOverlay.cs" />
+                <Page Update="Workflow\WorkflowControl.xaml">
+                        <Generator>MSBuild:Compile</Generator>
+                </Page>
+                <Compile Update="Workflow\WorkflowControl.xaml.cs" />
+        </ItemGroup>
+
 </Project>
 
 

@@ -2056,9 +2056,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     var k = len1 / len0;
                     VisConfLog.Roi(FormattableString.Invariant(
-                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} " +
-                        $"basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) " +
-                        $"m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
+                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
                 }
                 SetRoiCenterImg(target, mapped.X, mapped.Y);
 

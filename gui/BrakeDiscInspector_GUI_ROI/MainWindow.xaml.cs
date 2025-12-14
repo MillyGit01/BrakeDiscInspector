@@ -2067,14 +2067,34 @@ namespace BrakeDiscInspector_GUI_ROI
                 double tx = anchorNew.X - anchorBase.X;
                 double ty = anchorNew.Y - anchorBase.Y;
                 double distAfter = Dist(roiAfterCx, roiAfterCy, anchorNew.X, anchorNew.Y);
-                VisConfLog.Roi(FormattableString.Invariant(
-                    $"[VISCONF][APPLY_REPOSITION] key='{visImageKey}' file='{visFileName}' roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} " +
-                    $"baseM1=({m1Base.X:0.###},{m1Base.Y:0.###}) baseM2=({m2Base.X:0.###},{m2Base.Y:0.###}) " +
-                    $"newM1=({m1Cross.X:0.###},{m1Cross.Y:0.###}) newM2=({m2Cross.X:0.###},{m2Cross.Y:0.###}) " +
-                    $"xform=(tx={tx:0.###},ty={ty:0.###},angΔ={angleDelta * 180.0 / Math.PI:0.###},scale={scaleFactor:0.###}) " +
-                    $"roiBefore=(CX={roiBeforeCx:0.###},CY={roiBeforeCy:0.###},Ang={baseline.AngleDeg:0.###}) " +
-                    $"roiAfter=(CX={roiAfterCx:0.###},CY={roiAfterCy:0.###},Ang={target.AngleDeg:0.###}) " +
-                    $"residualToAnchor=(dx={roiAfterCx - anchorNew.X:0.###},dy={roiAfterCy - anchorNew.Y:0.###},dist={distAfter:0.###})"));
+                var repositionMessage = FormattableStringFactory.Create(
+                    "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(tx={12:0.###},ty={13:0.###},angΔ={14:0.###},scale={15:0.###}) roiBefore=(CX={16:0.###},CY={17:0.###},Ang={18:0.###}) roiAfter=(CX={19:0.###},CY={20:0.###},Ang={21:0.###}) residualToAnchor=(dx={22:0.###},dy={23:0.###},dist={24:0.###})",
+                    visImageKey,
+                    visFileName,
+                    target.Label ?? target.Id ?? "<null>",
+                    anchorMaster,
+                    m1Base.X,
+                    m1Base.Y,
+                    m2Base.X,
+                    m2Base.Y,
+                    m1Cross.X,
+                    m1Cross.Y,
+                    m2Cross.X,
+                    m2Cross.Y,
+                    tx,
+                    ty,
+                    angleDelta * 180.0 / Math.PI,
+                    scaleFactor,
+                    roiBeforeCx,
+                    roiBeforeCy,
+                    baseline.AngleDeg,
+                    roiAfterCx,
+                    roiAfterCy,
+                    target.AngleDeg,
+                    roiAfterCx - anchorNew.X,
+                    roiAfterCy - anchorNew.Y,
+                    distAfter);
+                VisConfLog.Roi(FormattableString.Invariant(repositionMessage));
             }
 
             System.Diagnostics.Debug.WriteLine(
@@ -2205,18 +2225,35 @@ namespace BrakeDiscInspector_GUI_ROI
             AnalyzeMasterDecisionInfo decisionInfo)
         {
             double ang = AngleDeg(m2.Y - m1.Y, m2.X - m1.X);
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER] key='{imageKey}' file='{fileName}' " +
-                $"M1=({m1.X:0.###},{m1.Y:0.###},ang={ang:0.###}) M2=({m2.X:0.###},{m2.Y:0.###}) " +
-                $"score=({score1:0.###},{score2:0.###}) posTol={decisionInfo.PosTol:0.###} angTol={decisionInfo.AngTol:0.###} " +
-                $"baseline_source='{decisionInfo.BaselineSource}' accepted={decisionInfo.Accepted} reason='{decisionInfo.Reason}'"));
+            var analyzeMessage = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER] key='{0}' file='{1}' M1=({2:0.###},{3:0.###},ang={4:0.###}) M2=({5:0.###},{6:0.###}) score=({7:0.###},{8:0.###}) posTol={9:0.###} angTol={10:0.###} baseline_source='{11}' accepted={12} reason='{13}'",
+                imageKey,
+                fileName,
+                m1.X,
+                m1.Y,
+                ang,
+                m2.X,
+                m2.Y,
+                score1,
+                score2,
+                decisionInfo.PosTol,
+                decisionInfo.AngTol,
+                decisionInfo.BaselineSource,
+                decisionInfo.Accepted,
+                decisionInfo.Reason);
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(analyzeMessage));
         }
 
         private void LogAnalyzeMasterFailureVisConf(string imageKey, string fileName, string reason, double posTol, double angTol)
         {
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER] key='{imageKey}' file='{fileName}' M1=(nan,nan) M2=(nan,nan) " +
-                $"score=(nan,nan) posTol={posTol:0.###} angTol={angTol:0.###} baseline_source='' accepted=False reason='{reason}'"));
+            var failureMessage = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER] key='{0}' file='{1}' M1=(nan,nan) M2=(nan,nan) score=(nan,nan) posTol={2:0.###} angTol={3:0.###} baseline_source='' accepted=False reason='{4}'",
+                imageKey,
+                fileName,
+                posTol,
+                angTol,
+                reason);
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(failureMessage));
         }
 
         private static bool IsRoiSaved(RoiModel? r)
@@ -7131,11 +7168,28 @@ namespace BrakeDiscInspector_GUI_ROI
                     ? Math.Sqrt(dx * dx + dy * dy)
                     : double.NaN;
 
-                VisConfLog.GuiAndRoi(FormattableString.Invariant(
-                    $"[VISCONF][SAVE_INSPECTION_ROI] key='{GetCurrentImageKey()}' file='{GetCurrentImageFileName()}' " +
-                    $"roi='{visRoi.Label ?? visRoi.Id ?? "<null>"}' idx={index} anchor={anchorMaster} " +
-                    $"roi=(L={visRoi.Left:0.###},T={visRoi.Top:0.###},W={visRoi.Width:0.###},H={visRoi.Height:0.###},CX={visRoi.CX:0.###},CY={visRoi.CY:0.###},Ang={visRoi.AngleDeg:0.###},R={visRoi.R:0.###},Rin={visRoi.RInner:0.###}) " +
-                    $"master=(CX={anchorCx:0.###},CY={anchorCy:0.###}) d=(dx={dx:0.###},dy={dy:0.###},dist={dist:0.###})"));
+                var saveRoiMessage = FormattableStringFactory.Create(
+                    "[VISCONF][SAVE_INSPECTION_ROI] key='{0}' file='{1}' roi='{2}' idx={3} anchor={4} roi=(L={5:0.###},T={6:0.###},W={7:0.###},H={8:0.###},CX={9:0.###},CY={10:0.###},Ang={11:0.###},R={12:0.###},Rin={13:0.###}) master=(CX={14:0.###},CY={15:0.###}) d=(dx={16:0.###},dy={17:0.###},dist={18:0.###})",
+                    GetCurrentImageKey(),
+                    GetCurrentImageFileName(),
+                    visRoi.Label ?? visRoi.Id ?? "<null>",
+                    index,
+                    anchorMaster,
+                    visRoi.Left,
+                    visRoi.Top,
+                    visRoi.Width,
+                    visRoi.Height,
+                    visRoi.CX,
+                    visRoi.CY,
+                    visRoi.AngleDeg,
+                    visRoi.R,
+                    visRoi.RInner,
+                    anchorCx,
+                    anchorCy,
+                    dx,
+                    dy,
+                    dist);
+                VisConfLog.GuiAndRoi(FormattableString.Invariant(saveRoiMessage));
             }
             ExitEditMode("save");
             MessageBox.Show($"Inspection {index} guardado.",
@@ -10527,8 +10581,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private MasterAnchorChoice ResolveAnchorForRoi(RoiModel roi)
         {
-            var index = TryParseInspectionIndex(roi) ?? ResolveActiveInspectionIndex();
-            var cfg = index.HasValue ? GetInspectionConfigByIndex(index.Value) : null;
+            var parsedIndex = TryParseInspectionIndex(roi);
+            var index = parsedIndex ?? ResolveActiveInspectionIndex();
+            var cfg = GetInspectionConfigByIndex(index);
             return cfg?.AnchorMaster ?? MasterAnchorChoice.Master1;
         }
 

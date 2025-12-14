@@ -2086,11 +2086,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     var afterResidualDy = mapped.Y - m2Cross.Y;
 
                     VisConfLog.Roi(FormattableString.Invariant(
-                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id ?? "<null>"}' anchor=Master2 " +
-                        $"scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} " +
-                        $"mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) " +
-                        $"baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) " +
-                        $"afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})"));
+                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id ?? "<null>"}' anchor=Master2 scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})));
                 }
 
                 target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);
@@ -11089,8 +11085,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 bool scaleLockUi = GetScaleLockUi();
                 effectiveScale = scaleLockUi ? 1.0 : scale;
                 InspLog(FormattableString.Invariant(
-                    $"[LOCKSCALE][MoveInspectionTo] prop={ScaleLock} chk={(ChkScaleLock?.IsChecked == true)} used={scaleLockUi} " +
-                    $"scale_req={scale:0.######} scale_eff={effectiveScale:0.######} lenOld={lenOld:0.###} lenNew={lenNew:0.###}"));
+                    $"[LOCKSCALE][MoveInspectionTo] prop={ScaleLock} chk={(ChkScaleLock?.IsChecked == true)} used={scaleLockUi} scale_req={scale:0.######} scale_eff={effectiveScale:0.######} lenOld={lenOld:0.###} lenNew={lenNew:0.###}"));
                 AppendLog($"[UI] AnalyzeMaster scale lock={scaleLockUi}, scale={scale:F6} -> eff={effectiveScale:F6}");
 
                 double angOldRad = Math.Atan2(dyOld, dxOld);

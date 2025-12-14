@@ -3167,7 +3167,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _adornerHadDelta;
         private bool _analysisViewActive;
         private DispatcherTimer? _snackTimer;
-        private readonly TimeSpan _snackDuration = TimeSpan.FromSeconds(3);
+        private readonly TimeSpan _snackDuration = TimeSpan.FromSeconds(7);
 
         private void AppendResizeLog(string msg)
         {

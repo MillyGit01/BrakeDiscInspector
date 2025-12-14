@@ -2019,6 +2019,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     continue;
 
                 double scaleFactor = effectiveScaleLock ? 1.0 : scaleRatio;
+                var anchorMaster = ResolveAnchorForRoi(target);
 
                 switch (target.Shape)
                 {
@@ -2040,7 +2041,25 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 var (cx, cy) = GetCenterShapeAware(baseline);
-                var mapped = MapBySt(m1Base, m2Base, m1Cross, m2Cross, new SWPoint(cx, cy), effectiveScaleLock);
+                var roiBasePt = new SWPoint(cx, cy);
+                SWPoint mapped;
+                if (anchorMaster == MasterAnchorChoice.Master2)
+                {
+                    mapped = MapBySt(m2Base, m1Base, m2Cross, m1Cross, roiBasePt, effectiveScaleLock);
+                }
+                else
+                {
+                    mapped = MapBySt(m1Base, m2Base, m1Cross, m2Cross, roiBasePt, effectiveScaleLock);
+                }
+
+                if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2 && Math.Abs(len1 - len0) > 1e-3)
+                {
+                    var k = len1 / len0;
+                    VisConfLog.Roi(FormattableString.Invariant(
+                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} " +
+                        $"basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) " +
+                        $"m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
+                }
                 SetRoiCenterImg(target, mapped.X, mapped.Y);
 
                 target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);
@@ -2059,7 +2078,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     movedLabels.Add("Inspection");
                 }
 
-                var anchorMaster = ResolveAnchorForRoi(target);
                 var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
                 var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
                 var (roiBeforeCx, roiBeforeCy) = GetCenterShapeAware(baseline);

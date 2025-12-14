@@ -828,6 +828,20 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private bool GetScaleLockUi()
+        {
+            // In case the checkbox is checked but the property binding is not yet synchronized,
+            // prefer honoring the UI state to avoid accidental unlocks.
+            try
+            {
+                return ScaleLock || (ChkScaleLock?.IsChecked == true);
+            }
+            catch
+            {
+                return ScaleLock;
+            }
+        }
+
         public bool DisableRot
         {
             get => _disableRot;
@@ -2043,7 +2057,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 var (cx, cy) = GetCenterShapeAware(baseline);
                 var roiBasePt = new SWPoint(cx, cy);
                 SWPoint mapped;
-                if (anchorMaster == MasterAnchorChoice.Master2)
+                if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2)
+                {
+                    mapped = MapBySt(m2Base, m1Base, m2Cross, m1Cross, roiBasePt, scaleLock: true);
+                }
+                else if (anchorMaster == MasterAnchorChoice.Master2)
                 {
                     mapped = MapBySt(m2Base, m1Base, m2Cross, m1Cross, roiBasePt, effectiveScaleLock);
                 }
@@ -2059,6 +2077,21 @@ namespace BrakeDiscInspector_GUI_ROI
                         $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
                 }
                 SetRoiCenterImg(target, mapped.X, mapped.Y);
+
+                if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2)
+                {
+                    var baseResidualDx = cx - m2Base.X;
+                    var baseResidualDy = cy - m2Base.Y;
+                    var afterResidualDx = mapped.X - m2Cross.X;
+                    var afterResidualDy = mapped.Y - m2Cross.Y;
+
+                    VisConfLog.Roi(FormattableString.Invariant(
+                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id ?? "<null>"}' anchor=Master2 " +
+                        $"scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} " +
+                        $"mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) " +
+                        $"baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) " +
+                        $"afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})"));
+                }
 
                 target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);
 
@@ -10270,7 +10303,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var crossM2 = c2.Value;
                 var master1Baseline = _layout?.Master1Pattern?.Clone();
                 var master2Baseline = _layout?.Master2Pattern?.Clone();
-                bool scaleLock = ScaleLock;
+                bool scaleLock = GetScaleLockUi();
 
                 _ = AcceptNewDetectionIfDifferent(
                     crossM1,
@@ -11052,8 +11085,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 double lenNew = Math.Sqrt(dxNew * dxNew + dyNew * dyNew);
 
                 scale = (lenOld > 1e-9) ? (lenNew / lenOld) : 1.0;
-                effectiveScale = ScaleLock ? 1.0 : scale;
-                AppendLog($"[UI] AnalyzeMaster scale lock={ScaleLock}, scale={scale:F6} -> eff={effectiveScale:F6}");
+
+                bool scaleLockUi = GetScaleLockUi();
+                effectiveScale = scaleLockUi ? 1.0 : scale;
+                InspLog(FormattableString.Invariant(
+                    $"[LOCKSCALE][MoveInspectionTo] prop={ScaleLock} chk={(ChkScaleLock?.IsChecked == true)} used={scaleLockUi} " +
+                    $"scale_req={scale:0.######} scale_eff={effectiveScale:0.######} lenOld={lenOld:0.###} lenNew={lenNew:0.###}"));
+                AppendLog($"[UI] AnalyzeMaster scale lock={scaleLockUi}, scale={scale:F6} -> eff={effectiveScale:F6}");
 
                 double angOldRad = Math.Atan2(dyOld, dxOld);
                 double angNewRad = Math.Atan2(dyNew, dxNew);

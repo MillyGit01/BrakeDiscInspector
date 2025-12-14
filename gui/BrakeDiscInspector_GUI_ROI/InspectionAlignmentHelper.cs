@@ -59,7 +59,11 @@ internal static class InspectionAlignmentHelper
 
         var rotForCenter = anchors.AngleDeltaGlobal;
         var rotForAngle = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
-        var scaleEffective = anchors.ScaleLock ? 1.0 : anchors.Scale;
+
+        // ROI scaling is disabled globally: ROIs must keep fixed size/offset across images.
+        // Keep anchors.Scale only for logging/diagnostics.
+        var scaleRequested = anchors.Scale;
+        var scaleEffective = 1.0;
 
         var cosA = Math.Cos(rotForCenter);
         var sinA = Math.Sin(rotForCenter);
@@ -110,10 +114,11 @@ internal static class InspectionAlignmentHelper
                 roiNewCenter.Y - baseCy));
         LogAlign(trace,
             FormattableStringFactory.Create(
-                "[BATCH][ROI] roi={0} applied rot_deg_center={1:0.###} rot_deg_angle={2:0.###} scale={3:0.####} tx={4:0.###} ty={5:0.###} scaleLock={6} disableRot={7}",
+                "[BATCH][ROI] roi={0} applied rot_deg_center={1:0.###} rot_deg_angle={2:0.###} scale_req={3:0.####} scale_applied={4:0.####} tx={5:0.###} ty={6:0.###} scaleLock={7} disableRot={8}",
                 inspectionTarget.Label ?? inspectionTarget.Id,
                 rotForCenter * 180.0 / Math.PI,
                 rotForAngle * 180.0 / Math.PI,
+                scaleRequested,
                 scaleEffective,
                 tx,
                 ty,

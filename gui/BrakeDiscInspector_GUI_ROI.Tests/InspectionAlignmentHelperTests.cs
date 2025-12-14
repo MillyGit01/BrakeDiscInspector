@@ -61,7 +61,7 @@ public class InspectionAlignmentHelperTests
     }
 
     [Fact]
-    public void MoveInspectionTo_AppliesRotationAndScale_WhenNotDisabled()
+    public void MoveInspectionTo_AppliesRotation_WithoutScaling()
     {
         var baselineInspection = new RoiModel
         {
@@ -78,10 +78,10 @@ public class InspectionAlignmentHelperTests
 
         InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
 
-        Assert.Equal(-9, target.X, 6);
-        Assert.Equal(12, target.Y, 6);
-        Assert.Equal(8, target.Width, 6);
-        Assert.Equal(12, target.Height, 6);
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
         Assert.Equal(100, target.AngleDeg, 6);
     }
 
@@ -103,10 +103,10 @@ public class InspectionAlignmentHelperTests
 
         InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
 
-        Assert.Equal(11, target.X, 6);
-        Assert.Equal(12, target.Y, 6);
-        Assert.Equal(8, target.Width, 6);
-        Assert.Equal(12, target.Height, 6);
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
         Assert.Equal(10, target.AngleDeg, 6);
     }
 
@@ -153,7 +153,7 @@ public class InspectionAlignmentHelperTests
 
         InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
 
-        Assert.Equal(6, target.X, 6);
+        Assert.Equal(-4, target.X, 6);
         Assert.Equal(7, target.Y, 6);
         Assert.Equal(4, target.Width, 6);
         Assert.Equal(6, target.Height, 6);
@@ -206,8 +206,8 @@ public class InspectionAlignmentHelperTests
         var cosA = Math.Cos(angleDelta);
         var sinA = Math.Sin(angleDelta);
         var expectedOffset = new Point2d(
-            (baselineOffset.X * cosA - baselineOffset.Y * sinA) * scale,
-            (baselineOffset.X * sinA + baselineOffset.Y * cosA) * scale);
+            (baselineOffset.X * cosA - baselineOffset.Y * sinA),
+            (baselineOffset.X * sinA + baselineOffset.Y * cosA));
 
         var expectedCenter = new Point2d(detectedM2.X + expectedOffset.X, detectedM2.Y + expectedOffset.Y);
         Assert.Equal(expectedCenter.X, target.X, 6);

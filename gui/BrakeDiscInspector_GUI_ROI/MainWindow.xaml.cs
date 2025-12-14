@@ -10603,7 +10603,52 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            var baseline = GetInspectionBaselineClone(roiId) ?? insp;
+            RoiModel? FindCurrentInspectionRoiById(string id)
+            {
+                if (_layout == null)
+                {
+                    return null;
+                }
+
+                for (int i = 1; i <= 4; i++)
+                {
+                    var r = GetInspectionSlotModel(i);
+                    if (r != null && !string.IsNullOrWhiteSpace(r.Id)
+                        && string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return r;
+                    }
+                }
+
+                var single = _layout.Inspection;
+                if (single != null && !string.IsNullOrWhiteSpace(single.Id)
+                    && string.Equals(single.Id, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    return single;
+                }
+
+                return null;
+            }
+
+            bool HasSizeMismatch(RoiModel a, RoiModel b)
+            {
+                const double tol = 0.01;
+                return Math.Abs(a.Width - b.Width) > tol
+                    || Math.Abs(a.Height - b.Height) > tol
+                    || Math.Abs(a.R - b.R) > tol
+                    || Math.Abs(a.RInner - b.RInner) > tol;
+            }
+
+            var persisted = GetInspectionBaselineClone(roiId);
+            var current = FindCurrentInspectionRoiById(roiId) ?? insp;
+            RoiModel? baseline = persisted ?? insp;
+
+            if (persisted != null && current != null && HasSizeMismatch(persisted, current))
+            {
+                InspLog($"[Seed][WARN] Persisted baseline size mismatch; using current ROI. id='{roiId}' persisted={FInsp(persisted)} current={FInsp(current)}");
+                baseline = current;
+            }
+
             if (baseline == null)
             {
                 InspLog("[Seed] Skip: baseline is null");
@@ -10858,13 +10903,27 @@ namespace BrakeDiscInspector_GUI_ROI
                     var persistedBaseline = GetInspectionBaselineClone(roiId);
                     if (persistedBaseline != null)
                     {
-                        baselineSource = "fixed-persisted";
-                        _inspectionBaselineFixedById[roiId] = persistedBaseline.Clone();
-                        _inspectionBaselineSeededIds.Add(roiId);
-                        _inspectionBaselineSeededForImage = true;
-                        _lastImageSeedKey = __seedKeyNow;
-                        InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=persisted base={FInsp(persistedBaseline)}");
-                        return persistedBaseline.Clone();
+                        const double tol = 0.01;
+                        bool mismatch = Math.Abs(persistedBaseline.Width - insp.Width) > tol
+                            || Math.Abs(persistedBaseline.Height - insp.Height) > tol
+                            || Math.Abs(persistedBaseline.R - insp.R) > tol
+                            || Math.Abs(persistedBaseline.RInner - insp.RInner) > tol;
+
+                        if (mismatch)
+                        {
+                            baselineSource = "fixed-persisted-mismatch->self";
+                            InspLog($"[Seed][WARN] Ignoring persisted baseline (size mismatch) id='{roiId}' persisted={FInsp(persistedBaseline)} active={FInsp(insp)}; seeding from self.");
+                        }
+                        else
+                        {
+                            baselineSource = "fixed-persisted";
+                            _inspectionBaselineFixedById[roiId] = persistedBaseline.Clone();
+                            _inspectionBaselineSeededIds.Add(roiId);
+                            _inspectionBaselineSeededForImage = true;
+                            _lastImageSeedKey = __seedKeyNow;
+                            InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=persisted base={FInsp(persistedBaseline)}");
+                            return persistedBaseline.Clone();
+                        }
                     }
 
                     baselineSource = "fixed-self";

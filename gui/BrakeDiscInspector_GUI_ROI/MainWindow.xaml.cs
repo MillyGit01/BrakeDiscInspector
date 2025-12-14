@@ -1983,6 +1983,8 @@ namespace BrakeDiscInspector_GUI_ROI
             double scaleRatio = len1 / len0;
             bool effectiveScaleLock = scaleLock && !_allowInspectionScaleOverride;
             double angleDelta = DeltaAngleFromFrames(m1Base, m2Base, m1Cross, m2Cross);
+            var visImageKey = GetCurrentImageKey();
+            var visFileName = GetCurrentImageFileName();
 
             var roisToMove = new List<(RoiModel target, RoiModel baseline)>();
             var seen = new HashSet<RoiModel>();
@@ -2056,6 +2058,23 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     movedLabels.Add("Inspection");
                 }
+
+                var anchorMaster = ResolveAnchorForRoi(target);
+                var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
+                var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
+                var (roiBeforeCx, roiBeforeCy) = GetCenterShapeAware(baseline);
+                var (roiAfterCx, roiAfterCy) = GetCenterShapeAware(target);
+                double tx = anchorNew.X - anchorBase.X;
+                double ty = anchorNew.Y - anchorBase.Y;
+                double distAfter = Dist(roiAfterCx, roiAfterCy, anchorNew.X, anchorNew.Y);
+                VisConfLog.Roi(FormattableString.Invariant(
+                    $"[VISCONF][APPLY_REPOSITION] key='{visImageKey}' file='{visFileName}' roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} " +
+                    $"baseM1=({m1Base.X:0.###},{m1Base.Y:0.###}) baseM2=({m2Base.X:0.###},{m2Base.Y:0.###}) " +
+                    $"newM1=({m1Cross.X:0.###},{m1Cross.Y:0.###}) newM2=({m2Cross.X:0.###},{m2Cross.Y:0.###}) " +
+                    $"xform=(tx={tx:0.###},ty={ty:0.###},angΔ={angleDelta * 180.0 / Math.PI:0.###},scale={scaleFactor:0.###}) " +
+                    $"roiBefore=(CX={roiBeforeCx:0.###},CY={roiBeforeCy:0.###},Ang={baseline.AngleDeg:0.###}) " +
+                    $"roiAfter=(CX={roiAfterCx:0.###},CY={roiAfterCy:0.###},Ang={target.AngleDeg:0.###}) " +
+                    $"residualToAnchor=(dx={roiAfterCx - anchorNew.X:0.###},dy={roiAfterCy - anchorNew.Y:0.###},dist={distAfter:0.###})"));
             }
 
             System.Diagnostics.Debug.WriteLine(
@@ -2063,9 +2082,30 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog($"[AnalyzeMaster] moved={moved} skipped_frozen={skippedFrozen} moved_labels={string.Join(", ", movedLabels)}");
         }
 
-        private bool AcceptNewDetectionIfDifferent(SWPoint newM1, SWPoint newM2, bool scaleLock,
-                                                   RoiModel? master1Baseline = null, RoiModel? master2Baseline = null)
+        private sealed class AnalyzeMasterDecisionInfo
         {
+            public bool Accepted { get; set; }
+            public double PosTol { get; set; }
+            public double AngTol { get; set; }
+            public bool HasLast { get; set; }
+            public string BaselineSource { get; set; } = string.Empty;
+            public SWPoint AppliedM1 { get; set; }
+            public SWPoint AppliedM2 { get; set; }
+            public SWPoint NewM1 { get; set; }
+            public SWPoint NewM2 { get; set; }
+            public string Reason { get; set; } = string.Empty;
+        }
+
+        private bool AcceptNewDetectionIfDifferent(SWPoint newM1, SWPoint newM2, bool scaleLock,
+                                                   RoiModel? master1Baseline,
+                                                   RoiModel? master2Baseline,
+                                                   out AnalyzeMasterDecisionInfo decisionInfo)
+        {
+            decisionInfo = new AnalyzeMasterDecisionInfo
+            {
+                NewM1 = newM1,
+                NewM2 = newM2
+            };
             if (_layout == null)
             {
                 _lastDetectionAccepted = false;
@@ -2078,10 +2118,14 @@ namespace BrakeDiscInspector_GUI_ROI
             string baselineSource = master1Baseline != null || master2Baseline != null
                 ? "explicit"
                 : (fromFixed ? "fixed" : "layout-fallback");
+            decisionInfo.BaselineSource = baselineSource;
 
             bool hasLast = !double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X);
             double posTol = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
             double angTol = _layout?.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
+            decisionInfo.PosTol = posTol;
+            decisionInfo.AngTol = angTol;
+            decisionInfo.HasLast = hasLast;
 
             bool accept = !hasLast;
             double dM1 = double.NaN, dM2 = double.NaN, dAng = double.NaN;
@@ -2102,10 +2146,17 @@ namespace BrakeDiscInspector_GUI_ROI
                 accept = acceptByPos || acceptByAng;
             }
 
+            decisionInfo.Accepted = accept;
+            decisionInfo.Reason = hasLast
+                ? (accept ? "delta_over_tol" : "within_tol_reuse_last")
+                : "first_detection";
+
             InspLog($"[Accept] ΔM1={dM1:F3}px ΔM2={dM2:F3}px ΔAng={dAng:F3}° posTol={posTol:F3} angTol={angTol:F3} hasLast={hasLast} accepted={accept} baseline_source={baselineSource}");
 
             var m1ToApply = (!hasLast || accept) ? newM1 : new SWPoint(_lastAccM1X, _lastAccM1Y);
             var m2ToApply = (!hasLast || accept) ? newM2 : new SWPoint(_lastAccM2X, _lastAccM2Y);
+            decisionInfo.AppliedM1 = m1ToApply;
+            decisionInfo.AppliedM2 = m2ToApply;
 
             InspLog($"[Accept] decision accepted={accept} anchorsToApply=M1({m1ToApply.X:F3},{m1ToApply.Y:F3}) M2({m2ToApply.X:F3},{m2ToApply.Y:F3}) acceptedAnchors={(accept ? "M1,M2" : "reuse_last")}");
 
@@ -2136,6 +2187,36 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _lastDetectionAccepted = accept;
             return accept;
+        }
+
+        private void LogAnalyzeMasterStartVisConf(string imageKey, string fileName, double posTol, double angTol)
+        {
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER][START] key='{imageKey}' file='{fileName}' posTol={posTol:0.###} angTol={angTol:0.###} layout='{GetCurrentLayoutName()}'"));
+        }
+
+        private void LogAnalyzeMasterVisConf(
+            string imageKey,
+            string fileName,
+            SWPoint m1,
+            SWPoint m2,
+            double score1,
+            double score2,
+            AnalyzeMasterDecisionInfo decisionInfo)
+        {
+            double ang = AngleDeg(m2.Y - m1.Y, m2.X - m1.X);
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER] key='{imageKey}' file='{fileName}' " +
+                $"M1=({m1.X:0.###},{m1.Y:0.###},ang={ang:0.###}) M2=({m2.X:0.###},{m2.Y:0.###}) " +
+                $"score=({score1:0.###},{score2:0.###}) posTol={decisionInfo.PosTol:0.###} angTol={decisionInfo.AngTol:0.###} " +
+                $"baseline_source='{decisionInfo.BaselineSource}' accepted={decisionInfo.Accepted} reason='{decisionInfo.Reason}'"));
+        }
+
+        private void LogAnalyzeMasterFailureVisConf(string imageKey, string fileName, string reason, double posTol, double angTol)
+        {
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER] key='{imageKey}' file='{fileName}' M1=(nan,nan) M2=(nan,nan) " +
+                $"score=(nan,nan) posTol={posTol:0.###} angTol={angTol:0.###} baseline_source='' accepted=False reason='{reason}'"));
         }
 
         private static bool IsRoiSaved(RoiModel? r)
@@ -4460,9 +4541,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 // New image => reset and seed
                 if (!string.Equals(seedKey, _lastImageSeedKey, System.StringComparison.Ordinal))
                 {
-                      _inspectionBaselineFixedById.Clear();
-                      _inspectionBaselineSeededIds.Clear();
-                      _inspectionBaselineSeededForImage = false;
+                    VisConfLog.GuiAndRoi(FormattableString.Invariant(
+                        $"[VISCONF][IMGLOAD] key='{seedKey}' file='{GetCurrentImageFileName()}' path='{_currentImagePathWin ?? string.Empty}' size={_imgW}x{_imgH} layout='{GetCurrentLayoutName()}'"));
+                    _inspectionBaselineFixedById.Clear();
+                    _inspectionBaselineSeededIds.Clear();
+                    _inspectionBaselineSeededForImage = false;
                     InspLog($"[Seed] New image detected, oldKey='{_lastImageSeedKey}' newKey='{seedKey}' -> reset baseline.");
                     try
                     {
@@ -7035,6 +7118,25 @@ namespace BrakeDiscInspector_GUI_ROI
 
             LogSaveSlot("post", index, GetInspectionSlotModelClone(index));
             AppendLog($"[inspection] saved slot={index} ok");
+
+            var visRoi = persistedSlot ?? roiModel;
+            if (visRoi != null)
+            {
+                var anchorCenter = GetAnchorMasterCenter(anchorMaster);
+                double anchorCx = anchorCenter?.cx ?? double.NaN;
+                double anchorCy = anchorCenter?.cy ?? double.NaN;
+                double dx = double.IsNaN(anchorCx) ? double.NaN : visRoi.CX - anchorCx;
+                double dy = double.IsNaN(anchorCy) ? double.NaN : visRoi.CY - anchorCy;
+                double dist = (!double.IsNaN(dx) && !double.IsNaN(dy))
+                    ? Math.Sqrt(dx * dx + dy * dy)
+                    : double.NaN;
+
+                VisConfLog.GuiAndRoi(FormattableString.Invariant(
+                    $"[VISCONF][SAVE_INSPECTION_ROI] key='{GetCurrentImageKey()}' file='{GetCurrentImageFileName()}' " +
+                    $"roi='{visRoi.Label ?? visRoi.Id ?? "<null>"}' idx={index} anchor={anchorMaster} " +
+                    $"roi=(L={visRoi.Left:0.###},T={visRoi.Top:0.###},W={visRoi.Width:0.###},H={visRoi.Height:0.###},CX={visRoi.CX:0.###},CY={visRoi.CY:0.###},Ang={visRoi.AngleDeg:0.###},R={visRoi.R:0.###},Rin={visRoi.RInner:0.###}) " +
+                    $"master=(CX={anchorCx:0.###},CY={anchorCy:0.###}) d=(dx={dx:0.###},dy={dy:0.###},dist={dist:0.###})"));
+            }
             ExitEditMode("save");
             MessageBox.Show($"Inspection {index} guardado.",
                             $"Inspection {index}",
@@ -9922,6 +10024,12 @@ namespace BrakeDiscInspector_GUI_ROI
             // CODEX: string interpolation compatibility.
             AppendLog($"[FLOW] Entrando en AnalyzeMastersAsync");
 
+            var analyzeImageKey = GetCurrentImageKey();
+            var analyzeFileName = GetCurrentImageFileName();
+            double posTolForLog = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
+            double angTolForLog = _layout?.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
+            LogAnalyzeMasterStartVisConf(analyzeImageKey, analyzeFileName, posTolForLog, angTolForLog);
+
             ViewModel?.TraceManual($"[manual-master] analyze file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}'");
 
             SWPoint? c1 = null, c2 = null;
@@ -10052,6 +10160,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // 3) Manejo de fallo
             if (c1 is null)
             {
+                LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M1 not found", posTolForLog, angTolForLog);
                 Snack($"No se ha encontrado Master 1 en su zona de búsqueda"); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c1 null");
@@ -10060,6 +10169,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             if (c2 is null)
             {
+                LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M2 not found", posTolForLog, angTolForLog);
                 Snack($"No se ha encontrado Master 2 en su zona de búsqueda"); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c2 null");
@@ -10092,7 +10202,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 var master2Baseline = _layout?.Master2Pattern?.Clone();
                 bool scaleLock = ScaleLock;
 
-                AcceptNewDetectionIfDifferent(crossM1, crossM2, scaleLock, master1Baseline, master2Baseline);
+                _ = AcceptNewDetectionIfDifferent(
+                    crossM1,
+                    crossM2,
+                    scaleLock,
+                    master1Baseline,
+                    master2Baseline,
+                    out var decisionInfo);
+
+                LogAnalyzeMasterVisConf(analyzeImageKey, analyzeFileName, c1.Value, c2.Value, s1, s2, decisionInfo);
             }
             catch (Exception ex)
             {
@@ -10339,6 +10457,22 @@ namespace BrakeDiscInspector_GUI_ROI
             catch { /* never throw from logging */ }
         }
 
+        private string GetCurrentImagePathSafe()
+            => _currentImagePathWin ?? _currentImagePath ?? _currentImagePathBackend ?? string.Empty;
+
+        private string GetCurrentImageFileName()
+            => VisConfLog.FileNameOrEmpty(GetCurrentImagePathSafe());
+
+        private string GetCurrentImageKey()
+        {
+            if (string.IsNullOrWhiteSpace(_currentImageHash))
+            {
+                _currentImageHash = ComputeImageSeedKey();
+            }
+
+            return _currentImageHash;
+        }
+
         private string ComputeImageSeedKey()
         {
             try
@@ -10368,6 +10502,35 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private static double Dist(double x1, double y1, double x2, double y2)
             => System.Math.Sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+
+        private (double cx, double cy)? GetAnchorMasterCenter(MasterAnchorChoice anchor)
+        {
+            if (!double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X))
+            {
+                return anchor == MasterAnchorChoice.Master2
+                    ? (_lastAccM2X, _lastAccM2Y)
+                    : (_lastAccM1X, _lastAccM1Y);
+            }
+
+            RoiModel? master = anchor == MasterAnchorChoice.Master2
+                ? _layout?.Master2Pattern
+                : _layout?.Master1Pattern;
+
+            if (master == null)
+            {
+                return null;
+            }
+
+            var (cx, cy) = GetCenterShapeAware(master);
+            return (cx, cy);
+        }
+
+        private MasterAnchorChoice ResolveAnchorForRoi(RoiModel roi)
+        {
+            var index = TryParseInspectionIndex(roi) ?? ResolveActiveInspectionIndex();
+            var cfg = index.HasValue ? GetInspectionConfigByIndex(index.Value) : null;
+            return cfg?.AnchorMaster ?? MasterAnchorChoice.Master1;
+        }
 
         private void SeedInspectionBaselineOnce(RoiModel? insp, string seedKey)
         {

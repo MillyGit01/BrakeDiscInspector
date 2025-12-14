@@ -2070,11 +2070,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     mapped = MapBySt(m1Base, m2Base, m1Cross, m2Cross, roiBasePt, effectiveScaleLock);
                 }
 
+                var labelOrId = target?.Label ?? target?.Id ?? "<null>";
+
                 if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2 && Math.Abs(len1 - len0) > 1e-3)
                 {
                     var k = len1 / len0;
                     VisConfLog.Roi(FormattableString.Invariant(
-                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
+                        $"[VISCONF][MAP_DEBUG] roi='{labelOrId}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
                 }
                 SetRoiCenterImg(target, mapped.X, mapped.Y);
 
@@ -2086,7 +2088,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     var afterResidualDy = mapped.Y - m2Cross.Y;
 
                     VisConfLog.Roi(FormattableString.Invariant(
-                        $"[VISCONF][MAP_DEBUG] roi='{target.Label ?? target.Id ?? "<null>"}' anchor=Master2 scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})));
+                        $"[VISCONF][MAP_DEBUG] roi='{labelOrId}' anchor=Master2 scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})));
                 }
 
                 target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);

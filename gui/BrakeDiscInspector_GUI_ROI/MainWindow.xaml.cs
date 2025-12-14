@@ -2089,9 +2089,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     VisConfLog.Roi(
                         FormattableString.Invariant(
-                            $"[VISCONF][MAP_DEBUG] roi='{labelOrId}' anchor=Master2 scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} " +
-                            $"scaleRatio={scaleRatio:0.######} mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) " +
-                            $"baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})"));
+                            $"[VISCONF][MAP_DEBUG] roi='{labelOrId}' anchor=Master2 scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})"));
                 }
 
                 target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -7,6 +9,25 @@ namespace BrakeDiscInspector_GUI_ROI
 {
     public class RoiOverlay : FrameworkElement
     {
+        private static readonly HashSet<string> _roiOverlayLogged = new HashSet<string>();
+
+        private static void LogOnce(string key, string msg)
+        {
+            if (_roiOverlayLogged.Add(key))
+                Debug.WriteLine(msg);
+        }
+
+        private static string BrushName(Brush b)
+        {
+            if (ReferenceEquals(b, Brushes.Lime) || ReferenceEquals(b, Brushes.LimeGreen)) return "Lime/LimeGreen";
+            if (ReferenceEquals(b, Brushes.DeepSkyBlue)) return "DeepSkyBlue";
+            if (ReferenceEquals(b, Brushes.OrangeRed)) return "OrangeRed";
+            if (ReferenceEquals(b, Brushes.Red)) return "Red";
+            if (ReferenceEquals(b, Brushes.Gray)) return "Gray";
+            if (ReferenceEquals(b, Brushes.White)) return "White";
+            return b?.ToString() ?? "<null>";
+        }
+
         // === Transformación imagen <-> pantalla ===
         private Image _boundImage;
         private double _scale = 1.0;
@@ -101,6 +122,14 @@ namespace BrakeDiscInspector_GUI_ROI
             if (roi == null)
                 return;
 
+            if (!string.IsNullOrWhiteSpace(roi.Legend) &&
+                roi.Legend.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce(
+                    "OnRender:" + roi.Legend,
+                    $"[RoiOverlay][OnRender] legend='{roi.Legend}' shape={roi.Shape} W={roi.Width:0.###} H={roi.Height:0.###} R={roi.R:0.###} Rin={roi.RInner:0.###}");
+            }
+
             roi.EnforceMinSize(10, 10);
 
             var dpi = VisualTreeHelper.GetDpi(this);
@@ -129,17 +158,28 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var legend = roi?.Legend ?? string.Empty;
 
-            // Use the role embedded in the UI legend to choose consistent colors.
-            // Masters are typically "Master 1 Pattern/Search" or "Master 2 Pattern/Search".
-            // Inspections often contain "Inspection".
             if (legend.IndexOf("pattern", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("ResolveStroke:" + legend, $"[RoiOverlay][ResolveStroke] legend='{legend}' => chosen='{BrushName(Brushes.DeepSkyBlue)}' (pattern)");
                 return Brushes.DeepSkyBlue;
+            }
 
             if (legend.IndexOf("search", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("ResolveStroke:" + legend, $"[RoiOverlay][ResolveStroke] legend='{legend}' => chosen='{BrushName(Brushes.LimeGreen)}' (search)");
                 return Brushes.LimeGreen;
+            }
 
             if (legend.IndexOf("inspection", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("ResolveStroke:" + legend, $"[RoiOverlay][ResolveStroke] legend='{legend}' => chosen='{BrushName(Brushes.OrangeRed)}' (inspection)");
                 return Brushes.OrangeRed;
+            }
+
+            if (legend.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("ResolveStroke:" + legend, $"[RoiOverlay][ResolveStroke] legend='{legend}' => chosen='{BrushName(fallback)}' (fallback)");
+            }
 
             return fallback;
         }
@@ -160,6 +200,12 @@ namespace BrakeDiscInspector_GUI_ROI
             dc.DrawRectangle(null, pen, rect);
             dc.Pop();
 
+            if (!string.IsNullOrWhiteSpace(roi.Legend) &&
+                roi.Legend.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("Draw:" + roi.Legend, $"[RoiOverlay][Draw] legend='{roi.Legend}' stroke='{BrushName(stroke)}'");
+            }
+
             DrawLabel(dc, roi.Legend, rect.TopLeft, pixelsPerDip, stroke);
         }
 
@@ -175,6 +221,13 @@ namespace BrakeDiscInspector_GUI_ROI
             dc.DrawEllipse(null, pen, centerScreen, radiusScreen, radiusScreen);
 
             var labelAnchor = new System.Windows.Point(centerScreen.X - radiusScreen, centerScreen.Y - radiusScreen);
+
+            if (!string.IsNullOrWhiteSpace(roi.Legend) &&
+                roi.Legend.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("Draw:" + roi.Legend, $"[RoiOverlay][Draw] legend='{roi.Legend}' stroke='{BrushName(stroke)}'");
+            }
+
             DrawLabel(dc, roi.Legend, labelAnchor, pixelsPerDip, stroke);
         }
 
@@ -206,6 +259,13 @@ namespace BrakeDiscInspector_GUI_ROI
             dc.DrawEllipse(null, dashedPen, centerScreen, ro, ro);
 
             var label = string.IsNullOrWhiteSpace(roi.Legend) ? "Annulus" : roi.Legend;
+
+            if (!string.IsNullOrWhiteSpace(roi.Legend) &&
+                roi.Legend.IndexOf("master", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                LogOnce("Draw:" + roi.Legend, $"[RoiOverlay][Draw] legend='{roi.Legend}' stroke='{BrushName(stroke)}'");
+            }
+
             var ft = new FormattedText(
                 label,
                 System.Globalization.CultureInfo.CurrentUICulture,

@@ -828,6 +828,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+
         private bool GetScaleLockUi()
         {
             // In case the checkbox is checked but the property binding is not yet synchronized,
@@ -1167,7 +1168,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var (baselineM1, baselineM2, fromFixed) = GetMastersBaselineSnapshot();
             bool hasBaseline = baselineM1 != null && baselineM2 != null;
             bool hasPatterns = _layout.Master1Pattern != null && _layout.Master2Pattern != null;
-            bool hasSearch   = _layout.Master1Search  != null && _layout.Master2Search  != null;
+            bool hasSearch = _layout.Master1Search != null && _layout.Master2Search != null;
 
             InspLog($"[Seed-M] enter reason={reason} imgKey='{key}' lastImgKey='{_imageKeyForMasters}' baselineSeeded={_mastersSeededForImage} " +
                     $"baselineKey='{_fixedMastersBaselineKey ?? "<null>"}' baseline_source={(fromFixed ? "fixed" : "layout-fallback")} " +
@@ -1875,12 +1876,24 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             r.CX = cx; r.CY = cy;
             r.Left = cx - r.Width * 0.5;
-            r.Top  = cy - r.Height * 0.5;
+            r.Top = cy - r.Height * 0.5;
         }
 
         private static SWPoint MapBySt(SWPoint m1Base, SWPoint m2Base, SWPoint m1New, SWPoint m2New,
                                        SWPoint roiBase, bool scaleLock)
         {
+            // When scaleLock is ON we cannot satisfy both masters if their distance changed.
+            // The previous implementation anchored at Master1, concentrating the whole error on Master2.
+            // Fix: anchor the rigid transform at the MIDPOINT between masters so the residual is split (~ΔL/2 each).
+            var originBase = m1Base;
+            var originNew = m1New;
+
+            if (scaleLock)
+            {
+                originBase = new SWPoint((m1Base.X + m2Base.X) * 0.5, (m1Base.Y + m2Base.Y) * 0.5);
+                originNew = new SWPoint((m1New.X + m2New.X) * 0.5, (m1New.Y + m2New.Y) * 0.5);
+            }
+
             var u0 = m2Base - m1Base;
             var v0 = new SWVector(-u0.Y, u0.X);
             var L0 = Math.Sqrt(u0.X * u0.X + u0.Y * u0.Y);
@@ -1889,7 +1902,7 @@ namespace BrakeDiscInspector_GUI_ROI
             u0 = new SWVector(u0.X / L0, u0.Y / L0);
             var v0n = Normalize(v0);
 
-            var d0 = roiBase - m1Base;
+            var d0 = roiBase - originBase;
             double s = d0.X * u0.X + d0.Y * u0.Y;
             double t = d0.X * v0n.X + d0.Y * v0n.Y;
 
@@ -1908,9 +1921,10 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             return new SWPoint(
-                m1New.X + s * u1n.X + t * v1n.X,
-                m1New.Y + s * u1n.Y + t * v1n.Y);
+                originNew.X + s * u1n.X + t * v1n.X,
+                originNew.Y + s * u1n.Y + t * v1n.Y);
         }
+
 
         private static double DeltaAngleFromFrames(SWPoint m1Base, SWPoint m2Base, SWPoint m1New, SWPoint m2New)
         {
@@ -1967,7 +1981,7 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private void RepositionInspectionUsingSt(SWPoint m1Cross, SWPoint m2Cross, bool scaleLock,
-                                                 RoiModel? master1Baseline = null, RoiModel? master2Baseline = null)
+                                                         RoiModel? master1Baseline = null, RoiModel? master2Baseline = null)
         {
             if (_layout == null)
                 return;
@@ -1996,6 +2010,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             double scaleRatio = len1 / len0;
             bool effectiveScaleLock = scaleLock && !_allowInspectionScaleOverride;
+            double scaleFactor = effectiveScaleLock ? 1.0 : scaleRatio;
             double angleDelta = DeltaAngleFromFrames(m1Base, m2Base, m1Cross, m2Cross);
             var visImageKey = GetCurrentImageKey();
             var visFileName = GetCurrentImageFileName();
@@ -2032,64 +2047,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (target == null || baseline == null)
                     continue;
 
-                double scaleFactor = effectiveScaleLock ? 1.0 : scaleRatio;
-                var anchorMaster = ResolveAnchorForRoi(target);
-
-                switch (target.Shape)
-                {
-                    case RoiShape.Rectangle:
-                        target.Width = baseline.Width * scaleFactor;
-                        target.Height = baseline.Height * scaleFactor;
-                        break;
-                    case RoiShape.Circle:
-                        target.R = baseline.R * scaleFactor;
-                        target.Width = baseline.Width * scaleFactor;
-                        target.Height = baseline.Height * scaleFactor;
-                        break;
-                    case RoiShape.Annulus:
-                        target.R = baseline.R * scaleFactor;
-                        target.RInner = baseline.RInner * scaleFactor;
-                        target.Width = baseline.Width * scaleFactor;
-                        target.Height = baseline.Height * scaleFactor;
-                        break;
-                }
+                // Keep inspection ROI size constant always (no scaling and no baseline size reset).
+                // Do NOT touch Width/Height/R/RInner here; only reposition center and update angle.
 
                 var (cx, cy) = GetCenterShapeAware(baseline);
-                var roiBasePt = new SWPoint(cx, cy);
-                SWPoint mapped;
-                if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2)
-                {
-                    mapped = MapBySt(m2Base, m1Base, m2Cross, m1Cross, roiBasePt, scaleLock: true);
-                }
-                else if (anchorMaster == MasterAnchorChoice.Master2)
-                {
-                    mapped = MapBySt(m2Base, m1Base, m2Cross, m1Cross, roiBasePt, effectiveScaleLock);
-                }
-                else
-                {
-                    mapped = MapBySt(m1Base, m2Base, m1Cross, m2Cross, roiBasePt, effectiveScaleLock);
-                }
-
-                var labelOrId = target?.Label ?? target?.Id ?? "<null>";
-
-                if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2 && Math.Abs(len1 - len0) > 1e-3)
-                {
-                    var k = len1 / len0;
-                    VisConfLog.Roi(FormattableString.Invariant(
-                        $"[VISCONF][MAP_DEBUG] roi='{labelOrId}' anchor={anchorMaster} scaleLock={effectiveScaleLock} L0={len0:0.###} L1={len1:0.###} k={k:0.######} basePt=({roiBasePt.X:0.###},{roiBasePt.Y:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) m1Base=({m1Base.X:0.###},{m1Base.Y:0.###}) m2Base=({m2Base.X:0.###},{m2Base.Y:0.###}) m1New=({m1Cross.X:0.###},{m1Cross.Y:0.###}) m2New=({m2Cross.X:0.###},{m2Cross.Y:0.###})"));
-                }
+                var mapped = MapBySt(m1Base, m2Base, m1Cross, m2Cross, new SWPoint(cx, cy), effectiveScaleLock);
                 SetRoiCenterImg(target, mapped.X, mapped.Y);
-
-                if (effectiveScaleLock && anchorMaster == MasterAnchorChoice.Master2)
+                if (_imgW > 0 && _imgH > 0)
                 {
-                    var baseResidualDx = cx - m2Base.X;
-                    var baseResidualDy = cy - m2Base.Y;
-                    var afterResidualDx = mapped.X - m2Cross.X;
-                    var afterResidualDy = mapped.Y - m2Cross.Y;
-
-                    VisConfLog.Roi(
-                        FormattableString.Invariant(
-                            $"[VISCONF][MAP_DEBUG] roi='{labelOrId}' anchor=Master2 scaleLock_in={scaleLock} effScaleLock={effectiveScaleLock} scaleRatio={scaleRatio:0.######} mapOrigin=Master2 basePt=({cx:0.###},{cy:0.###}) mapped=({mapped.X:0.###},{mapped.Y:0.###}) baseResidualToM2=(dx={baseResidualDx:0.###},dy={baseResidualDy:0.###}) afterResidualToM2=(dx={afterResidualDx:0.###},dy={afterResidualDy:0.###})"));
+                    ClipInspectionROI(target, _imgW, _imgH);
                 }
 
                 target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);
@@ -2108,6 +2074,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     movedLabels.Add("Inspection");
                 }
 
+                var anchorMaster = ResolveAnchorForRoi(target);
                 var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
                 var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
                 var (roiBeforeCx, roiBeforeCy) = GetCenterShapeAware(baseline);
@@ -2356,7 +2323,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // Center the label and orient tangent
             label.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
             Canvas.SetLeft(label, canvasPt.X - (label.DesiredSize.Width * 0.5));
-            Canvas.SetTop(label,  canvasPt.Y - (label.DesiredSize.Height * 0.5));
+            Canvas.SetTop(label, canvasPt.Y - (label.DesiredSize.Height * 0.5));
             label.RenderTransform = new System.Windows.Media.RotateTransform(thetaDeg + 90.0,
                 label.DesiredSize.Width * 0.5, label.DesiredSize.Height * 0.5);
         }
@@ -2477,8 +2444,8 @@ namespace BrakeDiscInspector_GUI_ROI
         // Overlay visibility flags (do not affect freeze/geometry)
         private bool _showMaster1PatternOverlay = true;
         private bool _showMaster2PatternOverlay = true;
-        private bool _showMaster1SearchOverlay  = true;
-        private bool _showMaster2SearchOverlay  = true;
+        private bool _showMaster1SearchOverlay = true;
+        private bool _showMaster2SearchOverlay = true;
 
         private System.Windows.Controls.StackPanel _roiChecksPanel;
         private CheckBox? _chkHeatmap;
@@ -2770,7 +2737,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         // Pretty print rectangle and center
         private static string FRect(double L, double T, double W, double H)
-            => $"L={L:F3},T={T:F3},W={W:F3},H={H:F3},CX={(L+W*0.5):F3},CY={(T+H*0.5):F3})";
+            => $"L={L:F3},T={T:F3},W={W:F3},H={H:F3},CX={(L + W * 0.5):F3},CY={(T + H * 0.5):F3})";
 
         private static string FRoiImg(RoiModel r)
         {
@@ -2885,10 +2852,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (o is System.Windows.FrameworkElement fe)
                     {
                         var tag = fe.Tag as string;
-                        var nm  = fe.Name ?? "";
+                        var nm = fe.Name ?? "";
                         bool matches =
                             (!string.IsNullOrEmpty(tag) && tag.IndexOf("roi", System.StringComparison.OrdinalIgnoreCase) >= 0) ||
-                            (!string.IsNullOrEmpty(nm)  && nm.IndexOf(r.Role.ToString(), System.StringComparison.OrdinalIgnoreCase) >= 0);
+                            (!string.IsNullOrEmpty(nm) && nm.IndexOf(r.Role.ToString(), System.StringComparison.OrdinalIgnoreCase) >= 0);
 
                         if (!matches) continue;
 
@@ -2904,7 +2871,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                 }
             }
-            catch {}
+            catch { }
             return false;
         }
 
@@ -2924,8 +2891,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (RoiDiagTryFindUiRect(r, out var rcUi, out var nm))
                 {
                     double dx = rcUi.Left - rcExp.Left;
-                    double dy = rcUi.Top  - rcExp.Top;
-                    double dw = rcUi.Width  - rcExp.Width;
+                    double dy = rcUi.Top - rcExp.Top;
+                    double dw = rcUi.Width - rcExp.Width;
                     double dh = rcUi.Height - rcExp.Height;
                     line += $"  UI[{nm}]({FRect(rcUi.Left, rcUi.Top, rcUi.Width, rcUi.Height)})  Δpos=({dx:F3},{dy:F3}) Δsize=({dw:F3},{dh:F3})";
                 }
@@ -2956,7 +2923,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         if (double.IsNaN(T)) T = 0;
                         string nm = fe.Name ?? fe.GetType().Name;
                         string tg = fe.Tag?.ToString() ?? "";
-                        RoiDiagLog($"    FE: {nm}  Tag='{tg}'  {FRect(L,T,W,H)}  Z={System.Windows.Controls.Panel.GetZIndex(fe)}");
+                        RoiDiagLog($"    FE: {nm}  Tag='{tg}'  {FRect(L, T, W, H)}  Z={System.Windows.Controls.Panel.GetZIndex(fe)}");
                     }
                     else
                     {
@@ -2992,7 +2959,7 @@ namespace BrakeDiscInspector_GUI_ROI
             int kept = CanvasROI.Children.Count;
             const int removed = 0;
 
-            try { LogHeatmap($"KeepOnlyMaster2InCanvas: kept={kept}, removed={removed}"); } catch {}
+            try { LogHeatmap($"KeepOnlyMaster2InCanvas: kept={kept}, removed={removed}"); } catch { }
         }
 
         private static string RoiDebug(RoiModel r)
@@ -3038,7 +3005,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // Accept both ROI (Legend) and RoiModel (Label)
             object tag = shape.Tag;
             string legendOrLabel = null;
-            if (tag is ROI rTag)        legendOrLabel = rTag.Legend;
+            if (tag is ROI rTag) legendOrLabel = rTag.Legend;
             else if (tag is RoiModel m) legendOrLabel = m.Label;
 
             string labelName = "roiLabel_" + ((legendOrLabel ?? string.Empty).Replace(" ", "_"));
@@ -3049,7 +3016,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // If Left/Top are not ready yet, defer positioning to next layout pass
             double left = Canvas.GetLeft(shape);
-            double top  = Canvas.GetTop(shape);
+            double top = Canvas.GetTop(shape);
             if (double.IsNaN(left) || double.IsNaN(top))
             {
                 Dispatcher.BeginInvoke(new Action(() => UpdateRoiLabelPosition(shape)), System.Windows.Threading.DispatcherPriority.Loaded);
@@ -3086,7 +3053,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     break;
                 default:
                     Canvas.SetLeft(label, roi.Left + 6);
-                    Canvas.SetTop(label,  roi.Top - 6 - label.DesiredSize.Height);
+                    Canvas.SetTop(label, roi.Top - 6 - label.DesiredSize.Height);
                     label.RenderTransform = null;
                     break;
             }
@@ -3183,7 +3150,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     {
                         Header = "Overlays",
                         Content = sp,
-                        Margin = new System.Windows.Thickness(6,12,6,6)
+                        Margin = new System.Windows.Thickness(6, 12, 6, 6)
                     });
                     _roiChecksPanel = sp;
                     return _roiChecksPanel;
@@ -3382,7 +3349,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     HideSnackVisual();
                 };
 
-                this.SizeChanged += (s,e) =>
+                this.SizeChanged += (s, e) =>
                 {
                     try
                     {
@@ -3402,7 +3369,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         Dispatcher.InvokeAsync(() => RoiDiagDumpCanvasChildren("sizechanged:UI-snapshot"),
                                                System.Windows.Threading.DispatcherPriority.Render);
                     }
-                    catch {}
+                    catch { }
                 };
 
                 try
@@ -3414,7 +3381,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         LogHeatmap($"DPI Scale = ({m.M11:F3}, {m.M22:F3})");
                     }
                 }
-                catch {}
+                catch { }
 
                 // RoiOverlay disabled: labels are now drawn on Canvas only
                 // RoiOverlay.BindToImage(ImgMain);
@@ -5409,7 +5376,7 @@ namespace BrakeDiscInspector_GUI_ROI
             LogHeatmap($"Transform Img→Canvas: sx={heatmapTransform.sx:F6}, sy={heatmapTransform.sy:F6}, offX={heatmapTransform.offX:F4}, offY={heatmapTransform.offY:F4}]");
 
             // 3) ROI en espacio de imagen (si tienes RoiDebug)
-            try { LogHeatmap("ROI (image space): " + RoiDebug(_lastHeatmapRoi)); } catch {}
+            try { LogHeatmap("ROI (image space): " + RoiDebug(_lastHeatmapRoi)); } catch { }
 
             // 4) ROI en espacio de CANVAS
             var rc = ImageToCanvas(_lastHeatmapRoi);
@@ -5432,7 +5399,7 @@ namespace BrakeDiscInspector_GUI_ROI
             // 2) Anchor overlay to ROI rect (canvas absolute via Canvas coords when available)
             // Size to ROI rect
             HeatmapOverlay.Source = _lastHeatmapBmp;
-            HeatmapOverlay.Width  = rc.Width;
+            HeatmapOverlay.Width = rc.Width;
             HeatmapOverlay.Height = rc.Height;
 
             // Prefer Canvas positioning to avoid Margin rounding drift. Fallback to Margin
@@ -5442,14 +5409,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 // Clear Margin so Canvas.Left/Top are not compounded
                 HeatmapOverlay.Margin = new System.Windows.Thickness(0);
                 System.Windows.Controls.Canvas.SetLeft(HeatmapOverlay, rc.Left);
-                System.Windows.Controls.Canvas.SetTop(HeatmapOverlay,  rc.Top);
+                System.Windows.Controls.Canvas.SetTop(HeatmapOverlay, rc.Top);
             }
             else
             {
                 // SUMAR el margen del Canvas de las ROI para alinear origen,
                 // y redondear a enteros para evitar subpíxeles (misma política que CanvasROI).
                 double leftRounded = System.Math.Round((CanvasROI?.Margin.Left ?? 0) + rc.Left);
-                double topRounded  = System.Math.Round((CanvasROI?.Margin.Top  ?? 0) + rc.Top);
+                double topRounded = System.Math.Round((CanvasROI?.Margin.Top ?? 0) + rc.Top);
                 HeatmapOverlay.Margin = new System.Windows.Thickness(leftRounded, topRounded, 0, 0);
             }
 
@@ -5772,29 +5739,29 @@ namespace BrakeDiscInspector_GUI_ROI
                                 m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
                             }
 
-                        var analyze = _layout.Analyze ?? new AnalyzeOptions();
+                            var analyze = _layout.Analyze ?? new AnalyzeOptions();
 
-                        var res1 = LocalMatcher.MatchInSearchROIWithDetails(
-                            img,
-                            _layout.Master1Pattern,
-                            _layout.Master1Search,
-                            analyze.FeatureM1,
-                            analyze.ThrM1,
-                            analyze.RotRange,
-                            analyze.ScaleMin,
-                            analyze.ScaleMax,
-                            m1Override,
-                            LogToFileAndUI);
+                            var res1 = LocalMatcher.MatchInSearchROIWithDetails(
+                                img,
+                                _layout.Master1Pattern,
+                                _layout.Master1Search,
+                                analyze.FeatureM1,
+                                analyze.ThrM1,
+                                analyze.RotRange,
+                                analyze.ScaleMin,
+                                analyze.ScaleMax,
+                                m1Override,
+                                LogToFileAndUI);
 
-                        if (res1.Center.HasValue)
-                        {
-                            c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
-                            s1 = res1.Score;
-                        }
-                        else
-                        {
-                            AppendLog("[batch] local matcher: Master1 not found");
-                        }
+                            if (res1.Center.HasValue)
+                            {
+                                c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
+                                s1 = res1.Score;
+                            }
+                            else
+                            {
+                                AppendLog("[batch] local matcher: Master1 not found");
+                            }
 
                             var res2 = LocalMatcher.MatchInSearchROIWithDetails(
                                 img,
@@ -5808,15 +5775,15 @@ namespace BrakeDiscInspector_GUI_ROI
                                 m2Override,
                                 LogToFileAndUI);
 
-                        if (res2.Center.HasValue)
-                        {
-                            c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
-                            s2 = res2.Score;
-                        }
-                        else
-                        {
-                            AppendLog("[batch] local matcher: Master2 not found");
-                        }
+                            if (res2.Center.HasValue)
+                            {
+                                c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
+                                s2 = res2.Score;
+                            }
+                            else
+                            {
+                                AppendLog("[batch] local matcher: Master2 not found");
+                            }
                         }
                         finally
                         {
@@ -6194,9 +6161,9 @@ namespace BrakeDiscInspector_GUI_ROI
             for (int i = 0; i < 256; i++)
             {
                 double t = i / 255.0;
-                double rr = 0.13572138 + 4.61539260*t - 42.66032258*t*t + 132.13108234*t*t*t - 152.94239396*t*t*t*t + 59.28637943*t*t*t*t*t;
-                double gg = 0.09140261 + 2.19418839*t + 4.84296658*t*t - 14.18503333*t*t*t + 14.13815831*t*t*t*t - 4.21519726*t*t*t*t*t;
-                double bb = 0.10667330 + 12.64194608*t - 60.58204836*t*t + 139.27510080*t*t*t - 150.21747690*t*t*t*t + 59.17006120*t*t*t*t*t;
+                double rr = 0.13572138 + 4.61539260 * t - 42.66032258 * t * t + 132.13108234 * t * t * t - 152.94239396 * t * t * t * t + 59.28637943 * t * t * t * t * t;
+                double gg = 0.09140261 + 2.19418839 * t + 4.84296658 * t * t - 14.18503333 * t * t * t + 14.13815831 * t * t * t * t - 4.21519726 * t * t * t * t * t;
+                double bb = 0.10667330 + 12.64194608 * t - 60.58204836 * t * t + 139.27510080 * t * t * t - 150.21747690 * t * t * t * t + 59.17006120 * t * t * t * t * t;
                 turboR[i] = (byte)Math.Round(255.0 * Math.Clamp(rr, 0.0, 1.0));
                 turboG[i] = (byte)Math.Round(255.0 * Math.Clamp(gg, 0.0, 1.0));
                 turboB[i] = (byte)Math.Round(255.0 * Math.Clamp(bb, 0.0, 1.0));
@@ -6323,13 +6290,13 @@ namespace BrakeDiscInspector_GUI_ROI
             if (double.IsNaN(t)) t = 0;
             if (t < 0) t = 0; if (t > 1) t = 1;
             // Polynomial approximation of Turbo (McIlroy 2019), clamped
-            double r = 0.13572138 + 4.61539260*t - 42.66032258*t*t + 132.13108234*t*t*t - 152.94239396*t*t*t*t + 59.28637943*t*t*t*t*t;
-            double g = 0.09140261 + 2.19418839*t + 4.84296658*t*t - 14.18503333*t*t*t + 14.13815831*t*t*t*t - 4.21519726*t*t*t*t*t;
-            double b = 0.10667330 + 12.64194608*t - 60.58204836*t*t + 139.27510080*t*t*t - 150.21747690*t*t*t*t + 59.17006120*t*t*t*t*t;
+            double r = 0.13572138 + 4.61539260 * t - 42.66032258 * t * t + 132.13108234 * t * t * t - 152.94239396 * t * t * t * t + 59.28637943 * t * t * t * t * t;
+            double g = 0.09140261 + 2.19418839 * t + 4.84296658 * t * t - 14.18503333 * t * t * t + 14.13815831 * t * t * t * t - 4.21519726 * t * t * t * t * t;
+            double b = 0.10667330 + 12.64194608 * t - 60.58204836 * t * t + 139.27510080 * t * t * t - 150.21747690 * t * t * t * t + 59.17006120 * t * t * t * t * t;
             r = System.Math.Clamp(r, 0.0, 1.0);
             g = System.Math.Clamp(g, 0.0, 1.0);
             b = System.Math.Clamp(b, 0.0, 1.0);
-            return ((byte)System.Math.Round(255*b), (byte)System.Math.Round(255*g), (byte)System.Math.Round(255*r));
+            return ((byte)System.Math.Round(255 * b), (byte)System.Math.Round(255 * g), (byte)System.Math.Round(255 * r));
         }
 
         // Build a visible BGRA32 heatmap with robust min/max normalization and optional colorization
@@ -6365,26 +6332,26 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 double inv = (maxv > minv) ? 1.0 / (maxv - minv) : 0.0;
 
-                byte[] bgra = new byte[w*h*4];
+                byte[] bgra = new byte[w * h * 4];
                 for (int p = 0, q = 0; p < g8.Length; p++, q += 4)
                 {
                     double t = (inv == 0.0) ? 0.0 : (g8[p] - minv) * inv;
                     if (gamma != 1.0) t = System.Math.Pow(t, 1.0 / System.Math.Max(1e-6, gamma));
                     if (useTurbo)
                     {
-                        var (B,G,R) = TurboLUT(t);
-                        bgra[q+0] = B; bgra[q+1] = G; bgra[q+2] = R; bgra[q+3] = 255;
+                        var (B, G, R) = TurboLUT(t);
+                        bgra[q + 0] = B; bgra[q + 1] = G; bgra[q + 2] = R; bgra[q + 3] = 255;
                     }
                     else
                     {
                         byte u = (byte)System.Math.Round(255.0 * t);
-                        bgra[q+0] = u; bgra[q+1] = u; bgra[q+2] = u; bgra[q+3] = 255;
+                        bgra[q + 0] = u; bgra[q + 1] = u; bgra[q + 2] = u; bgra[q + 3] = 255;
                     }
                 }
 
                 var wb = new System.Windows.Media.Imaging.WriteableBitmap(w, h, src.DpiX, src.DpiY,
                     System.Windows.Media.PixelFormats.Bgra32, null);
-                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w*4, 0);
+                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w * 4, 0);
                 wb.Freeze();
                 return wb;
             }
@@ -6395,10 +6362,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 src.CopyPixels(raw, stride, 0);
 
                 // Convert bytes→ushort (Little Endian)
-                int N = w*h;
+                int N = w * h;
                 ushort[] g16 = new ushort[N];
                 for (int i = 0, j = 0; i < N; i++, j += 2)
-                    g16[i] = (ushort)(raw[j] | (raw[j+1] << 8));
+                    g16[i] = (ushort)(raw[j] | (raw[j + 1] << 8));
 
                 int minv = ushort.MaxValue, maxv = 0, countNZ = 0;
                 for (int i = 0; i < N; i++)
@@ -6413,26 +6380,26 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 double inv = (maxv > minv) ? 1.0 / (maxv - minv) : 0.0;
 
-                byte[] bgra = new byte[N*4];
+                byte[] bgra = new byte[N * 4];
                 for (int i = 0, q = 0; i < N; i++, q += 4)
                 {
                     double t = (inv == 0.0) ? 0.0 : (g16[i] - minv) * inv;
                     if (gamma != 1.0) t = System.Math.Pow(t, 1.0 / System.Math.Max(1e-6, gamma));
                     if (useTurbo)
                     {
-                        var (B,G,R) = TurboLUT(t);
-                        bgra[q+0] = B; bgra[q+1] = G; bgra[q+2] = R; bgra[q+3] = 255;
+                        var (B, G, R) = TurboLUT(t);
+                        bgra[q + 0] = B; bgra[q + 1] = G; bgra[q + 2] = R; bgra[q + 3] = 255;
                     }
                     else
                     {
                         byte u = (byte)System.Math.Round(255.0 * t);
-                        bgra[q+0] = u; bgra[q+1] = u; bgra[q+2] = u; bgra[q+3] = 255;
+                        bgra[q + 0] = u; bgra[q + 1] = u; bgra[q + 2] = u; bgra[q + 3] = 255;
                     }
                 }
 
                 var wb = new System.Windows.Media.Imaging.WriteableBitmap(w, h, src.DpiX, src.DpiY,
                     System.Windows.Media.PixelFormats.Bgra32, null);
-                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w*4, 0);
+                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w * 4, 0);
                 wb.Freeze();
                 return wb;
             }
@@ -6451,7 +6418,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 for (int q = 0; q < buf.Length; q += 4)
                 {
                     // premultiplied alpha is fine: we treat zeros as background
-                    byte b = buf[q+0], g = buf[q+1], r = buf[q+2];
+                    byte b = buf[q + 0], g = buf[q + 1], r = buf[q + 2];
                     int lum = (int)System.Math.Round(0.2126 * r + 0.7152 * g + 0.0722 * b);
                     if (lum <= 0) continue;
                     if (lum < minv) minv = lum;
@@ -6465,26 +6432,26 @@ namespace BrakeDiscInspector_GUI_ROI
                 byte[] bgra = new byte[h * stride];
                 for (int q = 0; q < buf.Length; q += 4)
                 {
-                    byte b = buf[q+0], g = buf[q+1], r = buf[q+2];
+                    byte b = buf[q + 0], g = buf[q + 1], r = buf[q + 2];
                     int lum = (int)System.Math.Round(0.2126 * r + 0.7152 * g + 0.0722 * b);
                     double t = (inv == 0.0) ? 0.0 : (lum - minv) * inv;
                     if (t < 0) t = 0; if (t > 1) t = 1;
                     if (gamma != 1.0) t = System.Math.Pow(t, 1.0 / System.Math.Max(1e-6, gamma));
                     if (useTurbo)
                     {
-                        var (B,G,R) = TurboLUT(t);
-                        bgra[q+0] = B; bgra[q+1] = G; bgra[q+2] = R; bgra[q+3] = 255;
+                        var (B, G, R) = TurboLUT(t);
+                        bgra[q + 0] = B; bgra[q + 1] = G; bgra[q + 2] = R; bgra[q + 3] = 255;
                     }
                     else
                     {
                         byte u = (byte)System.Math.Round(255.0 * t);
-                        bgra[q+0] = u; bgra[q+1] = u; bgra[q+2] = u; bgra[q+3] = 255;
+                        bgra[q + 0] = u; bgra[q + 1] = u; bgra[q + 2] = u; bgra[q + 3] = 255;
                     }
                 }
 
                 var wb = new System.Windows.Media.Imaging.WriteableBitmap(w, h, conv.DpiX, conv.DpiY,
                     System.Windows.Media.PixelFormats.Bgra32, null);
-                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w*4, 0);
+                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w * 4, 0);
                 wb.Freeze();
                 return wb;
             }
@@ -6811,14 +6778,14 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RoiHudStack.Children.Add(CreateHudItem("Master 1 (Pattern)",
                     () => _showMaster1PatternOverlay,
-                    v  => _showMaster1PatternOverlay = v));
+                    v => _showMaster1PatternOverlay = v));
                 count++;
             }
             if (_layout.Master2Pattern != null && IsRoiSaved(_layout.Master2Pattern))
             {
                 RoiHudStack.Children.Add(CreateHudItem("Master 2 (Pattern)",
                     () => _showMaster2PatternOverlay,
-                    v  => _showMaster2PatternOverlay = v));
+                    v => _showMaster2PatternOverlay = v));
                 count++;
             }
 
@@ -6827,14 +6794,14 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RoiHudStack.Children.Add(CreateHudItem("Master 1 Search",
                     () => _showMaster1SearchOverlay,
-                    v  => _showMaster1SearchOverlay = v));
+                    v => _showMaster1SearchOverlay = v));
                 count++;
             }
             if (_layout.Master2Search != null && IsRoiSaved(_layout.Master2Search))
             {
                 RoiHudStack.Children.Add(CreateHudItem("Master 2 Search",
                     () => _showMaster2SearchOverlay,
-                    v  => _showMaster2SearchOverlay = v));
+                    v => _showMaster2SearchOverlay = v));
                 count++;
             }
 
@@ -9714,7 +9681,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 case MasterState.DrawM1_Pattern:
                     savedRole = RoiRole.Master1Pattern;
                     AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
-                    if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { // CODEX: string interpolation compatibility.
+                    if (!IsAllowedMasterShape(_tmpBuffer.Shape))
+                    { // CODEX: string interpolation compatibility.
                         Snack($"Master: usa rectángulo, círculo o annulus"); // CODEX: string interpolation compatibility.
                         return;
                     }
@@ -9759,7 +9727,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 case MasterState.DrawM2_Pattern:
                     savedRole = RoiRole.Master2Pattern;
                     AppendLog($"[wizard] save state={stateForSave} role={savedRole} source={bufferSource} roi={DescribeRoi(_tmpBuffer)}");
-                    if (!IsAllowedMasterShape(_tmpBuffer.Shape)) { // CODEX: string interpolation compatibility.
+                    if (!IsAllowedMasterShape(_tmpBuffer.Shape))
+                    { // CODEX: string interpolation compatibility.
                         Snack($"Master: usa rectángulo, círculo o annulus"); // CODEX: string interpolation compatibility.
                         return;
                     }
@@ -9800,7 +9769,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         SyncOverlayToImage();
                         try { RedrawOverlaySafe(); } catch { RedrawOverlay(); }
                         UpdateHeatmapOverlayLayoutAndClip();
-                        try { RedrawAnalysisCrosses(); } catch {}
+                        try { RedrawAnalysisCrosses(); } catch { }
                     }
                     // CODEX: string interpolation compatibility.
                     AppendLog($"[UI] Redraw forced after saving Master2-Search.");
@@ -10140,54 +10109,54 @@ namespace BrakeDiscInspector_GUI_ROI
             // 1) Intento local primero (opcional)
             if (ChkUseLocalMatcher.IsChecked == true)
             {
+                // CODEX: string interpolation compatibility.
+                AppendLog($"[ANALYZE] Using local matcher first...");
+                try
+                {
                     // CODEX: string interpolation compatibility.
-                    AppendLog($"[ANALYZE] Using local matcher first...");
+                    AppendLog($"[FLOW] Usando matcher local");
+                    using var img = Cv.Cv2.ImRead(_currentImagePathWin);
+                    Mat? m1Override = null;
+                    Mat? m2Override = null;
+                    var analyze = _layout.Analyze ?? new AnalyzeOptions();
                     try
                     {
-                        // CODEX: string interpolation compatibility.
-                        AppendLog($"[FLOW] Usando matcher local");
-                        using var img = Cv.Cv2.ImRead(_currentImagePathWin);
-                        Mat? m1Override = null;
-                        Mat? m2Override = null;
-                        var analyze = _layout.Analyze ?? new AnalyzeOptions();
-                        try
+                        if (_layout.Master1Pattern != null)
+                            m1Override = TryLoadMasterPatternOverride(_layout.Master1PatternImagePath, "M1");
+                        if (_layout.Master2Pattern != null)
+                            m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
+
+                        var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master1Pattern, _layout.Master1Search,
+                            analyze.FeatureM1, analyze.ThrM1, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m1Override,
+                            LogToFileAndUI);
+                        if (res1.Center.HasValue) { c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y); s1 = res1.Score; AppendLog($"[LOCAL] M1 hit score={res1.Score:0.###}"); }
+                        else
                         {
-                            if (_layout.Master1Pattern != null)
-                                m1Override = TryLoadMasterPatternOverride(_layout.Master1PatternImagePath, "M1");
-                            if (_layout.Master2Pattern != null)
-                                m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
-
-                            var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master1Pattern, _layout.Master1Search,
-                                analyze.FeatureM1, analyze.ThrM1, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m1Override,
-                                LogToFileAndUI);
-                            if (res1.Center.HasValue) { c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y); s1 = res1.Score; AppendLog($"[LOCAL] M1 hit score={res1.Score:0.###}"); }
-                            else
-                            {
-                                // CODEX: string interpolation compatibility.
-                                AppendLog($"[LOCAL] M1 no encontrado");
-                            }
-
-                            var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master2Pattern, _layout.Master2Search,
-                                analyze.FeatureM2, analyze.ThrM2, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m2Override,
-                                LogToFileAndUI);
-                            if (res2.Center.HasValue) { c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y); s2 = res2.Score; AppendLog($"[LOCAL] M2 hit score={res2.Score:0.###}"); }
-                            else
-                            {
-                                // CODEX: string interpolation compatibility.
-                                AppendLog($"[LOCAL] M2 no encontrado");
-                            }
+                            // CODEX: string interpolation compatibility.
+                            AppendLog($"[LOCAL] M1 no encontrado");
                         }
-                        finally
+
+                        var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master2Pattern, _layout.Master2Search,
+                            analyze.FeatureM2, analyze.ThrM2, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m2Override,
+                            LogToFileAndUI);
+                        if (res2.Center.HasValue) { c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y); s2 = res2.Score; AppendLog($"[LOCAL] M2 hit score={res2.Score:0.###}"); }
+                        else
                         {
-                            m1Override?.Dispose();
-                            m2Override?.Dispose();
+                            // CODEX: string interpolation compatibility.
+                            AppendLog($"[LOCAL] M2 no encontrado");
                         }
                     }
-                    catch (DllNotFoundException ex)
+                    finally
                     {
-                        // CODEX: string interpolation compatibility.
-                        AppendLog($"[OpenCV] DllNotFound: {ex.Message}");
-                        Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
+                        m1Override?.Dispose();
+                        m2Override?.Dispose();
+                    }
+                }
+                catch (DllNotFoundException ex)
+                {
+                    // CODEX: string interpolation compatibility.
+                    AppendLog($"[OpenCV] DllNotFound: {ex.Message}");
+                    Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
                     ChkUseLocalMatcher.IsChecked = false;
                 }
                 catch (Exception ex)
@@ -10321,34 +10290,10 @@ namespace BrakeDiscInspector_GUI_ROI
             // === END: reposition Masters & Inspections ===
 
             // 5) Reubicar inspección si existe
-            var inspectionRoi = _layout.Inspection;
-            if (inspectionRoi == null)
-            {
-                Snack($"Masters OK. Falta ROI de Inspección: dibújalo y guarda. Las cruces ya están dibujadas."); // CODEX: string interpolation compatibility.
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] Inspection null");
-                _state = MasterState.DrawInspection;
-                UpdateWizardState();
-                return;
-            }
-
-            if (inspectionRoi.IsFrozen)
-            {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] Inspection ROI frozen; skipping auto reposition.");
-            }
-            else
-            {
-                using (SuppressAutoSaves())
-                {
-                    MoveInspectionTo(inspectionRoi, c1.Value, c2.Value);
-                    ClipInspectionROI(inspectionRoi, _imgW, _imgH);
-                    RedrawOverlay();
-                }
-
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] Inspection movida y recortada");
-            }
+            // NOTE: inspection ROIs are repositioned inside AcceptNewDetectionIfDifferent() -> RepositionInspectionUsingSt().
+            //       We intentionally do NOT call MoveInspectionTo() here to avoid double-moving and mismatched offsets.
+            // CODEX: string interpolation compatibility.
+            AppendLog($"[FLOW] AnalyzeMaster: inspections repositioned via RepositionInspectionUsingSt; skipping MoveInspectionTo.");
 
             try
             {
@@ -10833,20 +10778,20 @@ namespace BrakeDiscInspector_GUI_ROI
             double newCY = pivotNewY + relYr;
 
             // Scale size (generic: Width/Height; for circles/annulus R, RInner)
-            double newW = baseline.Width  * scale;
+            double newW = baseline.Width * scale;
             double newH = baseline.Height * scale;
 
-            target.Width  = newW;
+            target.Width = newW;
             target.Height = newH;
 
             // Update center & box
-            target.CX  = newCX;
-            target.CY  = newCY;
+            target.CX = newCX;
+            target.CY = newCY;
             target.Left = newCX - (newW * 0.5);
-            target.Top  = newCY - (newH * 0.5);
+            target.Top = newCY - (newH * 0.5);
 
             // If circular radii exist, scale them (no-ops if zero)
-            target.R      = baseline.R      * scale;
+            target.R = baseline.R * scale;
             target.RInner = baseline.RInner * scale;
 
             // Apply angle rotation for rectangular ROIs
@@ -10920,9 +10865,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // Keep original size to restore after move (size lock)
-            double __inspW0   = insp?.Width  ?? 0;
-            double __inspH0   = insp?.Height ?? 0;
-            double __inspR0   = insp?.R      ?? 0;
+            double __inspW0 = insp?.Width ?? 0;
+            double __inspH0 = insp?.Height ?? 0;
+            double __inspR0 = insp?.R ?? 0;
             double __inspRin0 = insp?.RInner ?? 0;
 
             if (insp == null)
@@ -10951,27 +10896,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     var persistedBaseline = GetInspectionBaselineClone(roiId);
                     if (persistedBaseline != null)
                     {
-                        const double tol = 0.01;
-                        bool mismatch = Math.Abs(persistedBaseline.Width - insp.Width) > tol
-                            || Math.Abs(persistedBaseline.Height - insp.Height) > tol
-                            || Math.Abs(persistedBaseline.R - insp.R) > tol
-                            || Math.Abs(persistedBaseline.RInner - insp.RInner) > tol;
-
-                        if (mismatch)
-                        {
-                            baselineSource = "fixed-persisted-mismatch->self";
-                            InspLog($"[Seed][WARN] Ignoring persisted baseline (size mismatch) id='{roiId}' persisted={FInsp(persistedBaseline)} active={FInsp(insp)}; seeding from self.");
-                        }
-                        else
-                        {
-                            baselineSource = "fixed-persisted";
-                            _inspectionBaselineFixedById[roiId] = persistedBaseline.Clone();
-                            _inspectionBaselineSeededIds.Add(roiId);
-                            _inspectionBaselineSeededForImage = true;
-                            _lastImageSeedKey = __seedKeyNow;
-                            InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=persisted base={FInsp(persistedBaseline)}");
-                            return persistedBaseline.Clone();
-                        }
+                        baselineSource = "fixed-persisted";
+                        _inspectionBaselineFixedById[roiId] = persistedBaseline.Clone();
+                        _inspectionBaselineSeededIds.Add(roiId);
+                        _inspectionBaselineSeededForImage = true;
+                        _lastImageSeedKey = __seedKeyNow;
+                        InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=persisted base={FInsp(persistedBaseline)}");
+                        return persistedBaseline.Clone();
                     }
 
                     baselineSource = "fixed-self";
@@ -11002,8 +10933,8 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog(FormattableString.Invariant(
                 $"[InspectBaseline] activeIdx={activeInspectionIndex} roiId={insp.Id ?? "<null>"} fixed={useFixedBaseline} baselineSource={baselineSource} chosenBaselineId={baselineInspection?.Id ?? "<null>"} persistedBaselineId={_layout?.InspectionBaseline?.Id ?? "<null>"}"));
 
-            RoiModel? __baseM1S = _layout?.Master1Search ?.Clone();
-            RoiModel? __baseM2S = _layout?.Master2Search ?.Clone();
+            RoiModel? __baseM1S = _layout?.Master1Search?.Clone();
+            RoiModel? __baseM2S = _layout?.Master2Search?.Clone();
             var __baseHeat = _lastHeatmapRoi?.Clone();
 
             double m1NewX = master1.X, m1NewY = master1.Y;
@@ -11044,10 +10975,12 @@ namespace BrakeDiscInspector_GUI_ROI
             var baseM1ForLog = baseM1Snap ?? _layout?.Master1Pattern;
             var baseM2ForLog = baseM2Snap ?? _layout?.Master2Pattern;
             string baselineSourceLabel = baseFromFixed ? "fixed" : "layout-fallback";
-            var pivotBaseline = anchorMaster == MasterAnchorChoice.Master2 ? m2_base : m1_base;
-            var pivotDetected = anchorMaster == MasterAnchorChoice.Master2 ? m2_new : m1_new;
-            var pivotLabel = anchorMaster == MasterAnchorChoice.Master2 ? "Master2" : "Master1";
+            var pivotBaseline = new SWPoint((m1_base.X + m2_base.X) * 0.5, (m1_base.Y + m2_base.Y) * 0.5);
+            var pivotDetected = new SWPoint((m1_new.X + m2_new.X) * 0.5, (m1_new.Y + m2_new.Y) * 0.5);
+            const string pivotLabel = "Midpoint";
 
+
+            double pivotOldX = 0, pivotOldY = 0, pivotNewX = 0, pivotNewY = 0;
             AppendLog(FormattableString.Invariant(
                 $"[XFORM][CFG] roiId={insp?.Id ?? "<null>"} idx={activeInspectionIndex} anchor={(int)anchorMaster} pivot={pivotLabel}"));
             AppendLog(FormattableString.Invariant(
@@ -11084,12 +11017,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 double lenNew = Math.Sqrt(dxNew * dxNew + dyNew * dyNew);
 
                 scale = (lenOld > 1e-9) ? (lenNew / lenOld) : 1.0;
+                bool scaleLockUiNow = GetScaleLockUi();
 
-                bool scaleLockUi = GetScaleLockUi();
-                effectiveScale = scaleLockUi ? 1.0 : scale;
-                InspLog(FormattableString.Invariant(
-                    $"[LOCKSCALE][MoveInspectionTo] prop={ScaleLock} chk={(ChkScaleLock?.IsChecked == true)} used={scaleLockUi} scale_req={scale:0.######} scale_eff={effectiveScale:0.######} lenOld={lenOld:0.###} lenNew={lenNew:0.###}"));
-                AppendLog($"[UI] AnalyzeMaster scale lock={scaleLockUi}, scale={scale:F6} -> eff={effectiveScale:F6}");
+                effectiveScale = scaleLockUiNow ? 1.0 : scale;
+                AppendLog($"[UI] AnalyzeMaster scaleLockUiNow={scaleLockUiNow}, scale_req={scale:F6} -> effScale={effectiveScale:F6}");
 
                 double angOldRad = Math.Atan2(dyOld, dxOld);
                 double angNewRad = Math.Atan2(dyNew, dxNew);
@@ -11104,10 +11035,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 angDelta = deg * Math.PI / 180.0;
                 angDeltaEffective = _disableRot ? 0.0 : angDelta;
 
-                double pivotOldX = pivotBaseline.X;
-                double pivotOldY = pivotBaseline.Y;
-                double pivotNewX = pivotDetected.X;
-                double pivotNewY = pivotDetected.Y;
+                pivotOldX = pivotBaseline.X;
+                pivotOldY = pivotBaseline.Y;
+                pivotNewX = pivotDetected.X;
+                pivotNewY = pivotDetected.Y;
 
                 InspLog($"[Transform] imgKey='{__seedKeyNow}' roiId='{insp.Id ?? "<null>"}' anchorMaster={anchorMaster} baseline_source={baselineSourceLabel} " +
                         $"BASE:{DescribeMasterForLog("M1_base", baseM1ForLog)} {DescribeMasterForLog("M2_base", baseM2ForLog)} " +
@@ -11117,15 +11048,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 ApplyTransformWithLog("inspection", insp, baselineInspection, pivotOldX, pivotOldY, pivotNewX, pivotNewY, activeInspectionIndex);
             }
 
-            if (!__canTransform && ScaleLock && insp != null)
+            if (!__canTransform && GetScaleLockUi() && insp != null)
             {
                 double cx = insp.CX, cy = insp.CY;
-                insp.Width  = __inspW0;
+                insp.Width = __inspW0;
                 insp.Height = __inspH0;
-                insp.R      = __inspR0;
+                insp.R = __inspR0;
                 insp.RInner = __inspRin0;
                 insp.Left = cx - (__inspW0 * 0.5);
-                insp.Top  = cy - (__inspH0 * 0.5);
+                insp.Top = cy - (__inspH0 * 0.5);
             }
 
             if (!useFixedBaseline)
@@ -11156,10 +11087,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (!FREEZE_MASTER_SEARCH_ON_ANALYZE)
                     {
                         if (_layout.Master1Search != null && __baseM1S != null)
-                            ApplyTransformWithLog("m1-search", _layout.Master1Search, __baseM1S, m1OldX, m1OldY, m1NewX, m1NewY, 0);
+                            ApplyTransformWithLog("m1-search", _layout.Master1Search, __baseM1S, pivotOldX, pivotOldY, pivotNewX, pivotNewY, 0);
 
                         if (_layout.Master2Search != null && __baseM2S != null)
-                            ApplyTransformWithLog("m2-search", _layout.Master2Search, __baseM2S, m1OldX, m1OldY, m1NewX, m1NewY, 0);
+                            ApplyTransformWithLog("m2-search", _layout.Master2Search, __baseM2S, pivotOldX, pivotOldY, pivotNewX, pivotNewY, 0);
                     }
                     else
                     {
@@ -11168,7 +11099,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
 
                     if (_lastHeatmapRoi != null && __baseHeat != null)
-                        ApplyTransformWithLog("heatmap", _lastHeatmapRoi, __baseHeat, m1OldX, m1OldY, m1NewX, m1NewY, -1);
+                        ApplyTransformWithLog("heatmap", _lastHeatmapRoi, __baseHeat, pivotOldX, pivotOldY, pivotNewX, pivotNewY, -1);
 
                     try
                     {
@@ -13483,24 +13414,24 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_previewShape is System.Windows.Shapes.Rectangle)
             {
                 Canvas.SetLeft(_previewShape, rc.Left);
-                Canvas.SetTop(_previewShape,  rc.Top);
-                _previewShape.Width  = Math.Max(1.0, rc.Width);
+                Canvas.SetTop(_previewShape, rc.Top);
+                _previewShape.Width = Math.Max(1.0, rc.Width);
                 _previewShape.Height = Math.Max(1.0, rc.Height);
             }
             else if (_previewShape is System.Windows.Shapes.Ellipse)
             {
                 double d = Math.Max(1.0, rc.R * 2.0);
                 Canvas.SetLeft(_previewShape, rc.CX - d / 2.0);
-                Canvas.SetTop(_previewShape,  rc.CY - d / 2.0);
-                _previewShape.Width  = d;
+                Canvas.SetTop(_previewShape, rc.CY - d / 2.0);
+                _previewShape.Width = d;
                 _previewShape.Height = d;
             }
             else if (_previewShape is AnnulusShape ann)
             {
                 double d = Math.Max(1.0, rc.R * 2.0);
                 Canvas.SetLeft(ann, rc.CX - d / 2.0);
-                Canvas.SetTop(ann,  rc.CY - d / 2.0);
-                ann.Width  = d;
+                Canvas.SetTop(ann, rc.CY - d / 2.0);
+                ann.Width = d;
                 ann.Height = d;
                 double inner = Math.Max(0.0, Math.Min(rc.RInner, rc.R)); // clamp
                 ann.InnerRadius = inner;
@@ -13758,8 +13689,10 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var h = new System.Windows.Shapes.Line
             {
-                X1 = p.X - size, Y1 = p.Y,
-                X2 = p.X + size, Y2 = p.Y,
+                X1 = p.X - size,
+                Y1 = p.Y,
+                X2 = p.X + size,
+                Y2 = p.Y,
                 Stroke = System.Windows.Media.Brushes.Lime,
                 StrokeThickness = th,
                 IsHitTestVisible = false,
@@ -13767,8 +13700,10 @@ namespace BrakeDiscInspector_GUI_ROI
             };
             var v = new System.Windows.Shapes.Line
             {
-                X1 = p.X, Y1 = p.Y - size,
-                X2 = p.X, Y2 = p.Y + size,
+                X1 = p.X,
+                Y1 = p.Y - size,
+                X2 = p.X,
+                Y2 = p.Y + size,
                 Stroke = System.Windows.Media.Brushes.Lime,
                 StrokeThickness = th,
                 IsHitTestVisible = false,
@@ -13793,7 +13728,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void LogDeltaToCross(string label, double roiCxImg, double roiCyImg, double crossCxImg, double crossCyImg)
         {
             var crossCanvas = ImagePxToCanvasPt(crossCxImg, crossCyImg);
-            var roiCanvas   = ImagePxToCanvasPt(roiCxImg,   roiCyImg);
+            var roiCanvas = ImagePxToCanvasPt(roiCxImg, roiCyImg);
             double dx = roiCanvas.X - crossCanvas.X;
             double dy = roiCanvas.Y - crossCanvas.Y;
             LogInfo($"[AlignCheck] {label}: Cross(canvas)=({crossCanvas.X:F3},{crossCanvas.Y:F3}) " +
@@ -14170,7 +14105,7 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private void BtnM1_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(GetSelectedMasterState(1), GetMasterShapeCombo(1));
-        private void BtnM1_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(1));
+        private void BtnM1_Save_Click(object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(1));
         private void BtnM1_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(GetSelectedMasterState(1));
 
         private RoiRole GetSelectedMasterRole(int masterIndex)
@@ -14371,15 +14306,15 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private void BtnM1S_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM1_Search, ComboMasterRoiShape);
-        private void BtnM1S_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Search);
+        private void BtnM1S_Save_Click(object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM1_Search);
         private void BtnM1S_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM1_Search);
 
         private void BtnM2_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(GetSelectedMasterState(2), GetMasterShapeCombo(2));
-        private void BtnM2_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(2));
+        private void BtnM2_Save_Click(object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(2));
         private void BtnM2_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(GetSelectedMasterState(2));
 
         private void BtnM2S_Create_Click(object sender, RoutedEventArgs e) => StartDrawingFor(MasterState.DrawM2_Search, ComboM2Shape);
-        private void BtnM2S_Save_Click  (object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM2_Search);
+        private void BtnM2S_Save_Click(object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM2_Search);
         private void BtnM2S_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM2_Search);
 
         private void BtnEditM2_Click(object sender, RoutedEventArgs e)

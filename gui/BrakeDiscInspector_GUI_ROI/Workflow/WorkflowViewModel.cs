@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -263,6 +264,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private byte[]? _lastHeatmapPngBytes;
         private WriteableBitmap? _lastHeatmapBitmap;
         private int _batchHeatmapRoiIndex = 0;
+        private readonly Dictionary<int, byte[]> _batchHeatmapPngByRoi = new();
         private double _baseImageActualWidth;
         private double _baseImageActualHeight;
         private double _canvasRoiActualWidth;
@@ -2220,15 +2222,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             _batchPlacementTokenPlaced = token;
 
-            try
+            if (BatchRowOk.HasValue)
             {
-                if (BatchRowOk.HasValue)
-                {
-                    OverlayBatchCaption?.Invoke(imgName, BatchRowOk.Value);
-                }
-            }
-            catch
-            {
+                NotifyBatchCaption(imgName, BatchRowOk.Value);
             }
 
             await CaptureCanvasIfNeededAsync(imgName, "afterFinalPlacement").ConfigureAwait(false);
@@ -5313,15 +5309,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     BatchRowOk = ComputeBatchRowOk(row);
                     GuiLog.Info($"[batch] row result file='{Path.GetFileName(CurrentImagePath ?? string.Empty)}' => {(BatchRowOk == true ? "OK" : "NG")}");
 
-                    try
+                    if (BatchRowOk.HasValue)
                     {
-                        if (BatchRowOk.HasValue)
-                        {
-                            OverlayBatchCaption?.Invoke(Path.GetFileName(CurrentImagePath ?? string.Empty), BatchRowOk.Value);
-                        }
-                    }
-                    catch
-                    {
+                        NotifyBatchCaption(Path.GetFileName(CurrentImagePath ?? string.Empty), BatchRowOk.Value);
                     }
 
                     await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
@@ -5366,7 +5356,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void UpdateBatchHeatmapIndex(int roiIndex)
         {
-            InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
+            InvokeOnUi(() => ApplyBatchHeatmapSelection(Math.Max(1, Math.Min(4, roiIndex))));
         }
 
         private bool TryBuildAnchorContext(out AnchorTransformContext context, bool logError, bool logSummary = true)
@@ -6356,15 +6346,75 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             });
         }
 
+        private static string ComputeHashTag(byte[] data)
+        {
+            try
+            {
+                var hash = SHA256.HashData(data);
+                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant()[..8];
+            }
+            catch
+            {
+                return "(hash-err)";
+            }
+        }
+
+        private static (int Width, int Height) GetImageSizeSafe(byte[] data)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                if (decoder.Frames.Count > 0)
+                {
+                    var frame = decoder.Frames[0];
+                    return (frame.PixelWidth, frame.PixelHeight);
+                }
+            }
+            catch
+            {
+            }
+
+            return (0, 0);
+        }
+
+        private void ApplyBatchHeatmapSelection(int roiIndex)
+        {
+            BatchHeatmapRoiIndex = roiIndex;
+
+            if (_batchHeatmapPngByRoi.TryGetValue(BatchHeatmapRoiIndex, out var bytes) && bytes.Length > 0)
+            {
+                _lastHeatmapPngBytes = bytes;
+                UpdateHeatmapThreshold();
+
+                var (w, h) = GetImageSizeSafe(bytes);
+                GuiLog.Info($"[batch-hm] set-ui roi={BatchHeatmapRoiIndex} bytes={bytes.Length} hash={ComputeHashTag(bytes)} dims={w}x{h} source={(BatchHeatmapSource != null)}");
+            }
+            else
+            {
+                _lastHeatmapPngBytes = null;
+                BatchHeatmapSource = null;
+                OnPropertyChanged(nameof(BatchHeatmapSource));
+                GuiLog.Info($"[batch-hm] set-ui roi={BatchHeatmapRoiIndex} bytes=0 hash=∅ dims=0x0 source=false");
+            }
+        }
+
         public void SetBatchHeatmapForRoi(byte[]? heatmapPngBytes, int roiIndex)
         {
-            BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex));
-            _lastHeatmapPngBytes = heatmapPngBytes ?? Array.Empty<byte>();
+            var clampedIndex = Math.Max(1, Math.Min(4, roiIndex));
+
+            if (heatmapPngBytes != null && heatmapPngBytes.Length > 0)
+            {
+                _batchHeatmapPngByRoi[clampedIndex] = heatmapPngBytes;
+            }
+            else
+            {
+                _batchHeatmapPngByRoi.Remove(clampedIndex);
+            }
 
             try
             {
-                UpdateHeatmapThreshold();
-                GuiLog.Info($"[batch-hm] step={_batchStepId} file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' bytes={_lastHeatmapPngBytes.Length}");
+                ApplyBatchHeatmapSelection(clampedIndex);
 
                 if (_isBatchRunning)
                 {
@@ -6421,6 +6471,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 var heatmapBytes = Convert.FromBase64String(result.heatmap_png_base64);
+                var (w, h) = GetImageSizeSafe(heatmapBytes);
+                GuiLog.Info($"[heatmap] recv file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' roi={roiIndex} bytes={heatmapBytes.Length} hash={ComputeHashTag(heatmapBytes)} dims={w}x{h}");
 
                 InvokeOnUi(() =>
                 {
@@ -6447,6 +6499,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void UpdateHeatmapThreshold()
         {
             HeatmapInfo = $"Cutoff: {HeatmapCutoffPercent}%";
+
+            _batchHeatmapPngByRoi.TryGetValue(BatchHeatmapRoiIndex, out _lastHeatmapPngBytes);
 
             if (_lastHeatmapPngBytes == null || _lastHeatmapPngBytes.Length == 0)
             {
@@ -6477,6 +6531,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             BatchHeatmapRoiIndex = 0;
             _lastHeatmapBitmap = null;
             _lastHeatmapPngBytes = null;
+            _batchHeatmapPngByRoi.Clear();
         }
 
         private async Task<(byte[] Bytes, string FileName, string ShapeJson)> ExportRoiFromFileAsync(InspectionRoiConfig roiConfig, string fullPath)
@@ -6527,6 +6582,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             else
             {
                 dispatcher.Invoke(action);
+            }
+        }
+
+        private void NotifyBatchCaption(string fileName, bool isOk)
+        {
+            try
+            {
+                OverlayBatchCaption?.Invoke(fileName, isOk);
+                TraceBatch(FormattableString.Invariant($"[batch-ui] caption msg='{fileName}' isError={!isOk} snackbarSkipped=true"));
+            }
+            catch
+            {
             }
         }
 

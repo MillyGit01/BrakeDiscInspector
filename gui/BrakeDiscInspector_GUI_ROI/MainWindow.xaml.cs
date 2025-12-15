@@ -8481,23 +8481,21 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void OverlayBatchCaption(string fileName, bool isOk)
         {
-            var tb = _batchCaption ??= new TextBlock
+            EnsureBatchInfoOverlay();
+            if (_batchInfoOverlay == null)
             {
-                FontSize = 18,
-                FontWeight = FontWeights.Bold,
-                Foreground = Brushes.White,
-                Effect = new DropShadowEffect { ShadowDepth = 0, BlurRadius = 3, Color = Colors.Black, Opacity = 0.8 }
-            };
-
-            tb.Text = $"{System.IO.Path.GetFileName(fileName)}  —  {(isOk ? "OK" : "NG")}";
-
-            if (Overlay != null && !Overlay.Children.Contains(tb))
-            {
-                Overlay.Children.Add(tb);
+                return;
             }
 
-            Canvas.SetLeft(tb, 8);
-            Canvas.SetTop(tb, 8);
+            _batchInfoOverlay.Text = $"{System.IO.Path.GetFileName(fileName)}  —  {(isOk ? "OK" : "NG")}";
+            _batchInfoOverlay.Visibility = Visibility.Visible;
+            Canvas.SetLeft(_batchInfoOverlay, 8);
+            Canvas.SetTop(_batchInfoOverlay, 8);
+
+            if (_batchCaption != null && Overlay != null && Overlay.Children.Contains(_batchCaption))
+            {
+                Overlay.Children.Remove(_batchCaption);
+            }
         }
 
         private void RequestBatchHeatmapPlacement(string reason, WorkflowViewModel? vmOverride = null)

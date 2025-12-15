@@ -2328,13 +2328,41 @@ namespace BrakeDiscInspector_GUI_ROI
                 label.DesiredSize.Width * 0.5, label.DesiredSize.Height * 0.5);
         }
 
-        // Modern label factory: Border(black + neon-green) + TextBlock(white)
-        private FrameworkElement CreateStyledLabel(string text)
+        private static void ApplyStyledLabelColors(FrameworkElement label, WBrush accent, string text)
         {
+            if (label is System.Windows.Controls.Border border && border.Child is System.Windows.Controls.TextBlock tb)
+            {
+                tb.Text = text;
+                tb.Foreground = accent;
+                border.BorderBrush = accent;
+            }
+        }
+
+        private WBrush ResolveLabelAccent(object? roi)
+        {
+            if (roi is RoiModel model)
+            {
+                try
+                {
+                    return GetRoiStyle(model.Role).stroke;
+                }
+                catch
+                {
+                    // Fallback to default accent if style resolution fails
+                }
+            }
+
+            return WBrushes.Lime;
+        }
+
+        // Modern label factory: Border(black + accent) + TextBlock(accent)
+        private FrameworkElement CreateStyledLabel(string text, WBrush? accent = null)
+        {
+            var accentBrush = accent ?? WBrushes.Lime;
             var tb = new System.Windows.Controls.TextBlock
             {
                 Text = text,
-                Foreground = System.Windows.Media.Brushes.Lime,
+                Foreground = accentBrush,
                 FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
                 FontSize = 12,
                 FontWeight = System.Windows.FontWeights.SemiBold,
@@ -2344,6 +2372,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var neon = (System.Windows.Media.SolidColorBrush)
                 (new System.Windows.Media.BrushConverter().ConvertFromString("#39FF14"));
+
+            // Override border color with accent to keep label + ROI in sync
+            neon = accentBrush as System.Windows.Media.SolidColorBrush ?? neon;
 
             var border = new System.Windows.Controls.Border
             {
@@ -3076,6 +3107,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _lbl = "ROI";
 
             string labelName = "roiLabel_" + _lbl.Replace(" ", "_");
+            var accent = ResolveLabelAccent(roi);
             var existing = CanvasROI.Children
                 .OfType<FrameworkElement>()
                 .FirstOrDefault(fe => fe.Name == labelName);
@@ -3083,7 +3115,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (existing == null)
             {
-                label = CreateStyledLabel(_lbl);
+                label = CreateStyledLabel(_lbl, accent);
                 label.Name = labelName;
                 label.IsHitTestVisible = false;
             }
@@ -3091,10 +3123,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 label = existing;
                 label.IsHitTestVisible = false;
-                if (label is System.Windows.Controls.Border border && border.Child is System.Windows.Controls.TextBlock tb)
-                {
-                    tb.Text = _lbl;
-                }
+                ApplyStyledLabelColors(label, accent, _lbl);
             }
 
             var overlayTag = BuildOverlayTag(roi as RoiModel);
@@ -5123,10 +5152,11 @@ namespace BrakeDiscInspector_GUI_ROI
                     .FirstOrDefault(fe => fe.Name == _labelName);
                 FrameworkElement _label;
                 string finalText = string.IsNullOrWhiteSpace(_lbl) ? "ROI" : _lbl;
+                var accent = ResolveLabelAccent(canvasRoi);
 
                 if (_existing == null)
                 {
-                    _label = CreateStyledLabel(finalText);
+                    _label = CreateStyledLabel(finalText, accent);
                     _label.Name = _labelName;
                     _label.IsHitTestVisible = false;
                     CanvasROI.Children.Add(_label);
@@ -5136,10 +5166,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     _label = _existing;
                     _label.IsHitTestVisible = false;
-                    if (_label is System.Windows.Controls.Border border && border.Child is System.Windows.Controls.TextBlock tb)
-                    {
-                        tb.Text = finalText;
-                    }
+                    ApplyStyledLabelColors(_label, accent, finalText);
                 }
 
                 // Place label next to the ROI shape (may defer via Dispatcher if geometry not ready)
@@ -8829,9 +8856,10 @@ namespace BrakeDiscInspector_GUI_ROI
                     .OfType<FrameworkElement>()
                     .FirstOrDefault(t => t.Name == labelName);
                 FrameworkElement label;
+                var accent = ResolveLabelAccent(previewModel);
                 if (existingLabel == null)
                 {
-                    label = CreateStyledLabel(lbl);
+                    label = CreateStyledLabel(lbl, accent);
                     label.Name = labelName;
                     label.IsHitTestVisible = false;
                     CanvasROI.Children.Add(label);
@@ -8841,10 +8869,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     label = existingLabel;
                     label.IsHitTestVisible = false;
-                    if (label is System.Windows.Controls.Border border && border.Child is System.Windows.Controls.TextBlock tbChild)
-                    {
-                        tbChild.Text = lbl;
-                    }
+                    ApplyStyledLabelColors(label, accent, lbl);
                 }
 
                 _previewShape.Tag = previewModel;

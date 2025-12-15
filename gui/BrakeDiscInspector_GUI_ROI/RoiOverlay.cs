@@ -125,6 +125,25 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private static Brush ResolveStrokeFromLegend(ROI roi, Brush fallback)
+        {
+            var legend = roi?.Legend ?? string.Empty;
+
+            // Use the role embedded in the UI legend to choose consistent colors.
+            // Masters are typically "Master 1 Pattern/Search" or "Master 2 Pattern/Search".
+            // Inspections often contain "Inspection".
+            if (legend.IndexOf("pattern", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Brushes.DeepSkyBlue;
+
+            if (legend.IndexOf("search", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Brushes.LimeGreen;
+
+            if (legend.IndexOf("inspection", StringComparison.OrdinalIgnoreCase) >= 0)
+                return Brushes.OrangeRed;
+
+            return fallback;
+        }
+
         private void DrawRectangle(DrawingContext dc, ROI roi, System.Windows.Point centerScreen, double pixelsPerDip)
         {
             double widthScreen = ToScreenLen(roi.Width);
@@ -132,7 +151,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var rect = new Rect(centerScreen.X - widthScreen / 2.0, centerScreen.Y - heightScreen / 2.0, widthScreen, heightScreen);
             var rotate = new RotateTransform(roi.AngleDeg, centerScreen.X, centerScreen.Y);
-            var stroke = Brushes.Lime;
+
+            // IMPORTANT: stroke color and label color must match.
+            var stroke = ResolveStrokeFromLegend(roi, Brushes.Lime);
             var pen = new Pen(stroke, 2.0);
 
             dc.PushTransform(rotate);
@@ -147,8 +168,10 @@ namespace BrakeDiscInspector_GUI_ROI
             double radius = roi.R > 0 ? roi.R : Math.Max(roi.Width, roi.Height) / 2.0;
             double radiusScreen = ToScreenLen(radius);
 
-            var stroke = Brushes.DeepSkyBlue;
+            // IMPORTANT: stroke color and label color must match.
+            var stroke = ResolveStrokeFromLegend(roi, Brushes.DeepSkyBlue);
             var pen = new Pen(stroke, 2.0);
+
             dc.DrawEllipse(null, pen, centerScreen, radiusScreen, radiusScreen);
 
             var labelAnchor = new System.Windows.Point(centerScreen.X - radiusScreen, centerScreen.Y - radiusScreen);
@@ -168,11 +191,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 : AnnulusDefaults.ResolveInnerRadius(innerCandidate, outerRadius);
             double ri = ToScreenLen(riImage);
 
-            var stroke = Brushes.DeepSkyBlue;
+            // IMPORTANT: stroke color and label color must match.
+            var stroke = ResolveStrokeFromLegend(roi, Brushes.DeepSkyBlue);
             var circlePen = new Pen(stroke, 2.0);
+
             dc.DrawEllipse(null, circlePen, centerScreen, ro, ro);
             dc.DrawEllipse(null, circlePen, centerScreen, ri, ri);
 
+            // Keep the dashed pen as-is (visual cue).
             var dashedPen = new Pen(Brushes.OrangeRed, 1.5)
             {
                 DashStyle = new DashStyle(new double[] { 4, 4 }, 0)

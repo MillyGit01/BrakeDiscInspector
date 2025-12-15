@@ -765,8 +765,11 @@
             <RowDefinition Height="Auto"/>
           </Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal" Margin="8">
-            <TextBox Width="420"
+            <TextBox Width="315"
                      IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
                      Text="{Binding BatchFolder, UpdateSourceTrigger=PropertyChanged}"/>
             <Button Margin="8,0,0,0"
                     Padding="12,4"

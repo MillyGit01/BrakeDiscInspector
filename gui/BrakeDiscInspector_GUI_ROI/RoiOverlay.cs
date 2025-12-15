@@ -132,13 +132,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var rect = new Rect(centerScreen.X - widthScreen / 2.0, centerScreen.Y - heightScreen / 2.0, widthScreen, heightScreen);
             var rotate = new RotateTransform(roi.AngleDeg, centerScreen.X, centerScreen.Y);
-            var pen = new Pen(Brushes.Lime, 2.0);
+            var stroke = Brushes.Lime;
+            var pen = new Pen(stroke, 2.0);
 
             dc.PushTransform(rotate);
             dc.DrawRectangle(null, pen, rect);
             dc.Pop();
 
-            DrawLabel(dc, roi.Legend, rect.TopLeft, pixelsPerDip, Brushes.Lime);
+            DrawLabel(dc, roi.Legend, rect.TopLeft, pixelsPerDip, stroke);
         }
 
         private void DrawCircle(DrawingContext dc, ROI roi, System.Windows.Point centerScreen, double pixelsPerDip)
@@ -146,11 +147,12 @@ namespace BrakeDiscInspector_GUI_ROI
             double radius = roi.R > 0 ? roi.R : Math.Max(roi.Width, roi.Height) / 2.0;
             double radiusScreen = ToScreenLen(radius);
 
-            var pen = new Pen(Brushes.DeepSkyBlue, 2.0);
+            var stroke = Brushes.DeepSkyBlue;
+            var pen = new Pen(stroke, 2.0);
             dc.DrawEllipse(null, pen, centerScreen, radiusScreen, radiusScreen);
 
             var labelAnchor = new System.Windows.Point(centerScreen.X - radiusScreen, centerScreen.Y - radiusScreen);
-            DrawLabel(dc, roi.Legend, labelAnchor, pixelsPerDip, Brushes.DeepSkyBlue);
+            DrawLabel(dc, roi.Legend, labelAnchor, pixelsPerDip, stroke);
         }
 
         private void DrawAnnulus(DrawingContext dc, ROI roi, System.Windows.Point centerScreen, double pixelsPerDip)
@@ -166,7 +168,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 : AnnulusDefaults.ResolveInnerRadius(innerCandidate, outerRadius);
             double ri = ToScreenLen(riImage);
 
-            var circlePen = new Pen(Brushes.DeepSkyBlue, 2.0);
+            var stroke = Brushes.DeepSkyBlue;
+            var circlePen = new Pen(stroke, 2.0);
             dc.DrawEllipse(null, circlePen, centerScreen, ro, ro);
             dc.DrawEllipse(null, circlePen, centerScreen, ri, ri);
 
@@ -183,7 +186,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 FlowDirection.LeftToRight,
                 new Typeface("Segoe UI"),
                 12,
-                Brushes.White,
+                stroke,
                 pixelsPerDip);
 
             var labelPos = new System.Windows.Point(centerScreen.X - ft.Width / 2.0, centerScreen.Y - ro - ft.Height - 6);

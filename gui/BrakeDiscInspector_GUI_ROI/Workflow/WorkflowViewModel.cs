@@ -290,6 +290,30 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public int AnchorScoreMin { get; set; } = 85;
 
+        private int GetBatchThrM1()
+        {
+            var thr = _layoutOriginal?.Analyze?.ThrM1 ?? _layout?.Analyze?.ThrM1;
+            return thr.HasValue && thr.Value > 0 ? thr.Value : AnchorScoreMin;
+        }
+
+        private int GetBatchThrM2()
+        {
+            var thr = _layoutOriginal?.Analyze?.ThrM2 ?? _layout?.Analyze?.ThrM2;
+            return thr.HasValue && thr.Value > 0 ? thr.Value : AnchorScoreMin;
+        }
+
+        private string GetBatchFeatureM1()
+        {
+            var feature = _layoutOriginal?.Analyze?.FeatureM1 ?? _layout?.Analyze?.FeatureM1;
+            return string.IsNullOrWhiteSpace(feature) ? "auto" : feature;
+        }
+
+        private string GetBatchFeatureM2()
+        {
+            var feature = _layoutOriginal?.Analyze?.FeatureM2 ?? _layout?.Analyze?.FeatureM2;
+            return string.IsNullOrWhiteSpace(feature) ? "auto" : feature;
+        }
+
         private record RoiBaseline(string RoiId, Rect BaseRect, Point Center, double R, double Rin, double AngleDeg);
 
         public Canvas? OverlayCanvas { get; set; }
@@ -822,7 +846,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
         }
 
-        private bool AnchorsMeetThreshold() => _batchAnchorM1Score >= AnchorScoreMin && _batchAnchorM2Score >= AnchorScoreMin;
+        private bool AnchorsMeetThreshold()
+        {
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
+            return _batchAnchorM1Score >= thrM1 && _batchAnchorM2Score >= thrM2;
+        }
 
         public void RegisterBatchAnchors(Point baselineM1, Point baselineM2, Point detectedM1, Point detectedM2, int scoreM1 = 0, int scoreM2 = 0)
         {
@@ -836,6 +865,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchXformComputed = false;
             _batchAnchorM1Score = scoreM1;
             _batchAnchorM2Score = scoreM2;
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
             _batchAnchorsOk = AnchorsMeetThreshold();
             _currentBatchFile = System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty);
 
@@ -845,7 +876,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (!_batchAnchorsOk)
             {
-                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} m2={_batchAnchorM2Score} thr={AnchorScoreMin}");
+                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} (thrM1={thrM1}) m2={_batchAnchorM2Score} (thrM2={thrM2})");
                 t = (1.0, 0.0, 0.0, 0.0);
             }
 
@@ -880,10 +911,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _batchBaselineM1.Value.X, _batchBaselineM1.Value.Y, _batchBaselineM2.Value.X, _batchBaselineM2.Value.Y,
                 _batchDetectedM1.Value.X, _batchDetectedM1.Value.Y, _batchDetectedM2.Value.X, _batchDetectedM2.Value.Y);
 
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
             anchorsOk = AnchorsMeetThreshold();
             if (!anchorsOk)
             {
-                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} m2={_batchAnchorM2Score} thr={AnchorScoreMin}");
+                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} (thrM1={thrM1}) m2={_batchAnchorM2Score} (thrM2={thrM2})");
                 t = (1.0, 0.0, 0.0, 0.0);
             }
 
@@ -5626,10 +5659,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             var analyze = _layoutOriginal.Analyze ?? new AnalyzeOptions();
-            var featureM1 = analyze.FeatureM1;
-            var featureM2 = analyze.FeatureM2;
-            var thrM1 = analyze.ThrM1;
-            var thrM2 = analyze.ThrM2;
+            var featureM1 = GetBatchFeatureM1();
+            var featureM2 = GetBatchFeatureM2();
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
 
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 feature={featureM1} thr={thrM1}"));
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 feature={featureM2} thr={thrM2}"));

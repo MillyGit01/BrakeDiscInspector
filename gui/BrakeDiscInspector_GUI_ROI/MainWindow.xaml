@@ -65,7 +65,7 @@
                          ToolTip="Open an image"
                          Click="BtnLoadImage_Click">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Image24}" Margin="0,0,8,0"/>
+                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Image24}" Margin="0,0,8,0" FontSize="16"/>
                   <TextBlock Text="Load Picture" VerticalAlignment="Center"/>
                 </StackPanel>
               </ui:Button>
@@ -74,7 +74,7 @@
                          MinWidth="120"
                          Click="BtnLoadLayout_Click">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0"/>
+                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0" FontSize="16"/>
                   <TextBlock Text="Load Layout" VerticalAlignment="Center"/>
                 </StackPanel>
               </ui:Button>
@@ -82,7 +82,7 @@
                          MinWidth="120"
                          Click="BtnSaveLayout_Click">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                   <TextBlock Text="Save Layout" VerticalAlignment="Center"/>
                 </StackPanel>
               </ui:Button>
@@ -116,27 +116,27 @@
                   <ui:Button Command="{Binding LayoutProfiles.RefreshCommand}"
                              Margin="0,0,4,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowClockwise24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowClockwise24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Refresh" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
                   <ui:Button Command="{Binding LayoutProfiles.LoadSelectedCommand}"
                              Margin="0,0,4,0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowRight24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowRight24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Load Selected" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
                   <ui:Button Margin="0,0,4,0"
                              Click="SaveCurrentLayoutAs_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Save Current as" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
                   <ui:Button Command="{Binding LayoutProfiles.DeleteSelectedCommand}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -144,7 +144,7 @@
                              Command="{Binding BlankDatasetCommand}"
                              ToolTip="Create a blank dataset for the current layout">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Blank Dataset" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -190,7 +190,7 @@
                                Padding="8,4"
                                Click="BtnM1_Create_Click">
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
                         <TextBlock Text="Create" VerticalAlignment="Center"/>
                       </StackPanel>
                     </ui:Button>
@@ -200,7 +200,7 @@
                                Margin="4,0,0,0"
                                Click="BtnEditM1_Click">
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
                         <TextBlock Text="Edit Master 1" VerticalAlignment="Center"/>
                       </StackPanel>
                     </ui:Button>
@@ -210,7 +210,7 @@
                                Margin="4,0,0,0"
                                Click="BtnM1_Remove_Click">
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                         <TextBlock Text="Remove" VerticalAlignment="Center"/>
                       </StackPanel>
                     </ui:Button>
@@ -245,7 +245,7 @@
                                Padding="8,4"
                                Click="BtnM2_Create_Click">
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
                         <TextBlock Text="Create" VerticalAlignment="Center"/>
                       </StackPanel>
                     </ui:Button>
@@ -255,7 +255,7 @@
                                Margin="4,0,0,0"
                                Click="BtnEditM2_Click">
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
                         <TextBlock Text="Edit Master 2" VerticalAlignment="Center"/>
                       </StackPanel>
                     </ui:Button>
@@ -265,7 +265,7 @@
                                Margin="4,0,0,0"
                                Click="BtnM2_Remove_Click">
                       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                         <TextBlock Text="Remove" VerticalAlignment="Center"/>
                       </StackPanel>
                     </ui:Button>
@@ -278,7 +278,7 @@
               <ui:Button x:Name="BtnClearCanvas"
                          Click="BtnClearCanvas_Click">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Eraser24}" Margin="0,0,8,0"/>
+                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Eraser24}" Margin="0,0,8,0" FontSize="16"/>
                   <TextBlock Text="Clear Canvas" VerticalAlignment="Center"/>
                 </StackPanel>
               </ui:Button>
@@ -320,7 +320,7 @@
                              Margin="0,8,0,0"
                              Click="BtnAnalyzeMaster_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -389,7 +389,7 @@
                     <WrapPanel>
                       <ui:Button x:Name="BtnSavePreset" Click="BtnSavePreset_Click" Margin="0,0,8,0">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                          <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                          <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                           <TextBlock Text="Save Preset" VerticalAlignment="Center"/>
                         </StackPanel>
                       </ui:Button>
@@ -416,7 +416,7 @@
                              Tag="1"
                              Click="BtnCreateInspection_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Create ROI 1" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -432,7 +432,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -448,7 +448,7 @@
                             <Setter Property="Content">
                               <Setter.Value>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                   <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
                                 </StackPanel>
                               </Setter.Value>
@@ -469,7 +469,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -496,7 +496,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -522,7 +522,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Remove 1" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -552,7 +552,7 @@
                              Tag="2"
                              Click="BtnCreateInspection_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Create ROI 2" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -568,7 +568,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -584,7 +584,7 @@
                             <Setter Property="Content">
                               <Setter.Value>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                   <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
                                 </StackPanel>
                               </Setter.Value>
@@ -605,7 +605,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -632,7 +632,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -658,7 +658,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Remove 2" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -688,7 +688,7 @@
                              Tag="3"
                              Click="BtnCreateInspection_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Create ROI 3" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -704,7 +704,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -720,7 +720,7 @@
                             <Setter Property="Content">
                               <Setter.Value>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                   <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
                                 </StackPanel>
                               </Setter.Value>
@@ -741,7 +741,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -768,7 +768,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -794,7 +794,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Remove 3" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -824,7 +824,7 @@
                              Tag="4"
                              Click="BtnCreateInspection_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0"/>
+                      <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
                       <TextBlock Text="Create ROI 4" VerticalAlignment="Center"/>
                     </StackPanel>
                   </ui:Button>
@@ -840,7 +840,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -856,7 +856,7 @@
                             <Setter Property="Content">
                               <Setter.Value>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                                  <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                   <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
                                 </StackPanel>
                               </Setter.Value>
@@ -877,7 +877,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -904,7 +904,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -930,7 +930,7 @@
                         <Setter Property="Content">
                           <Setter.Value>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                               <TextBlock Text="Remove 4" VerticalAlignment="Center"/>
                             </StackPanel>
                           </Setter.Value>
@@ -972,7 +972,7 @@
                        Padding="12,4"
                        Command="{Binding BrowseBatchFolderCommand}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0"/>
+                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0" FontSize="16"/>
                 <TextBlock Text="Browse" VerticalAlignment="Center"/>
               </StackPanel>
             </ui:Button>
@@ -982,7 +982,7 @@
                        ToolTip="Play / Start or Resume"
                        AutomationProperties.Name="Play"
                        Command="{Binding StartBatchCommand}">
-              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Play24}"/>
+              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Play24}" FontSize="16"/>
             </ui:Button>
 
             <!-- ⏸ Pause -->
@@ -990,7 +990,7 @@
                        ToolTip="Pause"
                        AutomationProperties.Name="Pause"
                        Command="{Binding PauseBatchCommand}">
-              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pause24}"/>
+              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pause24}" FontSize="16"/>
             </ui:Button>
 
             <!-- ■ Stop -->
@@ -998,7 +998,7 @@
                        ToolTip="Stop"
                        AutomationProperties.Name="Stop"
                        Command="{Binding StopBatchCommand}">
-              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Stop24}"/>
+              <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Stop24}" FontSize="16"/>
             </ui:Button>
 
             <TextBlock Margin="12,0,0,0"
@@ -1140,7 +1140,7 @@
                        Padding="10,3"
                        Command="{Binding ConnectCommand}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" Margin="0,0,8,0"/>
+                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" Margin="0,0,8,0" FontSize="16"/>
                 <TextBlock Text="Connect" VerticalAlignment="Center"/>
               </StackPanel>
             </ui:Button>
@@ -1149,7 +1149,7 @@
                        Padding="10,3"
                        Command="{Binding DisconnectCommand}">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugDisconnected24}" Margin="0,0,8,0"/>
+                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugDisconnected24}" Margin="0,0,8,0" FontSize="16"/>
                 <TextBlock Text="Disconnect" VerticalAlignment="Center"/>
               </StackPanel>
             </ui:Button>
@@ -1181,7 +1181,7 @@
                                  Command="{Binding DataContext.ToggleInputCommand, RelativeSource={RelativeSource AncestorType=GroupBox}}"
                                  CommandParameter="{Binding Id}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                          <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,6,0"/>
+                          <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,6,0" FontSize="16"/>
                           <TextBlock Text="Enable" VerticalAlignment="Center"/>
                         </StackPanel>
                       </ui:Button>
@@ -1207,7 +1207,7 @@
                                  Command="{Binding DataContext.ToggleOutputCommand, RelativeSource={RelativeSource AncestorType=GroupBox}}"
                                  CommandParameter="{Binding Id}">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                          <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,6,0"/>
+                          <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,6,0" FontSize="16"/>
                           <TextBlock Text="Enable" VerticalAlignment="Center"/>
                         </StackPanel>
                       </ui:Button>

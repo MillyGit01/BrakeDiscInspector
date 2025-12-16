@@ -12,7 +12,7 @@
 
             <!-- Ensure SymbolIcons always have a valid numeric font size -->
             <Style TargetType="{x:Type ui:SymbolIcon}">
-                <Setter Property="FontSize" Value="18" />
+                <Setter Property="FontSize" Value="16" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

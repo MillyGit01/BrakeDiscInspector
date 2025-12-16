@@ -5,6 +5,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:m="clr-namespace:BrakeDiscInspector_GUI_ROI.Models"
              xmlns:w="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              mc:Ignorable="d"
              d:DesignHeight="600"
              d:DesignWidth="480">
@@ -49,8 +50,13 @@
                     <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="8,4,8,0">
                         <TextBox Width="260" Margin="0,0,8,0"
                                  Text="{Binding BackendBaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
-                        <Button Content="Health" Padding="12,4"
-                                Command="{Binding RefreshHealthCommand}"/>
+                        <ui:Button Padding="12,4"
+                                   Command="{Binding RefreshHealthCommand}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="Pulse" Margin="0,0,8,0"/>
+                                <TextBlock Text="Health" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
                     </StackPanel>
 
                     <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,4,0,0"
@@ -89,9 +95,13 @@
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                            <Button Content="Infer Enabled"
-                                    Command="{Binding InferEnabledRoisCommand}"
-                                    Padding="12,4"/>
+                            <ui:Button Command="{Binding InferEnabledRoisCommand}"
+                                       Padding="12,4">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ui:SymbolIcon Symbol="Checkmark" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Infer Enabled" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ui:Button>
                         </StackPanel>
                     </StackPanel>
                     <TabControl ItemsSource="{Binding InspectionRois}"
@@ -120,29 +130,35 @@
                                         <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
                                         <TextBox Text="{Binding Name}" Width="200" Margin="0,0,12,0"/>
                                         <CheckBox Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center"/>
-                                        <Button Margin="8,0,0,0"
-                                                Padding="12,4"
-                                                Click="BtnToggleEdit_Click"
-                                                IsEnabled="{Binding Enabled}">
-                                            <Button.Style>
-                                                <Style TargetType="Button">
+                                        <ui:Button Margin="8,0,0,0"
+                                                   Padding="12,4"
+                                                   Click="BtnToggleEdit_Click"
+                                                   IsEnabled="{Binding Enabled}">
+                                            <ui:Button.Style>
+                                                <Style TargetType="{x:Type ui:Button}">
                                                     <Setter Property="Content">
                                                         <Setter.Value>
-                                                            <Binding Path="Index" StringFormat="Edit ROI{0}"/>
+                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                <ui:SymbolIcon Symbol="Edit" Margin="0,0,8,0"/>
+                                                                <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
+                                                            </StackPanel>
                                                         </Setter.Value>
                                                     </Setter>
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsEditable}" Value="True">
                                                             <Setter Property="Content">
                                                                 <Setter.Value>
-                                                                    <Binding Path="Index" StringFormat="Save ROI{0}"/>
+                                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                        <ui:SymbolIcon Symbol="Save" Margin="0,0,8,0"/>
+                                                                        <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
+                                                                    </StackPanel>
                                                                 </Setter.Value>
                                                             </Setter>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </Button.Style>
-                                        </Button>
+                                            </ui:Button.Style>
+                                        </ui:Button>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
@@ -174,12 +190,21 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Dataset" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                         <TextBox Grid.Column="1" Text="{Binding DatasetPath}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                        <Button Grid.Column="2"
-                                                Content="Browse..."
-                                                Padding="12,4"
-                                                Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                        <Button Grid.Column="3" Content="Open Folder" Padding="12,4"
-                                                Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                        <ui:Button Grid.Column="2"
+                                                   Padding="12,4"
+                                                   Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="FolderOpen" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Browse..." VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
+                                        <ui:Button Grid.Column="3" Padding="12,4"
+                                                   Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="Folder" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Open Folder" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
                                     </Grid>
 
                                     <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
@@ -259,26 +284,46 @@
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-                                        <Button Content="Load model"
-                                                Padding="12,4"
-                                                Margin="0,0,8,0"
-                                                Tag="{Binding Index}"
-                                                Click="LoadModelButton_Click"/>
-                                        <Button Content="Delete Selected"
-                                                Padding="12,4"
-                                                Margin="0,0,8,0"
-                                                Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                        <Button Content="Train"
-                                                Padding="12,4"
-                                                Margin="0,0,8,0"
-                                                Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                        <Button Content="Calibrate"
-                                                Padding="12,4"
-                                                Margin="0,0,8,0"
-                                                Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-                                        <Button Content="Evaluate ROI"
-                                                Padding="12,4"
-                                                Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                                        <ui:Button Padding="12,4"
+                                                   Margin="0,0,8,0"
+                                                   Tag="{Binding Index}"
+                                                   Click="LoadModelButton_Click">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="ArrowDownload" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Load model" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
+                                        <ui:Button Padding="12,4"
+                                                   Margin="0,0,8,0"
+                                                   Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="Delete" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
+                                        <ui:Button Padding="12,4"
+                                                   Margin="0,0,8,0"
+                                                   Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="Rocket" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Train" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
+                                        <ui:Button Padding="12,4"
+                                                   Margin="0,0,8,0"
+                                                   Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="Wrench" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Calibrate" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
+                                        <ui:Button Padding="12,4"
+                                                   Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="Search" Margin="0,0,8,0"/>
+                                                <TextBlock Text="Evaluate ROI" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </ui:Button>
                                     </StackPanel>
 
                                     <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,8,0,0">
@@ -331,9 +376,13 @@
             </GroupBox>
 
             <WrapPanel Margin="0,0,0,12">
-                <Button Content="Clear Canvas"
-                        Padding="12,4"
-                        Click="ClearCanvasButton_Click"/>
+                <ui:Button Padding="12,4"
+                           Click="ClearCanvasButton_Click">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Eraser" Margin="0,0,8,0"/>
+                        <TextBlock Text="Clear Canvas" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
             </WrapPanel>
 
             <GroupBox Header="Regions">

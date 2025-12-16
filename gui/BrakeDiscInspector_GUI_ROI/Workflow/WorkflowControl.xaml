@@ -53,7 +53,7 @@
                         <ui:Button Padding="12,4"
                                    Command="{Binding RefreshHealthCommand}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <ui:SymbolIcon Symbol="Pulse" Margin="0,0,8,0"/>
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pulse24}" Margin="0,0,8,0"/>
                                 <TextBlock Text="Health" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ui:Button>
@@ -98,7 +98,7 @@
                             <ui:Button Command="{Binding InferEnabledRoisCommand}"
                                        Padding="12,4">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="Checkmark" Margin="0,0,8,0"/>
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Checkmark24}" Margin="0,0,8,0"/>
                                     <TextBlock Text="Infer Enabled" VerticalAlignment="Center"/>
                                 </StackPanel>
                             </ui:Button>
@@ -139,7 +139,7 @@
                                                     <Setter Property="Content">
                                                         <Setter.Value>
                                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <ui:SymbolIcon Symbol="Edit" Margin="0,0,8,0"/>
+                                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
                                                                 <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
                                                             </StackPanel>
                                                         </Setter.Value>
@@ -149,7 +149,7 @@
                                                             <Setter Property="Content">
                                                                 <Setter.Value>
                                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                        <ui:SymbolIcon Symbol="Save" Margin="0,0,8,0"/>
+                                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
                                                                         <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
                                                                     </StackPanel>
                                                                 </Setter.Value>
@@ -194,14 +194,14 @@
                                                    Padding="12,4"
                                                    Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="FolderOpen" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Browse..." VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                         <ui:Button Grid.Column="3" Padding="12,4"
                                                    Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="Folder" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Open Folder" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
@@ -289,7 +289,7 @@
                                                    Tag="{Binding Index}"
                                                    Click="LoadModelButton_Click">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="ArrowDownload" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowDownload24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Load model" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
@@ -297,7 +297,7 @@
                                                    Margin="0,0,8,0"
                                                    Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="Delete" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
@@ -305,7 +305,7 @@
                                                    Margin="0,0,8,0"
                                                    Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="Rocket" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Rocket24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Train" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
@@ -313,14 +313,14 @@
                                                    Margin="0,0,8,0"
                                                    Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="Wrench" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Wrench24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Calibrate" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                         <ui:Button Padding="12,4"
                                                    Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <ui:SymbolIcon Symbol="Search" Margin="0,0,8,0"/>
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Search24}" Margin="0,0,8,0"/>
                                                 <TextBlock Text="Evaluate ROI" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
@@ -379,7 +379,7 @@
                 <ui:Button Padding="12,4"
                            Click="ClearCanvasButton_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="Eraser" Margin="0,0,8,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Eraser24}" Margin="0,0,8,0"/>
                         <TextBlock Text="Clear Canvas" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>

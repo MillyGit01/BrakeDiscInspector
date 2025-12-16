@@ -20,9 +20,6 @@
       <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
         <Setter Property="TextElement.Foreground" Value="Black"/>
       </Style>
-      <Style TargetType="{x:Type ui:SymbolIcon}">
-        <Setter Property="FontSize" Value="16"/>
-      </Style>
       <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}">
         <Setter Property="Width" Value="36"/>
         <Setter Property="Height" Value="36"/>

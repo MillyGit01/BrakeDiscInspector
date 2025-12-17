@@ -1,4 +1,6 @@
 using System;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Util;
@@ -8,6 +10,31 @@ namespace BrakeDiscInspector_GUI_ROI;
 
 internal static class InspectionAlignmentHelper
 {
+    private static void LogAlign(Action<string>? trace, FormattableString message)
+    {
+        if (message == null)
+        {
+            return;
+        }
+
+        var payload = "[ALIGN]" + message.ToString(CultureInfo.InvariantCulture);
+        GuiLog.Info(payload);
+        trace?.Invoke(payload);
+    }
+
+    internal static (double Tx, double Ty) ComputeTranslation(
+        Point2d pivotBaseline,
+        Point2d pivotDetected,
+        double angleRad,
+        double scale)
+    {
+        var cosA = Math.Cos(angleRad);
+        var sinA = Math.Sin(angleRad);
+        var tx = pivotDetected.X - scale * (pivotBaseline.X * cosA - pivotBaseline.Y * sinA);
+        var ty = pivotDetected.Y - scale * (pivotBaseline.X * sinA + pivotBaseline.Y * cosA);
+        return (tx, ty);
+    }
+
     internal static void MoveInspectionTo(
         RoiModel inspectionTarget,
         RoiModel baselineInspection,
@@ -30,25 +57,80 @@ internal static class InspectionAlignmentHelper
         var (baseCx, baseCy) = baselineInspection.GetCenter();
         var vBase = new Point2d(baseCx - pivotBaseline.X, baseCy - pivotBaseline.Y);
 
-        var cosA = Math.Cos(anchors.AngleDeltaGlobal);
-        var sinA = Math.Sin(anchors.AngleDeltaGlobal);
-        var vx = (vBase.X * cosA - vBase.Y * sinA) * anchors.Scale;
-        var vy = (vBase.X * sinA + vBase.Y * cosA) * anchors.Scale;
+        var rotForCenter = anchors.AngleDeltaGlobal;
+        var rotForAngle = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
+
+        // ROI scaling is disabled globally: ROIs must keep fixed size/offset across images.
+        // Keep anchors.Scale only for logging/diagnostics.
+        var scaleRequested = anchors.Scale;
+        var scaleEffective = 1.0;
+
+        var cosA = Math.Cos(rotForCenter);
+        var sinA = Math.Sin(rotForCenter);
+        var vx = (vBase.X * cosA - vBase.Y * sinA) * scaleEffective;
+        var vy = (vBase.X * sinA + vBase.Y * cosA) * scaleEffective;
 
         var roiNewCenter = new Point2d(pivotCurrent.X + vx, pivotCurrent.Y + vy);
-        var roiNewAngleDeg = baselineInspection.AngleDeg + anchors.AngleDeltaGlobal * 180.0 / Math.PI;
+        var roiNewAngleDeg = baselineInspection.AngleDeg + rotForAngle * 180.0 / Math.PI;
 
-        trace?.Invoke(
-            $"[ROI] name={inspectionTarget.Label} anchor={anchor} " +
-            $"baseCenter=({baseCx:F1},{baseCy:F1}) baseAngle={baselineInspection.AngleDeg:F1} " +
-            $"newCenter=({roiNewCenter.X:F1},{roiNewCenter.Y:F1}) newAngle={roiNewAngleDeg:F1}");
+        var (tx, ty) = ComputeTranslation(pivotBaseline, pivotCurrent, rotForCenter, scaleEffective);
+        var widthScaled = Math.Max(1, baselineInspection.Width * scaleEffective);
+        var heightScaled = Math.Max(1, baselineInspection.Height * scaleEffective);
+        var radiusScaled = Math.Max(1, baselineInspection.R * scaleEffective);
+        var radiusInnerScaled = Math.Max(0, baselineInspection.RInner * scaleEffective);
+        if (radiusInnerScaled >= radiusScaled)
+        {
+            radiusInnerScaled = Math.Max(0, radiusScaled - 1);
+        }
+
+        var finalRect = new System.Windows.Rect(
+            roiNewCenter.X - widthScaled * 0.5,
+            roiNewCenter.Y - heightScaled * 0.5,
+            widthScaled,
+            heightScaled);
+
+        LogAlign(trace,
+            FormattableStringFactory.Create(
+                "[BATCH][ROI] roi={0} anchor_master={1} pivot_base=({2:0.###},{3:0.###}) pivot_det=({4:0.###},{5:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                (int)anchor,
+                pivotBaseline.X,
+                pivotBaseline.Y,
+                pivotCurrent.X,
+                pivotCurrent.Y));
+        LogAlign(trace,
+            FormattableStringFactory.Create(
+                "[BATCH][ROI] roi={0} roi_base_center=({1:0.###},{2:0.###}) v_base=({3:0.###},{4:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                baseCx,
+                baseCy,
+                vBase.X,
+                vBase.Y));
+        LogAlign(trace,
+            FormattableStringFactory.Create(
+                "[BATCH][ROI] roi={0} center_delta=({1:0.###},{2:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                roiNewCenter.X - baseCx,
+                roiNewCenter.Y - baseCy));
+        LogAlign(trace,
+            FormattableStringFactory.Create(
+                "[BATCH][ROI] roi={0} applied rot_deg_center={1:0.###} rot_deg_angle={2:0.###} scale_req={3:0.####} scale_applied={4:0.####} tx={5:0.###} ty={6:0.###} scaleLock={7} disableRot={8}",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                rotForCenter * 180.0 / Math.PI,
+                rotForAngle * 180.0 / Math.PI,
+                scaleRequested,
+                scaleEffective,
+                tx,
+                ty,
+                anchors.ScaleLock,
+                anchors.DisableRot));
 
         switch (baselineInspection.Shape)
         {
             case RoiShape.Rectangle:
                 inspectionTarget.Shape = RoiShape.Rectangle;
-                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * anchors.Scale);
-                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * anchors.Scale);
+                inspectionTarget.Width = widthScaled;
+                inspectionTarget.Height = heightScaled;
                 inspectionTarget.X = roiNewCenter.X;
                 inspectionTarget.Y = roiNewCenter.Y;
                 inspectionTarget.Left = roiNewCenter.X - inspectionTarget.Width * 0.5;
@@ -61,30 +143,38 @@ internal static class InspectionAlignmentHelper
                 inspectionTarget.Shape = RoiShape.Circle;
                 inspectionTarget.CX = roiNewCenter.X;
                 inspectionTarget.CY = roiNewCenter.Y;
-                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * anchors.Scale);
-                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * anchors.Scale);
+                inspectionTarget.Width = widthScaled;
+                inspectionTarget.Height = heightScaled;
                 inspectionTarget.Left = roiNewCenter.X - inspectionTarget.Width * 0.5;
                 inspectionTarget.Top = roiNewCenter.Y - inspectionTarget.Height * 0.5;
-                inspectionTarget.R = Math.Max(1, baselineInspection.R * anchors.Scale);
+                inspectionTarget.R = radiusScaled;
                 inspectionTarget.AngleDeg = roiNewAngleDeg;
                 break;
             case RoiShape.Annulus:
                 inspectionTarget.Shape = RoiShape.Annulus;
                 inspectionTarget.CX = roiNewCenter.X;
                 inspectionTarget.CY = roiNewCenter.Y;
-                inspectionTarget.Width = Math.Max(1, baselineInspection.Width * anchors.Scale);
-                inspectionTarget.Height = Math.Max(1, baselineInspection.Height * anchors.Scale);
+                inspectionTarget.Width = widthScaled;
+                inspectionTarget.Height = heightScaled;
                 inspectionTarget.Left = roiNewCenter.X - inspectionTarget.Width * 0.5;
                 inspectionTarget.Top = roiNewCenter.Y - inspectionTarget.Height * 0.5;
-                inspectionTarget.R = Math.Max(1, baselineInspection.R * anchors.Scale);
-                inspectionTarget.RInner = Math.Max(0, baselineInspection.RInner * anchors.Scale);
-                if (inspectionTarget.RInner >= inspectionTarget.R)
-                {
-                    inspectionTarget.RInner = Math.Max(0, inspectionTarget.R - 1);
-                }
+                inspectionTarget.R = radiusScaled;
+                inspectionTarget.RInner = radiusInnerScaled;
                 inspectionTarget.AngleDeg = roiNewAngleDeg;
                 break;
         }
+
+        LogAlign(trace,
+            FormattableStringFactory.Create(
+                "[BATCH][ROI] roi={0} roi_new_center=({1:0.###},{2:0.###}) roi_new_angle={3:0.###} roi_new_rect=({4:0.###},{5:0.###},{6:0.###},{7:0.###})",
+                inspectionTarget.Label ?? inspectionTarget.Id,
+                roiNewCenter.X,
+                roiNewCenter.Y,
+                roiNewAngleDeg,
+                finalRect.Left,
+                finalRect.Top,
+                finalRect.Right,
+                finalRect.Bottom));
     }
 }
 
@@ -98,4 +188,6 @@ internal readonly record struct AnchorTransformContext(
     double M1DetectedAngleDeg,
     double M2DetectedAngleDeg,
     double Scale,
-    double AngleDeltaGlobal);
+    double AngleDeltaGlobal,
+    bool ScaleLock,
+    bool DisableRot);

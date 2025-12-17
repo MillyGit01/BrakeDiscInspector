@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -263,6 +264,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private byte[]? _lastHeatmapPngBytes;
         private WriteableBitmap? _lastHeatmapBitmap;
         private int _batchHeatmapRoiIndex = 0;
+        private readonly Dictionary<int, byte[]> _batchHeatmapPngByRoi = new();
         private double _baseImageActualWidth;
         private double _baseImageActualHeight;
         private double _canvasRoiActualWidth;
@@ -287,6 +289,30 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public string CurrentLayoutName => _currentLayoutName;
 
         public int AnchorScoreMin { get; set; } = 85;
+
+        private int GetBatchThrM1()
+        {
+            var thr = _layoutOriginal?.Analyze?.ThrM1 ?? _layout?.Analyze?.ThrM1;
+            return thr.HasValue && thr.Value > 0 ? thr.Value : AnchorScoreMin;
+        }
+
+        private int GetBatchThrM2()
+        {
+            var thr = _layoutOriginal?.Analyze?.ThrM2 ?? _layout?.Analyze?.ThrM2;
+            return thr.HasValue && thr.Value > 0 ? thr.Value : AnchorScoreMin;
+        }
+
+        private string GetBatchFeatureM1()
+        {
+            var feature = _layoutOriginal?.Analyze?.FeatureM1 ?? _layout?.Analyze?.FeatureM1;
+            return string.IsNullOrWhiteSpace(feature) ? "auto" : feature;
+        }
+
+        private string GetBatchFeatureM2()
+        {
+            var feature = _layoutOriginal?.Analyze?.FeatureM2 ?? _layout?.Analyze?.FeatureM2;
+            return string.IsNullOrWhiteSpace(feature) ? "auto" : feature;
+        }
 
         private record RoiBaseline(string RoiId, Rect BaseRect, Point Center, double R, double Rin, double AngleDeg);
 
@@ -783,13 +809,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var rotRad = angN - angO;
             var rotDeg = rotRad * 180.0 / Math.PI;
 
-            double x = cx1Old, y = cy1Old;
-            double xr = (x * Math.Cos(rotRad) - y * Math.Sin(rotRad)) * scale;
-            double yr = (x * Math.Sin(rotRad) + y * Math.Cos(rotRad)) * scale;
-            double tx = cx1New - xr;
-            double ty = cy1New - yr;
-
-            return (scale, tx, ty, rotDeg);
+            // Translation is anchor-specific at placement time; keep identity offsets here
+            // to avoid suggesting a single global anchor. Values retained for legacy logging.
+            return (scale, 0.0, 0.0, rotDeg);
         }
 
         private static Rect ApplyBatchTransformToRect(Rect r, (double s, double dx, double dy, double rot) xf)
@@ -824,7 +846,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
         }
 
-        private bool AnchorsMeetThreshold() => _batchAnchorM1Score >= AnchorScoreMin && _batchAnchorM2Score >= AnchorScoreMin;
+        private bool AnchorsMeetThreshold()
+        {
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
+            return _batchAnchorM1Score >= thrM1 && _batchAnchorM2Score >= thrM2;
+        }
 
         public void RegisterBatchAnchors(Point baselineM1, Point baselineM2, Point detectedM1, Point detectedM2, int scoreM1 = 0, int scoreM2 = 0)
         {
@@ -838,6 +865,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchXformComputed = false;
             _batchAnchorM1Score = scoreM1;
             _batchAnchorM2Score = scoreM2;
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
             _batchAnchorsOk = AnchorsMeetThreshold();
             _currentBatchFile = System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty);
 
@@ -847,7 +876,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (!_batchAnchorsOk)
             {
-                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} m2={_batchAnchorM2Score} thr={AnchorScoreMin}");
+                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} (thrM1={thrM1}) m2={_batchAnchorM2Score} (thrM2={thrM2})");
                 t = (1.0, 0.0, 0.0, 0.0);
             }
 
@@ -882,10 +911,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _batchBaselineM1.Value.X, _batchBaselineM1.Value.Y, _batchBaselineM2.Value.X, _batchBaselineM2.Value.Y,
                 _batchDetectedM1.Value.X, _batchDetectedM1.Value.Y, _batchDetectedM2.Value.X, _batchDetectedM2.Value.Y);
 
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
             anchorsOk = AnchorsMeetThreshold();
             if (!anchorsOk)
             {
-                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} m2={_batchAnchorM2Score} thr={AnchorScoreMin}");
+                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} (thrM1={thrM1}) m2={_batchAnchorM2Score} (thrM2={thrM2})");
                 t = (1.0, 0.0, 0.0, 0.0);
             }
 
@@ -1637,10 +1668,49 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Inspection4 = inspection4;
         }
 
+        private void LogLayoutAlignmentSnapshot(MasterLayout layout)
+        {
+            var m1Center = layout.Master1Pattern?.GetCenter() ?? (double.NaN, double.NaN);
+            var m2Center = layout.Master2Pattern?.GetCenter() ?? (double.NaN, double.NaN);
+            var m1Angle = layout.Master1Pattern?.AngleDeg ?? double.NaN;
+            var m2Angle = layout.Master2Pattern?.AngleDeg ?? double.NaN;
+
+            LogAlign(FormattableString.Invariant(
+                $"[LAYOUT] M1_base=({m1Center.Item1:0.###},{m1Center.Item2:0.###}) M2_base=({m2Center.Item1:0.###},{m2Center.Item2:0.###}) m1_base_angle={m1Angle:0.###} m2_base_angle={m2Angle:0.###}"));
+
+            if (layout.InspectionRois == null)
+            {
+                return;
+            }
+
+            foreach (var cfg in layout.InspectionRois.OrderBy(r => r.Index))
+            {
+                var baseline = cfg.Index switch
+                {
+                    1 => layout.Inspection1,
+                    2 => layout.Inspection2,
+                    3 => layout.Inspection3,
+                    4 => layout.Inspection4,
+                    _ => null
+                };
+
+                var center = baseline?.GetCenter() ?? (double.NaN, double.NaN);
+                var angle = baseline?.AngleDeg ?? double.NaN;
+
+                LogAlign(FormattableString.Invariant(
+                    $"[LAYOUT] roi_index={cfg.Index} id={cfg.Id} model_key={cfg.ModelKey} enabled={cfg.Enabled} anchor_master={(int)cfg.AnchorMaster} baseline_center=({center.Item1:0.###},{center.Item2:0.###}) baseline_angle={angle:0.###}"));
+            }
+        }
+
         public void SetMasterLayout(MasterLayout? layout)
         {
             _layout = layout;
             _layoutOriginal = layout?.DeepClone();
+
+            if (_layoutOriginal != null)
+            {
+                LogLayoutAlignmentSnapshot(_layoutOriginal);
+            }
 
             if (layout != null)
             {
@@ -2185,15 +2255,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             _batchPlacementTokenPlaced = token;
 
-            try
+            if (BatchRowOk.HasValue)
             {
-                if (BatchRowOk.HasValue)
-                {
-                    OverlayBatchCaption?.Invoke(imgName, BatchRowOk.Value);
-                }
-            }
-            catch
-            {
+                NotifyBatchCaption(imgName, BatchRowOk.Value);
             }
 
             await CaptureCanvasIfNeededAsync(imgName, "afterFinalPlacement").ConfigureAwait(false);
@@ -2396,8 +2460,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             var baselineModel = BuildBaselineModel(clone, baseline);
-            var anchor = config?.AnchorMaster ?? MasterAnchorChoice.Master1;
+            var anchor = ResolveAnchorMaster(config, source, "batch-export");
+
+            var (baselineCx, baselineCy) = baselineModel.GetCenter();
+            LogAlign(FormattableString.Invariant(
+                $"[CALL] roi_id={source.Id ?? "<null>"} roi_index={config?.Index ?? TryParseInspectionIndex(source.Id) ?? -1} cfg_anchor={(int?)(config?.AnchorMaster) ?? -1} anchor_passed={(int)anchor} base_center=({baselineCx:0.###},{baselineCy:0.###}) m1_base=({anchorContext.M1BaselineCenter.X:0.###},{anchorContext.M1BaselineCenter.Y:0.###}) m2_base=({anchorContext.M2BaselineCenter.X:0.###},{anchorContext.M2BaselineCenter.Y:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###})"));
+
+            var (prevCx, prevCy) = clone.GetCenter();
             InspectionAlignmentHelper.MoveInspectionTo(clone, baselineModel, anchor, anchorContext, _trace);
+            var (newCx, newCy) = clone.GetCenter();
+            LogAlign(FormattableString.Invariant(
+                $"[RESULT] roi_id={source.Id ?? "<null>"} roi_index={config?.Index ?? TryParseInspectionIndex(source.Id) ?? -1} new_center=({newCx:0.###},{newCy:0.###}) new_angle={clone.AngleDeg:0.###} delta=({newCx - prevCx:0.###},{newCy - prevCy:0.###})"));
             return clone;
         }
 
@@ -2513,6 +2586,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void InspectionRoiPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
+            if (e.PropertyName == nameof(InspectionRoiConfig.AnchorMaster) && sender is InspectionRoiConfig anchorChanged)
+            {
+                LogAlign(FormattableString.Invariant(
+                    $"[UI] roi_index={anchorChanged.Index} anchor_master_changed_to={(int)anchorChanged.AnchorMaster}"));
+            }
+
             if (e.PropertyName == nameof(InspectionRoiConfig.Enabled))
             {
                 EvaluateAllRoisCommand.RaiseCanExecuteChanged();
@@ -5263,15 +5342,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     BatchRowOk = ComputeBatchRowOk(row);
                     GuiLog.Info($"[batch] row result file='{Path.GetFileName(CurrentImagePath ?? string.Empty)}' => {(BatchRowOk == true ? "OK" : "NG")}");
 
-                    try
+                    if (BatchRowOk.HasValue)
                     {
-                        if (BatchRowOk.HasValue)
-                        {
-                            OverlayBatchCaption?.Invoke(Path.GetFileName(CurrentImagePath ?? string.Empty), BatchRowOk.Value);
-                        }
-                    }
-                    catch
-                    {
+                        NotifyBatchCaption(Path.GetFileName(CurrentImagePath ?? string.Empty), BatchRowOk.Value);
                     }
 
                     await OnRowCompletedAsync(row, ct).ConfigureAwait(false);
@@ -5316,7 +5389,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void UpdateBatchHeatmapIndex(int roiIndex)
         {
-            InvokeOnUi(() => BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex)));
+            InvokeOnUi(() => ApplyBatchHeatmapSelection(Math.Max(1, Math.Min(4, roiIndex))));
         }
 
         private bool TryBuildAnchorContext(out AnchorTransformContext context, bool logError, bool logSummary = true)
@@ -5358,9 +5431,30 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var angCurr = Math.Atan2(vCurr.Y, vCurr.X);
             var angleDeltaGlobal = angCurr - angBase;
 
+            var analyzeOpts = _layoutOriginal.Analyze ?? new AnalyzeOptions();
+            bool scaleLock = analyzeOpts.ScaleLock;
+            bool disableRot = analyzeOpts.DisableRot;
+
             if (logSummary)
             {
-                _trace?.Invoke(FormattableString.Invariant($"[ANCHORS] scale={scale:F3} angleDeltaGlobal={angleDeltaGlobal * 180.0 / Math.PI:F1}deg"));
+                var angleDeltaGlobalDeg = angleDeltaGlobal * 180.0 / Math.PI;
+                var rotEffective = disableRot ? 0.0 : angleDeltaGlobal;
+                var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
+                var scaleEffective = scaleLock ? 1.0 : scale;
+
+                var deltaM1 = new Point2d(m1DetectedCenter.X - m1BaselineCenter.X, m1DetectedCenter.Y - m1BaselineCenter.Y);
+                var deltaM2 = new Point2d(m2DetectedCenter.X - m2BaselineCenter.X, m2DetectedCenter.Y - m2BaselineCenter.Y);
+
+                LogAlign(FormattableString.Invariant(
+                    $"[BATCH][MASTERS] baseline_m1=({m1BaselineCenter.X:0.###},{m1BaselineCenter.Y:0.###}) baseline_m2=({m2BaselineCenter.X:0.###},{m2BaselineCenter.Y:0.###}) det_m1=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) det_m2=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###})"));
+                LogAlign(FormattableString.Invariant(
+                    $"[BATCH][MASTERS] delta_m1=({deltaM1.X:0.###},{deltaM1.Y:0.###}) delta_m2=({deltaM2.X:0.###},{deltaM2.Y:0.###}) angle_delta_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####} scale_lock={scaleLock} disable_rot={disableRot}"));
+
+                var tM1 = InspectionAlignmentHelper.ComputeTranslation(m1BaselineCenter, m1DetectedCenter, rotEffective, scaleEffective);
+                var tM2 = InspectionAlignmentHelper.ComputeTranslation(m2BaselineCenter, m2DetectedCenter, rotEffective, scaleEffective);
+
+                LogAlign(FormattableString.Invariant(
+                    $"[BATCH][MASTERS] anchor_tx_m1=({tM1.Tx:0.###},{tM1.Ty:0.###}) anchor_tx_m2=({tM2.Tx:0.###},{tM2.Ty:0.###}) rot_deg={rotEffectiveDeg:0.###} scale_eff={scaleEffective:0.####}"));
             }
 
             context = new AnchorTransformContext(
@@ -5373,7 +5467,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 _m1Detection.AngleDeg,
                 _m2Detection.AngleDeg,
                 scale,
-                angleDeltaGlobal);
+                angleDeltaGlobal,
+                scaleLock,
+                disableRot);
 
             return true;
         }
@@ -5405,8 +5501,92 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
                 var baselineModel = BuildBaselineModel(roi, baseline);
-                InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, rcfg.AnchorMaster, anchorContext, _trace);
+                var anchor = ResolveAnchorMaster(rcfg, roi, "batch-align");
+                var pivotBase = anchor == MasterAnchorChoice.Master1
+                    ? anchorContext.M1BaselineCenter
+                    : anchorContext.M2BaselineCenter;
+                var pivotDet = anchor == MasterAnchorChoice.Master1
+                    ? anchorContext.M1DetectedCenter
+                    : anchorContext.M2DetectedCenter;
+
+                var (baselineCx, baselineCy) = baselineModel.GetCenter();
+                var angleDeltaDeg = anchorContext.AngleDeltaGlobal * 180.0 / Math.PI;
+                var rotEffective = anchorContext.DisableRot ? 0.0 : anchorContext.AngleDeltaGlobal;
+                var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
+                var scaleEffective = anchorContext.ScaleLock ? 1.0 : anchorContext.Scale;
+
+                LogAlign(FormattableString.Invariant(
+                    $"[CALL] roi_index={rcfg.Index} cfg_anchor={(int)rcfg.AnchorMaster} anchor_passed={(int)anchor} base_center=({baselineCx:0.###},{baselineCy:0.###}) m1_base=({anchorContext.M1BaselineCenter.X:0.###},{anchorContext.M1BaselineCenter.Y:0.###}) m2_base=({anchorContext.M2BaselineCenter.X:0.###},{anchorContext.M2BaselineCenter.Y:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###}) angΔ_deg={angleDeltaDeg:0.###} rot_eff_deg={rotEffectiveDeg:0.###} scale={anchorContext.Scale:0.####} scale_eff={scaleEffective:0.####} disableRot={anchorContext.DisableRot} scaleLock={anchorContext.ScaleLock}"));
+
+                var (prevCx, prevCy) = roi.GetCenter();
+                InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, anchor, anchorContext, _trace);
+
+                var (newCx, newCy) = roi.GetCenter();
+                var roiRect = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus
+                    ? new Rect(roi.CX - roi.R, roi.CY - roi.R, roi.R * 2.0, roi.R * 2.0)
+                    : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
+
+                LogAlign(FormattableString.Invariant(
+                    $"[RESULT] roi_index={rcfg.Index} new_center=({newCx:0.###},{newCy:0.###}) new_angle={roi.AngleDeg:0.###} delta=({newCx - prevCx:0.###},{newCy - prevCy:0.###}) rect=({roiRect.Left:0.###},{roiRect.Top:0.###},{roiRect.Right:0.###},{roiRect.Bottom:0.###})"));
             }
+        }
+
+        private MasterAnchorChoice ResolveAnchorMaster(InspectionRoiConfig? config, RoiModel roi, string caller)
+        {
+            if (config != null)
+            {
+                return config.AnchorMaster;
+            }
+
+            MasterAnchorChoice? resolved = null;
+            var roiIndex = TryParseInspectionIndex(roi.Id) ?? TryParseInspectionIndex(roi.Label);
+
+            if (roiIndex.HasValue)
+            {
+                resolved = GetInspectionConfigByIndex(roiIndex.Value)?.AnchorMaster
+                           ?? _layoutOriginal?.InspectionRois.FirstOrDefault(r => r.Index == roiIndex.Value)?.AnchorMaster;
+            }
+
+            resolved ??= _layoutOriginal?.InspectionRois.FirstOrDefault(r =>
+                string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(r.ModelKey, roi.Id, StringComparison.OrdinalIgnoreCase))?.AnchorMaster;
+
+            var anchor = resolved ?? MasterAnchorChoice.Master1;
+
+            if (!resolved.HasValue)
+            {
+                LogAlign(FormattableString.Invariant(
+                    $"[WARN] roi_id={roi.Id ?? "<null>"} caller={caller} cfg_anchor=<null> anchor_fallback={(int)anchor} reason=no_config"));
+            }
+
+            return anchor;
+        }
+
+        private static int? TryParseInspectionIndex(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            var trimmed = key.Trim();
+            if (trimmed.StartsWith("Inspection_", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("Inspection", StringComparison.OrdinalIgnoreCase))
+            {
+                var parts = trimmed.Split('_', StringSplitOptions.RemoveEmptyEntries);
+                var last = parts.LastOrDefault();
+                if (last != null && int.TryParse(last, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                {
+                    return parsed;
+                }
+            }
+
+            if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var direct))
+            {
+                return direct;
+            }
+
+            return null;
         }
 
         private async Task RepositionInspectionRoisForImageCoreAsync(string imagePath, CancellationToken ct)
@@ -5479,10 +5659,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             var analyze = _layoutOriginal.Analyze ?? new AnalyzeOptions();
-            var featureM1 = analyze.FeatureM1;
-            var featureM2 = analyze.FeatureM2;
-            var thrM1 = analyze.ThrM1;
-            var thrM2 = analyze.ThrM2;
+            var featureM1 = GetBatchFeatureM1();
+            var featureM2 = GetBatchFeatureM2();
+            var thrM1 = GetBatchThrM1();
+            var thrM2 = GetBatchThrM2();
 
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 feature={featureM1} thr={thrM1}"));
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 feature={featureM2} thr={thrM2}"));
@@ -6199,15 +6379,75 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             });
         }
 
+        private static string ComputeHashTag(byte[] data)
+        {
+            try
+            {
+                var hash = SHA256.HashData(data);
+                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant()[..8];
+            }
+            catch
+            {
+                return "(hash-err)";
+            }
+        }
+
+        private static (int Width, int Height) GetImageSizeSafe(byte[] data)
+        {
+            try
+            {
+                using var ms = new MemoryStream(data);
+                var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                if (decoder.Frames.Count > 0)
+                {
+                    var frame = decoder.Frames[0];
+                    return (frame.PixelWidth, frame.PixelHeight);
+                }
+            }
+            catch
+            {
+            }
+
+            return (0, 0);
+        }
+
+        private void ApplyBatchHeatmapSelection(int roiIndex)
+        {
+            BatchHeatmapRoiIndex = roiIndex;
+
+            if (_batchHeatmapPngByRoi.TryGetValue(BatchHeatmapRoiIndex, out var bytes) && bytes.Length > 0)
+            {
+                _lastHeatmapPngBytes = bytes;
+                UpdateHeatmapThreshold();
+
+                var (w, h) = GetImageSizeSafe(bytes);
+                GuiLog.Info($"[batch-hm] set-ui roi={BatchHeatmapRoiIndex} bytes={bytes.Length} hash={ComputeHashTag(bytes)} dims={w}x{h} source={(BatchHeatmapSource != null)}");
+            }
+            else
+            {
+                _lastHeatmapPngBytes = null;
+                BatchHeatmapSource = null;
+                OnPropertyChanged(nameof(BatchHeatmapSource));
+                GuiLog.Info($"[batch-hm] set-ui roi={BatchHeatmapRoiIndex} bytes=0 hash=∅ dims=0x0 source=false");
+            }
+        }
+
         public void SetBatchHeatmapForRoi(byte[]? heatmapPngBytes, int roiIndex)
         {
-            BatchHeatmapRoiIndex = Math.Max(1, Math.Min(4, roiIndex));
-            _lastHeatmapPngBytes = heatmapPngBytes ?? Array.Empty<byte>();
+            var clampedIndex = Math.Max(1, Math.Min(4, roiIndex));
+
+            if (heatmapPngBytes != null && heatmapPngBytes.Length > 0)
+            {
+                _batchHeatmapPngByRoi[clampedIndex] = heatmapPngBytes;
+            }
+            else
+            {
+                _batchHeatmapPngByRoi.Remove(clampedIndex);
+            }
 
             try
             {
-                UpdateHeatmapThreshold();
-                GuiLog.Info($"[batch-hm] step={_batchStepId} file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' bytes={_lastHeatmapPngBytes.Length}");
+                ApplyBatchHeatmapSelection(clampedIndex);
 
                 if (_isBatchRunning)
                 {
@@ -6264,6 +6504,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 var heatmapBytes = Convert.FromBase64String(result.heatmap_png_base64);
+                var (w, h) = GetImageSizeSafe(heatmapBytes);
+                GuiLog.Info($"[heatmap] recv file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' roi={roiIndex} bytes={heatmapBytes.Length} hash={ComputeHashTag(heatmapBytes)} dims={w}x{h}");
 
                 InvokeOnUi(() =>
                 {
@@ -6290,6 +6532,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void UpdateHeatmapThreshold()
         {
             HeatmapInfo = $"Cutoff: {HeatmapCutoffPercent}%";
+
+            _batchHeatmapPngByRoi.TryGetValue(BatchHeatmapRoiIndex, out _lastHeatmapPngBytes);
 
             if (_lastHeatmapPngBytes == null || _lastHeatmapPngBytes.Length == 0)
             {
@@ -6320,6 +6564,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             BatchHeatmapRoiIndex = 0;
             _lastHeatmapBitmap = null;
             _lastHeatmapPngBytes = null;
+            _batchHeatmapPngByRoi.Clear();
         }
 
         private async Task<(byte[] Bytes, string FileName, string ShapeJson)> ExportRoiFromFileAsync(InspectionRoiConfig roiConfig, string fullPath)
@@ -6370,6 +6615,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             else
             {
                 dispatcher.Invoke(action);
+            }
+        }
+
+        private void NotifyBatchCaption(string fileName, bool isOk)
+        {
+            try
+            {
+                OverlayBatchCaption?.Invoke(fileName, isOk);
+                TraceBatch(FormattableString.Invariant($"[batch-ui] caption msg='{fileName}' isError={!isOk} snackbarSkipped=true"));
+            }
+            catch
+            {
             }
         }
 
@@ -6625,6 +6882,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        private void LogAlign(string message)
+        {
+            var payload = "[ALIGN]" + message;
+            GuiLog.Info(payload);
+            _trace?.Invoke(payload);
         }
 
         public void TraceBatch(string message)

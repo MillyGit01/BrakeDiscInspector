@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Reflection;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -15,6 +16,11 @@ namespace BrakeDiscInspector_GUI_ROI
 {
     public class MasterLayout
     {
+        public MasterLayout()
+        {
+            MasterLayoutManager.EnsureInspectionRoiDefaults(this);
+        }
+
         public RoiModel? Master1Pattern { get; set; }
         public string? Master1PatternImagePath { get; set; }
         public RoiModel? Master1Search { get; set; }
@@ -34,14 +40,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public Dictionary<string, List<RoiModel>> InspectionBaselinesByImage { get; set; }
             = new(StringComparer.OrdinalIgnoreCase);
 
-        public ObservableCollection<InspectionRoiConfig> InspectionRois { get; }
-            = new ObservableCollection<InspectionRoiConfig>
-            {
-                new InspectionRoiConfig(1),
-                new InspectionRoiConfig(2),
-                new InspectionRoiConfig(3),
-                new InspectionRoiConfig(4),
-            };
+        public ObservableCollection<InspectionRoiConfig> InspectionRois { get; set; } = new();
 
         public MasterLayout DeepClone()
         {
@@ -64,6 +63,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     PosTolPx = Analyze?.PosTolPx ?? new AnalyzeOptions().PosTolPx,
                     AngTolDeg = Analyze?.AngTolDeg ?? new AnalyzeOptions().AngTolDeg,
                     ScaleLock = Analyze?.ScaleLock ?? new AnalyzeOptions().ScaleLock,
+                    DisableRot = Analyze?.DisableRot ?? new AnalyzeOptions().DisableRot,
                     UseLocalMatcher = Analyze?.UseLocalMatcher ?? new AnalyzeOptions().UseLocalMatcher,
                     FeatureM1 = Analyze?.FeatureM1 ?? new AnalyzeOptions().FeatureM1,
                     FeatureM2 = Analyze?.FeatureM2 ?? new AnalyzeOptions().FeatureM2,
@@ -91,9 +91,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            clone.InspectionRois.Clear();
-            foreach (var cfg in InspectionRois)
+            clone.InspectionRois = new ObservableCollection<InspectionRoiConfig>();
+            foreach (var cfg in InspectionRois ?? Enumerable.Empty<InspectionRoiConfig>())
             {
+                if (cfg == null)
+                {
+                    continue;
+                }
+
                 clone.InspectionRois.Add(cfg.Clone());
             }
 
@@ -106,6 +111,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public double PosTolPx { get; set; } = 1.0;
         public double AngTolDeg { get; set; } = 0.5;
         public bool ScaleLock { get; set; } = true;
+        public bool DisableRot { get; set; } = false;
         public bool UseLocalMatcher { get; set; } = true;
         public string FeatureM1 { get; set; } = "auto";
         public int ThrM1 { get; set; } = 85;
@@ -178,6 +184,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 NormalizeLayoutPathsForRecipe(layout, layoutName, filePath);
                 EnsureInspectionRoiDefaults(layout);
                 EnsureOptionDefaults(layout);
+                TraceInspectionRois("load", layout);
 
                 layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
                 layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
@@ -189,6 +196,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var layout = new MasterLayout();
                 EnsureInspectionRoiDefaults(layout);
                 EnsureOptionDefaults(layout);
+                TraceInspectionRois("load", layout);
                 layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
                 layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
                 return layout;
@@ -222,6 +230,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             EnsureInspectionRoiDefaults(layout);
             EnsureOptionDefaults(layout);
+            TraceInspectionRois("load", layout);
 
             if (loadedFromFile && (layout.Master1Pattern == null || layout.Master1Search == null))
             {
@@ -254,7 +263,9 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // === Sanitizar antes de serializar ===
+            EnsureInspectionRoiDefaults(layout);
             SanitizeForSave(layout);
+            TraceInspectionRois("save", layout);
 
             var path = EnsureLayoutJsonExtension(GetDefaultPath(preset));
             System.Diagnostics.Debug.WriteLine(
@@ -308,7 +319,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     "Dibuja/guarda Master 1 Pattern antes de 'Save Layout'.");
             }
 
+            EnsureInspectionRoiDefaults(layout);
             SanitizeForSave(layout);
+            TraceInspectionRois("save", layout);
 
             var json = JsonSerializer.Serialize(layout, s_opts);
             File.WriteAllText(targetPath, json);
@@ -327,28 +340,103 @@ namespace BrakeDiscInspector_GUI_ROI
             return match.Success ? $"inspection-{match.Groups[1].Value}" : key.Trim();
         }
 
-        private static void EnsureInspectionRoiDefaults(MasterLayout layout)
+        public sealed record InspectionRoiNormalizationResult(int OriginalCount, int NormalizedCount, bool DuplicatesRemoved);
+
+        private static int TryParseInspectionIndex(string? key)
         {
-            for (int i = 0; i < layout.InspectionRois.Count; i++)
+            if (string.IsNullOrWhiteSpace(key))
             {
-                var roi = layout.InspectionRois[i];
-                if (string.IsNullOrWhiteSpace(roi.Name))
+                return -1;
+            }
+
+            var match = s_inspectionKeyRegex.Match(key);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int idx) && idx >= 1 && idx <= 4)
+            {
+                return idx;
+            }
+
+            return -1;
+        }
+
+        private static int ResolveInspectionSlot(InspectionRoiConfig roi)
+        {
+            if (roi == null)
+            {
+                return -1;
+            }
+
+            if (roi.Index is >= 1 and <= 4)
+            {
+                return roi.Index;
+            }
+
+            var parsed = TryParseInspectionIndex(roi.Id);
+            if (parsed is >= 1 and <= 4)
+            {
+                return parsed;
+            }
+
+            parsed = TryParseInspectionIndex(roi.ModelKey);
+            return parsed;
+        }
+
+        private static void ForceInspectionIndex(InspectionRoiConfig roi, int index)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            var prop = typeof(InspectionRoiConfig).GetProperty("Index", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            prop?.SetValue(roi, index);
+        }
+
+        public static InspectionRoiNormalizationResult EnsureInspectionRoiDefaults(MasterLayout layout)
+        {
+            layout.InspectionRois ??= new ObservableCollection<InspectionRoiConfig>();
+            var originalCount = layout.InspectionRois.Count;
+
+            var slotMap = new Dictionary<int, InspectionRoiConfig>();
+            foreach (var cfg in layout.InspectionRois)
+            {
+                var slot = ResolveInspectionSlot(cfg);
+                if (slot < 1 || slot > 4)
                 {
-                    roi.Name = $"Inspection {i + 1}";
+                    continue;
                 }
 
-                var normalizedKey = NormalizeInspectionKey(roi.ModelKey);
-                if (string.IsNullOrWhiteSpace(normalizedKey))
-                {
-                    normalizedKey = $"inspection-{i + 1}";
-                }
-                roi.ModelKey = normalizedKey;
+                slotMap[slot] = cfg; // last one wins
+            }
 
-                var expectedId = $"Inspection_{i + 1}";
-                if (string.IsNullOrWhiteSpace(roi.Id) || !string.Equals(roi.Id, expectedId, StringComparison.OrdinalIgnoreCase))
+            var normalized = new List<InspectionRoiConfig>(capacity: 4);
+            for (int i = 1; i <= 4; i++)
+            {
+                slotMap.TryGetValue(i, out var cfg);
+                cfg ??= new InspectionRoiConfig(i);
+
+                ForceInspectionIndex(cfg, i);
+
+                if (string.IsNullOrWhiteSpace(cfg.Name))
                 {
-                    roi.Id = expectedId;
+                    cfg.Name = $"Inspection {i}";
                 }
+
+                var normalizedKey = NormalizeInspectionKey(cfg.ModelKey);
+                cfg.ModelKey = string.IsNullOrWhiteSpace(normalizedKey) ? $"inspection-{i}" : normalizedKey;
+
+                var expectedId = $"Inspection_{i}";
+                if (string.IsNullOrWhiteSpace(cfg.Id) || !string.Equals(cfg.Id, expectedId, StringComparison.OrdinalIgnoreCase))
+                {
+                    cfg.Id = expectedId;
+                }
+
+                normalized.Add(cfg);
+            }
+
+            layout.InspectionRois.Clear();
+            foreach (var cfg in normalized)
+            {
+                layout.InspectionRois.Add(cfg);
             }
 
             // Migración legacy: si sólo existe 'Inspection' global y no hay slots, volcar a slot 1 y borrar el global.
@@ -365,6 +453,38 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // A partir de aquí, no usar 'Inspection' global como fuente de verdad.
             layout.Inspection = null;
+
+            var duplicatesRemoved = originalCount > slotMap.Count;
+            if (duplicatesRemoved)
+            {
+                Debug.WriteLine(FormattableString.Invariant(
+                    $"[layout:rois] WARNING duplicates detected: originalCount={originalCount} -> normalizedCount={layout.InspectionRois.Count}"));
+            }
+
+            return new InspectionRoiNormalizationResult(originalCount, layout.InspectionRois.Count, duplicatesRemoved);
+        }
+
+        private static void TraceInspectionRois(string label, MasterLayout layout)
+        {
+            if (layout?.InspectionRois == null)
+            {
+                Debug.WriteLine(FormattableString.Invariant($"[layout:rois] {label} count=0"));
+                return;
+            }
+
+            Debug.WriteLine(FormattableString.Invariant(
+                $"[layout:rois] {label} count={layout.InspectionRois.Count}"));
+
+            foreach (var roi in layout.InspectionRois.OrderBy(r => r.Index))
+            {
+                if (roi == null)
+                {
+                    continue;
+                }
+
+                Debug.WriteLine(FormattableString.Invariant(
+                    $"[layout:roi] idx={roi.Index} id={roi.Id} modelKey={roi.ModelKey} anchorMaster={(int)roi.AnchorMaster} datasetPath={roi.DatasetPath}"));
+            }
         }
 
         private static void EnsureOptionDefaults(MasterLayout layout)

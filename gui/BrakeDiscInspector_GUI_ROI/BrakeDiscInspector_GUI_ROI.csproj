@@ -18,7 +18,8 @@
                 <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.11.0.20250507" />
                 <PackageReference Include="OpenCvSharp4.Extensions" Version="4.11.0.20250507" />
                 <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.11.0.20250507" />
-<PackageReference Include="S7netplus" Version="0.20.0" />
+                <PackageReference Include="Wpf.Ui" Version="3.4.2.7" />
+                <PackageReference Include="S7netplus" Version="0.20.0" />
                 <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0" />
         </ItemGroup>
 
@@ -26,6 +27,17 @@
                 <Content Include="appsettings.json">
                         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
                 </Content>
+        </ItemGroup>
+
+        <ItemGroup>
+                <Compile Update="Converters\BoolToEditSaveTextConverter.cs" />
+                <Compile Update="Converters\BoolToBrushConverter.cs" />
+                <Compile Update="Converters\BatchCellStatusToBrushConverter.cs" />
+                <Compile Update="RoiOverlay.cs" />
+                <Page Update="Workflow\WorkflowControl.xaml">
+                        <Generator>MSBuild:Compile</Generator>
+                </Page>
+                <Compile Update="Workflow\WorkflowControl.xaml.cs" />
         </ItemGroup>
 
 </Project>

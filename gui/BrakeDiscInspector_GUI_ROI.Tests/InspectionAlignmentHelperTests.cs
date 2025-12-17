@@ -60,6 +60,182 @@ public class InspectionAlignmentHelperTests
         AssertClose(firstResult, target, shape);
     }
 
+    [Fact]
+    public void MoveInspectionTo_AppliesRotation_WithoutScaling()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: false, disableRot: false);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
+        Assert.Equal(100, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_DisableRot_TranslatesWithoutRotation()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: false, disableRot: true);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
+        Assert.Equal(10, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_ScaleLock_KeepsSizeAndOffsetScale()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: true, disableRot: false);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
+        Assert.Equal(100, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_DisableRotAndScaleLock_TranslatesOnly()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: true, disableRot: true);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
+        Assert.Equal(4, target.Width, 6);
+        Assert.Equal(6, target.Height, 6);
+        Assert.Equal(10, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_UsesMaster2AnchorOffset()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 130,
+            Y = 20,
+            Width = 20,
+            Height = 10,
+            AngleDeg = 0
+        };
+
+        var target = baselineInspection.Clone();
+
+        var baselineM1 = new Point2d(0, 0);
+        var baselineM2 = new Point2d(100, 0);
+        var detectedM1 = new Point2d(10, -5);
+        var detectedM2 = new Point2d(70, 60);
+
+        var scale = Distance(detectedM1, detectedM2) / Distance(baselineM1, baselineM2);
+        var angleDelta = Math.Atan2(detectedM2.Y - detectedM1.Y, detectedM2.X - detectedM1.X)
+                         - Math.Atan2(baselineM2.Y - baselineM1.Y, baselineM2.X - baselineM1.X);
+
+        var anchors = new AnchorTransformContext(
+            baselineM1,
+            baselineM2,
+            detectedM1,
+            detectedM2,
+            0,
+            0,
+            0,
+            0,
+            scale,
+            angleDelta,
+            scaleLock: false,
+            disableRot: false);
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master2, anchors);
+
+        var (baselineCx, baselineCy) = baselineInspection.GetCenter();
+        var baselineOffset = new Point2d(baselineCx - baselineM2.X, baselineCy - baselineM2.Y);
+
+        var cosA = Math.Cos(angleDelta);
+        var sinA = Math.Sin(angleDelta);
+        var expectedOffset = new Point2d(
+            (baselineOffset.X * cosA - baselineOffset.Y * sinA),
+            (baselineOffset.X * sinA + baselineOffset.Y * cosA));
+
+        var expectedCenter = new Point2d(detectedM2.X + expectedOffset.X, detectedM2.Y + expectedOffset.Y);
+        Assert.Equal(expectedCenter.X, target.X, 6);
+        Assert.Equal(expectedCenter.Y, target.Y, 6);
+    }
+
+    private static AnchorTransformContext CreateAnchorContext(bool scaleLock, bool disableRot)
+    {
+        var baselineM1 = new Point2d(0, 0);
+        var baselineM2 = new Point2d(10, 0);
+        var detectedM1 = new Point2d(1, 2);
+        var detectedM2 = new Point2d(1, 22);
+
+        return new AnchorTransformContext(
+            baselineM1,
+            baselineM2,
+            detectedM1,
+            detectedM2,
+            0,
+            0,
+            0,
+            0,
+            2.0,
+            Math.PI / 2.0,
+            scaleLock,
+            disableRot);
+    }
+
     private static RoiModel CreateBaselineInspection(RoiShape shape)
     {
         return shape switch
@@ -150,6 +326,13 @@ public class InspectionAlignmentHelperTests
             default:
                 throw new ArgumentOutOfRangeException(nameof(shape), shape, null);
         }
+    }
+
+    private static double Distance(Point2d a, Point2d b)
+    {
+        var dx = a.X - b.X;
+        var dy = a.Y - b.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     private static bool AreClose(double expected, double actual, double tolerance)

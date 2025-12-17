@@ -11,7 +11,11 @@
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- Ensure SymbolIcons always have a valid numeric font size -->
+            <!-- Ensure SymbolIcons and FontIcons always have a valid numeric FontSize -->
+            <Style TargetType="{x:Type ui:FontIcon}">
+                <Setter Property="FontSize" Value="16" />
+            </Style>
+
             <Style TargetType="{x:Type ui:SymbolIcon}">
                 <Setter Property="FontSize" Value="16" />
             </Style>

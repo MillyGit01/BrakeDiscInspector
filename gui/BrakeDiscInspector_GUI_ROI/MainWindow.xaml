@@ -13,7 +13,6 @@
         UseLayoutRounding="True"
         Loaded="MainWindow_Loaded">
 
-<<<<<<< HEAD
   <Window.Resources>
       <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
       <conv:BoolToBrushConverter x:Key="BoolToBrush" />
@@ -48,34 +47,6 @@
         <Setter Property="Margin" Value="0,0,0,12"/>
       </Style>
   </Window.Resources>
-=======
-    <Window.Resources>
-        <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
-        <conv:BoolToBrushConverter x:Key="BoolToBrush" />
-        <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
-        <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
-            <Setter Property="TextElement.Foreground" Value="Black"/>
-        </Style>
-        <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}">
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="8,0,0,0"/>
-            <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
-        </Style>
-        <Style TargetType="GroupBox">
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#CCCCCC"/>
-            <Setter Property="Background" Value="#F5F5F5"/>
-            <Setter Property="Padding" Value="8"/>
-            <Setter Property="Foreground" Value="Black"/>
-            <Setter Property="FontWeight" Value="Normal"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Margin" Value="0,0,0,12"/>
-        </Style>
-    </Window.Resources>
->>>>>>> f7abf27 (Add left nav panel (150px) with buttons)
 
   <Grid x:Name="RootGrid">
     <Grid.RowDefinitions>

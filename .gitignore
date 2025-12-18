@@ -4,3 +4,7 @@ __pycache__/
 backend/logs/
 gui/**/bin/
 gui/**/obj/
+
+.vs/
+**/.vs/
+

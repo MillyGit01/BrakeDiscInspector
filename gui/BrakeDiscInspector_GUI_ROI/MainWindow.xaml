@@ -77,15 +77,6 @@
     </Window.Resources>
 >>>>>>> f7abf27 (Add left nav panel (150px) with buttons)
 
-    <Grid x:Name="RootGrid">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition x:Name="SidePanelColumn" Width="560" MinWidth="560" />
-        </Grid.ColumnDefinitions>
   <Grid x:Name="RootGrid">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />

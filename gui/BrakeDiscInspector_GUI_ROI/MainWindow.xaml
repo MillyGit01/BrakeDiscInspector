@@ -46,12 +46,13 @@
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="150" />
       <ColumnDefinition Width="*" />
       <ColumnDefinition x:Name="SidePanelColumn" Width="560" MinWidth="560" />
     </Grid.ColumnDefinitions>
 
     <!-- ===== Tabs (top) ===== -->
-    <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
+    <TabControl Grid.Row="1" Grid.Column="2" x:Name="MainTabs" TabStripPlacement="Top">
       <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
@@ -1218,8 +1219,19 @@
       </TabItem>
     </TabControl>
 
+    <Border Grid.Row="1" Grid.Column="0"
+            BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
+            Background="#F7F7F7">
+      <StackPanel Margin="8">
+        <ui:Button Content="Layout Setup" FontSize="20" Margin="0,0,0,8"/>
+        <ui:Button Content="ROIs Management" FontSize="20" Margin="0,0,0,8"/>
+        <ui:Button Content="Batch Inspection" FontSize="20" Margin="0,0,0,8"/>
+        <ui:Button Content="Comms" FontSize="20"/>
+      </StackPanel>
+    </Border>
+
       <!-- ===== Viewer/Canvas (right) ===== -->
-      <Grid Grid.Column="0" Grid.RowSpan="2" x:Name="ViewerHost">
+      <Grid Grid.Column="1" Grid.RowSpan="2" x:Name="ViewerHost">
         <Grid Margin="10">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

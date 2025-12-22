@@ -53,7 +53,6 @@ using ROI = BrakeDiscInspector_GUI_ROI.RoiModel;
 using RoiShapeType = BrakeDiscInspector_GUI_ROI.RoiShape;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Helpers;
-using BrakeDiscInspector_GUI_ROI.Views;
 // --- BEGIN: UI/OCV type aliases ---
 using SW = System.Windows;
 using SWM = System.Windows.Media;
@@ -743,7 +742,6 @@ namespace BrakeDiscInspector_GUI_ROI
         private WorkflowViewModel? _workflowViewModel;
         private WorkflowViewModel? ViewModel => _workflowViewModel;
         private BackendClient? _backendClient;
-        private BusyProgressWindow? _busyWindow;
         private string? _dataRoot;
         private double _heatmapOverlayOpacity = 0.6;
         private double _heatmapGain = 1.0;
@@ -3359,16 +3357,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 InitializeComponent();
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent() OK"); // CODEX: string interpolation compatibility.
 
-                if (this.DataContext == null)
-                {
-                    this.DataContext = this;
-                    GuiLog.Info($"[BOOT] MainWindow ctor → DataContext asignado a self"); // CODEX: string interpolation compatibility.
-                }
-                else
-                {
-                    GuiLog.Info($"[BOOT] MainWindow ctor → DataContext ya estaba asignado"); // CODEX: string interpolation compatibility.
-                }
-
                 GuiLog.Info($"[BOOT] MainWindow ctor → ApplyDrawToolSelection()"); // CODEX: string interpolation compatibility.
                 ApplyDrawToolSelection(_currentDrawTool, updateViewModel: false);
                 GuiLog.Info($"[BOOT] MainWindow ctor → ApplyDrawToolSelection OK"); // CODEX: string interpolation compatibility.
@@ -3726,19 +3714,9 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             Dispatcher.Invoke(() =>
             {
-                _busyWindow ??= new BusyProgressWindow
-                {
-                    Owner = this
-                };
-
-                _busyWindow.SetState(title, detail: null, percent: null);
-
-                if (!_busyWindow.IsVisible)
-                {
-                    _busyWindow.Show();
-                }
-
-                _busyWindow.Activate();
+                BusyTitleText.Text = string.IsNullOrWhiteSpace(title) ? "Working..." : title;
+                BusyProgress.IsIndeterminate = true;
+                BusyOverlay.Visibility = Visibility.Visible;
             });
         }
 
@@ -3746,10 +3724,30 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             Dispatcher.Invoke(() =>
             {
-                if (_busyWindow != null)
+                if (!progress.HasValue)
                 {
-                    _busyWindow.SetState(_busyWindow.Title, detail: null, percent: progress);
+                    BusyProgress.IsIndeterminate = true;
+                    return;
                 }
+
+                BusyProgress.IsIndeterminate = false;
+
+                var value = progress.Value;
+                if (value <= 1.0)
+                {
+                    value *= 100.0;
+                }
+
+                if (value < 0)
+                {
+                    value = 0;
+                }
+                else if (value > 100)
+                {
+                    value = 100;
+                }
+
+                BusyProgress.Value = value;
             });
         }
 
@@ -3757,13 +3755,9 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             Dispatcher.Invoke(() =>
             {
-                if (_busyWindow == null)
-                {
-                    return;
-                }
-
-                _busyWindow.Close();
-                _busyWindow = null;
+                BusyOverlay.Visibility = Visibility.Collapsed;
+                BusyProgress.IsIndeterminate = true;
+                BusyProgress.Value = 0;
             });
         }
 
@@ -3819,6 +3813,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     updateBusyProgress: UpdateBusy,
                     hideBusyDialog: HideBusy);
 
+                DataContext = _workflowViewModel;
                 _workflowViewModel.SetLayoutName(GetCurrentLayoutName());
                 SyncRecipeIdWithLayout(GetCurrentLayoutName());
 

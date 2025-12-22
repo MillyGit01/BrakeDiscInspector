@@ -130,12 +130,12 @@
                             </ui:Button>
                         </StackPanel>
                         <CheckBox Content="Layout Autosave"
-                      IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay}"
+                      IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=Window}}"
                       />
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0"/>
 
-                        <GroupBox Header="Layouts" Margin="0,0,0,12" Width="553">
+                        <GroupBox Header="Layouts" Margin="0,0,0,12" Width="553" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}">
                             <StackPanel>
 
                                 <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
@@ -1516,6 +1516,35 @@
                     </StackPanel>
                 </Border>
             </Grid>
+        </Grid>
+        <Grid x:Name="BusyOverlay"
+              Background="#66000000"
+              Visibility="Collapsed"
+              Panel.ZIndex="999"
+              Grid.RowSpan="2"
+              Grid.ColumnSpan="3">
+          <Border Width="360"
+                  Padding="18"
+                  Background="White"
+                  CornerRadius="12"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center">
+            <StackPanel>
+              <TextBlock x:Name="BusyTitleText"
+                         Text="Working..."
+                         FontSize="20"
+                         FontWeight="SemiBold"
+                         Margin="0,0,0,12"/>
+              <ProgressBar x:Name="BusyProgress"
+                           Height="6"
+                           Width="260"
+                           IsIndeterminate="True"/>
+              <TextBlock Text="Please wait..."
+                         FontSize="12"
+                         Margin="0,12,0,0"
+                         Opacity="0.7"/>
+            </StackPanel>
+          </Border>
         </Grid>
     </Grid>
 </Window>

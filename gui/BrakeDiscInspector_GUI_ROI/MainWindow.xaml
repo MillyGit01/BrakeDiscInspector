@@ -82,12 +82,12 @@
     </Grid.RowDefinitions>
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="150" />
-      <ColumnDefinition Width="*" />
       <ColumnDefinition x:Name="SidePanelColumn" Width="560" MinWidth="560" />
+      <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
 
     <!-- ===== Tabs (top) ===== -->
-    <TabControl Grid.Row="1" Grid.Column="2" x:Name="MainTabs" TabStripPlacement="Top">
+    <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
       <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
@@ -1291,7 +1291,7 @@
     </Border>
 
       <!-- ===== Viewer/Canvas (right) ===== -->
-      <Grid Grid.Column="1" Grid.RowSpan="2" x:Name="ViewerHost">
+      <Grid Grid.Column="2" Grid.RowSpan="2" x:Name="ViewerHost">
         <Grid Margin="10">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

@@ -53,6 +53,7 @@ using ROI = BrakeDiscInspector_GUI_ROI.RoiModel;
 using RoiShapeType = BrakeDiscInspector_GUI_ROI.RoiShape;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Helpers;
+using BrakeDiscInspector_GUI_ROI.Views;
 // --- BEGIN: UI/OCV type aliases ---
 using SW = System.Windows;
 using SWM = System.Windows.Media;
@@ -742,6 +743,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private WorkflowViewModel? _workflowViewModel;
         private WorkflowViewModel? ViewModel => _workflowViewModel;
         private BackendClient? _backendClient;
+        private BusyProgressWindow? _busyWindow;
         private string? _dataRoot;
         private double _heatmapOverlayOpacity = 0.6;
         private double _heatmapGain = 1.0;
@@ -3720,6 +3722,51 @@ namespace BrakeDiscInspector_GUI_ROI
             return GetInspectionModelFolder(roi.Index, roi.ModelKey);
         }
 
+        private void ShowBusy(string title)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _busyWindow ??= new BusyProgressWindow
+                {
+                    Owner = this
+                };
+
+                _busyWindow.SetState(title, detail: null, percent: null);
+
+                if (!_busyWindow.IsVisible)
+                {
+                    _busyWindow.Show();
+                }
+
+                _busyWindow.Activate();
+            });
+        }
+
+        private void UpdateBusy(double? progress)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (_busyWindow != null)
+                {
+                    _busyWindow.SetState(_busyWindow.Title, detail: null, percent: progress);
+                }
+            });
+        }
+
+        private void HideBusy()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (_busyWindow == null)
+                {
+                    return;
+                }
+
+                _busyWindow.Close();
+                _busyWindow = null;
+            });
+        }
+
         private void InitWorkflow()
         {
             try
@@ -3752,22 +3799,25 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 _workflowViewModel = new WorkflowViewModel(
-                    backendClient,
-                    datasetManager,
-                    ExportCurrentRoiCanonicalAsync,
-                    () => _currentImagePathWin,
-                    AppendLog,
-                    ShowHeatmapAsync,
-                    ClearHeatmapOverlay,
-                    UpdateGlobalBadge,
-                    SetActiveInspectionIndex,
-                    ResolveInspectionModelDirectory,
-                    RepositionBeforeBatchStepAsync,
-                    CreateMasterRoiFromWorkflowAsync,
-                    ToggleEditSaveMasterRoiFromWorkflowAsync,
-                    RemoveMasterRoiFromWorkflowAsync,
-                    CanEditMasterRoiFromWorkflow,
-                    Snack);
+                    client: backendClient,
+                    datasetManager: datasetManager,
+                    exportRoiAsync: ExportCurrentRoiCanonicalAsync,
+                    getSourceImagePath: () => _currentImagePathWin,
+                    log: AppendLog,
+                    showHeatmapAsync: ShowHeatmapAsync,
+                    clearHeatmap: ClearHeatmapOverlay,
+                    updateGlobalBadge: UpdateGlobalBadge,
+                    activateInspectionIndex: SetActiveInspectionIndex,
+                    resolveModelDirectory: ResolveInspectionModelDirectory,
+                    repositionInspectionRoisAsync: RepositionBeforeBatchStepAsync,
+                    createMasterRoiAsync: CreateMasterRoiFromWorkflowAsync,
+                    toggleEditSaveMasterRoiAsync: ToggleEditSaveMasterRoiFromWorkflowAsync,
+                    removeMasterRoiAsync: RemoveMasterRoiFromWorkflowAsync,
+                    canEditMasterRoi: CanEditMasterRoiFromWorkflow,
+                    showSnackbar: Snack,
+                    showBusyDialog: ShowBusy,
+                    updateBusyProgress: UpdateBusy,
+                    hideBusyDialog: HideBusy);
 
                 _workflowViewModel.SetLayoutName(GetCurrentLayoutName());
                 SyncRecipeIdWithLayout(GetCurrentLayoutName());

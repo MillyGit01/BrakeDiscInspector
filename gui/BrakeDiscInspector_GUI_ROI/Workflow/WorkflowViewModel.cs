@@ -159,6 +159,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Action<string> _log;
         private readonly Action<string>? _trace;
         private readonly Action<string>? _showSnackbar;
+        private readonly Action<string>? _showBusyDialog;
+        private readonly Action<double?>? _updateBusyProgress;
+        private readonly Action? _hideBusyDialog;
         private readonly Func<RoiExportResult, byte[], double, Task> _showHeatmapAsync;
         private readonly Action _clearHeatmap;
         private readonly Action<bool?> _updateGlobalBadge;
@@ -370,7 +373,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             Func<RoiRole, Task<bool>>? toggleEditSaveMasterRoiAsync = null,
             Func<RoiRole, Task>? removeMasterRoiAsync = null,
             Func<bool>? canEditMasterRoi = null,
-            Action<string>? showSnackbar = null)
+            Action<string>? showSnackbar = null,
+            Action<string>? showBusyDialog = null,
+            Action<double?>? updateBusyProgress = null,
+            Action? hideBusyDialog = null)
         {
             _client = client ?? throw new ArgumentNullException(nameof(client));
             _datasetManager = datasetManager ?? throw new ArgumentNullException(nameof(datasetManager));
@@ -379,6 +385,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _log = log ?? (_ => { });
             _trace = log;
             _showSnackbar = showSnackbar;
+            _showBusyDialog = showBusyDialog;
+            _updateBusyProgress = updateBusyProgress;
+            _hideBusyDialog = hideBusyDialog;
             _showHeatmapAsync = showHeatmapAsync ?? throw new ArgumentNullException(nameof(showHeatmapAsync));
             _clearHeatmap = clearHeatmap ?? throw new ArgumentNullException(nameof(clearHeatmap));
             _updateGlobalBadge = updateGlobalBadge ?? (_ => { });
@@ -3441,6 +3450,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             _log($"[fit] sending {images.Count} samples to fit_ok");
+            _showBusyDialog?.Invoke("Training");
+            _updateBusyProgress?.Invoke(null);
             try
             {
                 var result = await _client.FitOkAsync(RoleId, RoiId, MmPerPx, images).ConfigureAwait(false);
@@ -3459,6 +3470,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 FitSummary = "Train failed";
                 await ShowMessageAsync($"Training failed: {ex.Message}", caption: "Train error");
             }
+            finally
+            {
+                _updateBusyProgress?.Invoke(null);
+                _hideBusyDialog?.Invoke();
+            }
         }
 
         private async Task CalibrateAsync()
@@ -3474,27 +3490,50 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var okScores = new List<double>();
             var ngScores = new List<double>();
 
-            _log($"[calibrate] evaluating {ok.Count} OK samples");
-            foreach (var sample in ok)
-            {
-                var infer = await _client.InferAsync(RoleId, RoiId, MmPerPx, sample.ImagePath, sample.Metadata.shape_json).ConfigureAwait(false);
-                okScores.Add(infer.score);
-            }
+            var totalCalibSamples = ok.Count + NgSamples.Count;
+            _showBusyDialog?.Invoke("Calibrating");
+            _updateBusyProgress?.Invoke(null);
 
-            var ngList = NgSamples.ToList();
-            if (ngList.Count > 0)
+            try
             {
-                _log($"[calibrate] evaluating {ngList.Count} NG samples");
-                foreach (var sample in ngList)
+                _log($"[calibrate] evaluating {ok.Count} OK samples");
+                for (var i = 0; i < ok.Count; i++)
                 {
+                    var sample = ok[i];
                     var infer = await _client.InferAsync(RoleId, RoiId, MmPerPx, sample.ImagePath, sample.Metadata.shape_json).ConfigureAwait(false);
-                    ngScores.Add(infer.score);
+                    okScores.Add(infer.score);
+                    if (totalCalibSamples > 0)
+                    {
+                        _updateBusyProgress?.Invoke(100.0 * (i + 1) / totalCalibSamples);
+                    }
                 }
-            }
 
-            var calib = await _client.CalibrateAsync(RoleId, RoiId, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null).ConfigureAwait(false);
-            CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile}";
-            _log("[calibrate] " + CalibrationSummary);
+                var ngList = NgSamples.ToList();
+                if (ngList.Count > 0)
+                {
+                    _log($"[calibrate] evaluating {ngList.Count} NG samples");
+                    for (var i = 0; i < ngList.Count; i++)
+                    {
+                        var sample = ngList[i];
+                        var infer = await _client.InferAsync(RoleId, RoiId, MmPerPx, sample.ImagePath, sample.Metadata.shape_json).ConfigureAwait(false);
+                        ngScores.Add(infer.score);
+                        if (totalCalibSamples > 0)
+                        {
+                            _updateBusyProgress?.Invoke(100.0 * (ok.Count + i + 1) / totalCalibSamples);
+                        }
+                    }
+                }
+
+                var calib = await _client.CalibrateAsync(RoleId, RoiId, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null).ConfigureAwait(false);
+                CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile}";
+                _log("[calibrate] " + CalibrationSummary);
+                _updateBusyProgress?.Invoke(100);
+            }
+            finally
+            {
+                _updateBusyProgress?.Invoke(null);
+                _hideBusyDialog?.Invoke();
+            }
         }
 
         private async Task InferCurrentAsync()

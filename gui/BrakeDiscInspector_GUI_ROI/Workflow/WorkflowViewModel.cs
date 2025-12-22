@@ -3450,7 +3450,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             _log($"[fit] sending {images.Count} samples to fit_ok");
-            _showBusyDialog?.Invoke("Training");
+            _showBusyDialog?.Invoke("Training...");
             _updateBusyProgress?.Invoke(null);
             try
             {
@@ -3491,7 +3491,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var ngScores = new List<double>();
 
             var totalCalibSamples = ok.Count + NgSamples.Count;
-            _showBusyDialog?.Invoke("Calibrating");
+            _showBusyDialog?.Invoke("Calibrating...");
             _updateBusyProgress?.Invoke(null);
 
             try
@@ -4188,60 +4188,70 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var roiPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
             GuiLog.Info($"[train] START roi='{roi.DisplayName}' datasetPath='{roiPath}'");
 
-            var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
-            if (analysis.OkCount == 0)
-            {
-                var message = string.IsNullOrWhiteSpace(analysis.StatusMessage)
-                    ? "Dataset has no OK samples for training."
-                    : analysis.StatusMessage;
-                await ShowMessageAsync(message, caption: "Dataset not ready");
-                return false;
-            }
-
-            if (!analysis.IsValid && !string.IsNullOrWhiteSpace(analysis.StatusMessage))
-            {
-                _log($"[train] dataset warning: {analysis.StatusMessage}");
-            }
-
-            var okImages = analysis.Entries.Where(e => e.IsOk).Select(e => e.Path).Where(File.Exists).ToList();
-            if (okImages.Count == 0)
-            {
-                await ShowMessageAsync($"No OK images found in dataset for ROI '{roi.Name}'.");
-                return false;
-            }
-
-            if (!await EnsureFitEndpointAsync().ConfigureAwait(false))
-            {
-                await ShowMessageAsync("Backend /fit_ok endpoint is not available.");
-                return false;
-            }
+            _showBusyDialog?.Invoke("Training...");
+            _updateBusyProgress?.Invoke(null);
 
             try
             {
-                var result = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okImages, roi.TrainMemoryFit, roiPath, ct).ConfigureAwait(false);
-                var memoryHint = roi.TrainMemoryFit ? " (memory-fit)" : string.Empty;
-                FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]" + memoryHint;
-                roi.HasFitOk = true;
-                _lastFitResultsByRoi[roi] = result;
-                await SaveModelManifestAsync(roi, result, null, ct).ConfigureAwait(false);
-                CopyModelArtifactsToRecipe(roi);
-            }
-            catch (HttpRequestException ex)
-            {
-                if (IsAlreadyTrainedError(ex))
+                var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
+                if (analysis.OkCount == 0)
                 {
-                    FitSummary = "Model already trained";
-                    _log($"[train] backend reported already trained: {ex.Message}");
-                    roi.HasFitOk = true;
-                    return true;
+                    var message = string.IsNullOrWhiteSpace(analysis.StatusMessage)
+                        ? "Dataset has no OK samples for training."
+                        : analysis.StatusMessage;
+                    await ShowMessageAsync(message, caption: "Dataset not ready");
+                    return false;
                 }
 
-                FitSummary = "Train failed";
-                await ShowMessageAsync($"Training failed: {ex.Message}", caption: "Train error");
-                return false;
-            }
+                if (!analysis.IsValid && !string.IsNullOrWhiteSpace(analysis.StatusMessage))
+                {
+                    _log($"[train] dataset warning: {analysis.StatusMessage}");
+                }
 
-            return true;
+                var okImages = analysis.Entries.Where(e => e.IsOk).Select(e => e.Path).Where(File.Exists).ToList();
+                if (okImages.Count == 0)
+                {
+                    await ShowMessageAsync($"No OK images found in dataset for ROI '{roi.Name}'.");
+                    return false;
+                }
+
+                if (!await EnsureFitEndpointAsync().ConfigureAwait(false))
+                {
+                    await ShowMessageAsync("Backend /fit_ok endpoint is not available.");
+                    return false;
+                }
+
+                try
+                {
+                    var result = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okImages, roi.TrainMemoryFit, roiPath, ct).ConfigureAwait(false);
+                    var memoryHint = roi.TrainMemoryFit ? " (memory-fit)" : string.Empty;
+                    FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]" + memoryHint;
+                    roi.HasFitOk = true;
+                    _lastFitResultsByRoi[roi] = result;
+                    await SaveModelManifestAsync(roi, result, null, ct).ConfigureAwait(false);
+                    CopyModelArtifactsToRecipe(roi);
+                }
+                catch (HttpRequestException ex)
+                {
+                    if (IsAlreadyTrainedError(ex))
+                    {
+                        FitSummary = "Model already trained";
+                        _log($"[train] backend reported already trained: {ex.Message}");
+                        roi.HasFitOk = true;
+                        return true;
+                    }
+
+                    FitSummary = "Train failed";
+                    await ShowMessageAsync($"Training failed: {ex.Message}", caption: "Train error");
+                    return false;
+                }
+
+                return true;
+            }
+            finally
+            {
+                _hideBusyDialog?.Invoke();
+            }
         }
 
         private static bool IsAlreadyTrainedError(HttpRequestException ex)
@@ -4273,88 +4283,98 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
-            if (!analysis.IsValid && analysis.OkCount == 0)
-            {
-                await ShowMessageAsync(analysis.StatusMessage, caption: "Dataset not ready");
-                return;
-            }
+            _showBusyDialog?.Invoke("Calibrating...");
+            _updateBusyProgress?.Invoke(null);
 
-            var okEntries = analysis.Entries.Where(e => e.IsOk).ToList();
-            if (okEntries.Count == 0)
+            try
             {
-                await ShowMessageAsync("Dataset has no OK samples for calibration.", "Calibrate");
-                return;
-            }
-
-            var koEntries = analysis.Entries.Where(e => !e.IsOk).ToList();
-
-            var okScores = new List<double>();
-            foreach (var entry in okEntries)
-            {
-                var score = await InferScoreForCalibrationAsync(roi, entry.Path, ct).ConfigureAwait(false);
-                if (!score.HasValue)
+                var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
+                if (!analysis.IsValid && analysis.OkCount == 0)
                 {
+                    await ShowMessageAsync(analysis.StatusMessage, caption: "Dataset not ready");
                     return;
                 }
 
-                okScores.Add(score.Value);
-            }
-
-            var ngScores = new List<double>();
-            foreach (var entry in koEntries)
-            {
-                var score = await InferScoreForCalibrationAsync(roi, entry.Path, ct).ConfigureAwait(false);
-                if (!score.HasValue)
+                var okEntries = analysis.Entries.Where(e => e.IsOk).ToList();
+                if (okEntries.Count == 0)
                 {
+                    await ShowMessageAsync("Dataset has no OK samples for calibration.", "Calibrate");
                     return;
                 }
 
-                ngScores.Add(score.Value);
-            }
+                var koEntries = analysis.Entries.Where(e => !e.IsOk).ToList();
 
-            double? threshold = null;
-            CalibResult? calibResult = null;
-            if (await EnsureCalibrateEndpointAsync().ConfigureAwait(false))
-            {
-                try
+                var okScores = new List<double>();
+                foreach (var entry in okEntries)
                 {
-                    var calib = await _client.CalibrateAsync(RoleId, roi.ModelKey, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null, ct: ct).ConfigureAwait(false);
-                    threshold = calib.threshold;
-                    calibResult = calib;
-                    CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile:0.###}";
+                    var score = await InferScoreForCalibrationAsync(roi, entry.Path, ct).ConfigureAwait(false);
+                    if (!score.HasValue)
+                    {
+                        return;
+                    }
+
+                    okScores.Add(score.Value);
                 }
-                catch (HttpRequestException ex)
+
+                var ngScores = new List<double>();
+                foreach (var entry in koEntries)
                 {
-                    _log("[calibrate] backend error: " + ex.Message);
+                    var score = await InferScoreForCalibrationAsync(roi, entry.Path, ct).ConfigureAwait(false);
+                    if (!score.HasValue)
+                    {
+                        return;
+                    }
+
+                    ngScores.Add(score.Value);
                 }
-            }
 
-            if (threshold == null)
-            {
-                threshold = ComputeYoudenThreshold(okScores, ngScores, roi.ThresholdDefault);
-                CalibrationSummary = $"Threshold={threshold:0.###} (local)";
-                calibResult = new CalibResult
+                double? threshold = null;
+                CalibResult? calibResult = null;
+                if (await EnsureCalibrateEndpointAsync().ConfigureAwait(false))
                 {
-                    threshold = threshold,
-                    ok_mean = okScores.Count > 0 ? okScores.Average() : 0.0,
-                    ng_mean = ngScores.Count > 0 ? ngScores.Average() : 0.0,
-                    score_percentile = 0.0,
-                    area_mm2_thr = 0.0
-                };
+                    try
+                    {
+                        var calib = await _client.CalibrateAsync(RoleId, roi.ModelKey, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null, ct: ct).ConfigureAwait(false);
+                        threshold = calib.threshold;
+                        calibResult = calib;
+                        CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile:0.###}";
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        _log("[calibrate] backend error: " + ex.Message);
+                    }
+                }
+
+                if (threshold == null)
+                {
+                    threshold = ComputeYoudenThreshold(okScores, ngScores, roi.ThresholdDefault);
+                    CalibrationSummary = $"Threshold={threshold:0.###} (local)";
+                    calibResult = new CalibResult
+                    {
+                        threshold = threshold,
+                        ok_mean = okScores.Count > 0 ? okScores.Average() : 0.0,
+                        ng_mean = ngScores.Count > 0 ? ngScores.Average() : 0.0,
+                        score_percentile = 0.0,
+                        area_mm2_thr = 0.0
+                    };
+                }
+
+                roi.CalibratedThreshold = threshold;
+                OnPropertyChanged(nameof(SelectedInspectionRoi));
+                UpdateGlobalBadge();
+
+                if (calibResult != null)
+                {
+                    _lastCalibResultsByRoi[roi] = calibResult;
+                }
+
+                await SaveModelManifestAsync(roi, GetLastFitResult(roi), calibResult, ct).ConfigureAwait(false);
+                CopyModelArtifactsToRecipe(roi);
             }
-
-            roi.CalibratedThreshold = threshold;
-            OnPropertyChanged(nameof(SelectedInspectionRoi));
-            UpdateGlobalBadge();
-
-            if (calibResult != null)
+            finally
             {
-                _lastCalibResultsByRoi[roi] = calibResult;
+                _hideBusyDialog?.Invoke();
             }
-
-            await SaveModelManifestAsync(roi, GetLastFitResult(roi), calibResult, ct).ConfigureAwait(false);
-            CopyModelArtifactsToRecipe(roi);
         }
 
         public void ResetModelStates()

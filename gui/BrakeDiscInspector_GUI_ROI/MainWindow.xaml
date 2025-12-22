@@ -20,7 +20,34 @@
       <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
         <Setter Property="TextElement.Foreground" Value="Black"/>
       </Style>
-      <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}">
+      <Style x:Key="FluentShadowButtonBase" TargetType="{x:Type ui:Button}">
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Effect">
+          <Setter.Value>
+            <DropShadowEffect BlurRadius="0" ShadowDepth="0" Opacity="0"/>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+            <Setter Property="Effect">
+              <Setter.Value>
+                <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.18"/>
+              </Setter.Value>
+            </Setter>
+          </Trigger>
+          <Trigger Property="IsPressed" Value="True">
+            <Setter Property="Effect">
+              <Setter.Value>
+                <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.12"/>
+              </Setter.Value>
+            </Setter>
+          </Trigger>
+        </Style.Triggers>
+      </Style>
+      <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
         <Setter Property="Width" Value="36"/>
         <Setter Property="Height" Value="36"/>
         <Setter Property="Padding" Value="0"/>
@@ -28,7 +55,7 @@
         <Setter Property="Margin" Value="8,0,0,0"/>
         <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
       </Style>
-      <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}">
+      <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
         <Setter Property="Appearance" Value="Secondary"/>
         <Setter Property="FontSize" Value="20"/>
         <Setter Property="Height" Value="52"/>

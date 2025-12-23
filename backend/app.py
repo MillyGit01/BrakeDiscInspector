@@ -15,6 +15,7 @@ import cv2
 try:
     from fastapi import FastAPI, UploadFile, File, Form, Request
     from fastapi.responses import JSONResponse
+    from starlette.middleware.cors import CORSMiddleware
 except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     missing = exc.name or "fastapi"
     raise ModuleNotFoundError(
@@ -45,7 +46,36 @@ else:
 
 log = logging.getLogger(__name__)
 
+# Carpeta para artefactos persistentes por (role_id, roi_id)
+def _env_var(name: str, *, legacy: str | None = None, default: str | None = None) -> str | None:
+    """Return environment variable prioritising the new BDI_* keys."""
+    value = os.environ.get(name)
+    if not value and legacy:
+        value = os.environ.get(legacy)
+    if value is None or value == "":
+        return default
+    return value
+
 app = FastAPI(title="Anomaly Backend (PatchCore + DINOv2)")
+
+# --- CORS (solo afecta a clientes web / navegador) ---
+# Coma-separado, ej: "http://localhost:5173,http://127.0.0.1:5173"
+_raw = _env_var("BDI_CORS_ORIGINS", legacy="BRAKEDISC_CORS_ORIGINS", default="*")  # helper ya existente
+origins = ["*"]
+if _raw and _raw.strip() != "*":
+    origins = [o.strip() for o in _raw.split(",") if o.strip()]
+
+# Nota: allow_credentials no puede usarse con origins="*" (los navegadores lo bloquean).
+allow_credentials = False if origins == ["*"] else True
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=allow_credentials,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["x-request-id", "x-recipe-id"],
+)
 
 
 def slog(event: str, **kw):
@@ -60,17 +90,6 @@ def _resolve_request_context(request: Request, recipe_id_hint: Optional[str] = N
     recipe_raw = headers.get("x-recipe-id") or recipe_id_hint or "default"
     recipe_id = ModelStore._sanitize_recipe_id(recipe_raw)
     return request_id, recipe_id
-
-# Carpeta para artefactos persistentes por (role_id, roi_id)
-def _env_var(name: str, *, legacy: str | None = None, default: str | None = None) -> str | None:
-    """Return environment variable prioritising the new BDI_* keys."""
-    value = os.environ.get(name)
-    if not value and legacy:
-        value = os.environ.get(legacy)
-    if value is None or value == "":
-        return default
-    return value
-
 
 MODELS_DIR = Path(_env_var("BDI_MODELS_DIR", legacy="BRAKEDISC_MODELS_DIR", default="models"))
 

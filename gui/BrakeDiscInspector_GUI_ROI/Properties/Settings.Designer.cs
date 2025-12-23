@@ -73,5 +73,29 @@ namespace BrakeDiscInspector_GUI_ROI.Properties
             get => (string)this[nameof(LastModelDirROI4)];
             set => this[nameof(LastModelDirROI4)] = value;
         }
+
+        [UserScopedSetting]
+        [DefaultSettingValue("520")]
+        public double SidePanelWidth
+        {
+            get => (double)this[nameof(SidePanelWidth)];
+            set => this[nameof(SidePanelWidth)] = value;
+        }
+
+        [UserScopedSetting]
+        [DefaultSettingValue("false")]
+        public bool IsSidePanelCollapsed
+        {
+            get => (bool)this[nameof(IsSidePanelCollapsed)];
+            set => this[nameof(IsSidePanelCollapsed)] = value;
+        }
+
+        [UserScopedSetting]
+        [DefaultSettingValue("Auto")]
+        public string ThemePreference
+        {
+            get => (string)this[nameof(ThemePreference)];
+            set => this[nameof(ThemePreference)] = value;
+        }
     }
 }

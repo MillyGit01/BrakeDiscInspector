@@ -13,86 +13,86 @@
         UseLayoutRounding="True"
         Loaded="MainWindow_Loaded">
 
-  <Window.Resources>
-      <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
-      <conv:BoolToBrushConverter x:Key="BoolToBrush" />
-      <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
-      <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
-        <Setter Property="TextElement.Foreground" Value="Black"/>
-      </Style>
-      <Style x:Key="FluentShadowButtonBase" TargetType="{x:Type ui:Button}">
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Effect">
-          <Setter.Value>
-            <DropShadowEffect BlurRadius="0" ShadowDepth="0" Opacity="0"/>
-          </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-          <Trigger Property="IsMouseOver" Value="True">
+    <Window.Resources>
+        <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
+        <conv:BoolToBrushConverter x:Key="BoolToBrush" />
+        <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
+        <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
+            <Setter Property="TextElement.Foreground" Value="Black"/>
+        </Style>
+        <Style x:Key="FluentShadowButtonBase" TargetType="{x:Type ui:Button}">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Effect">
-              <Setter.Value>
-                <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.18"/>
-              </Setter.Value>
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="0" ShadowDepth="0" Opacity="0"/>
+                </Setter.Value>
             </Setter>
-          </Trigger>
-          <Trigger Property="IsPressed" Value="True">
-            <Setter Property="Effect">
-              <Setter.Value>
-                <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.12"/>
-              </Setter.Value>
-            </Setter>
-          </Trigger>
-        </Style.Triggers>
-      </Style>
-      <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
-        <Setter Property="Width" Value="36"/>
-        <Setter Property="Height" Value="36"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="Margin" Value="8,0,0,0"/>
-        <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
-      </Style>
-      <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
-        <Setter Property="Appearance" Value="Secondary"/>
-        <Setter Property="FontSize" Value="20"/>
-        <Setter Property="Height" Value="52"/>
-        <Setter Property="HorizontalContentAlignment" Value="Left"/>
-        <Setter Property="Padding" Value="12,8"/>
-        <Setter Property="Margin" Value="0,0,0,8"/>
-      </Style>
-      <Style TargetType="GroupBox">
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="BorderBrush" Value="#CCCCCC"/>
-        <Setter Property="Background" Value="#F5F5F5"/>
-        <Setter Property="Padding" Value="8"/>
-        <Setter Property="Foreground" Value="Black"/>
-        <Setter Property="FontWeight" Value="Normal"/>
-        <Setter Property="FontSize" Value="12"/>
-        <Setter Property="Margin" Value="0,0,0,12"/>
-      </Style>
-  </Window.Resources>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.18"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.12"/>
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+        </Style>
+        <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
+            <Setter Property="Appearance" Value="Secondary"/>
+            <Setter Property="FontSize" Value="20"/>
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#CCCCCC"/>
+            <Setter Property="Background" Value="#F5F5F5"/>
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+    </Window.Resources>
 
-  <Grid x:Name="RootGrid">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="*" />
-    </Grid.RowDefinitions>
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="150" />
-      <ColumnDefinition x:Name="SidePanelColumn" Width="560" MinWidth="560" />
-      <ColumnDefinition Width="*" />
-    </Grid.ColumnDefinitions>
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition x:Name="SidePanelColumn" Width="560" MinWidth="560" />
+            <ColumnDefinition />
+        </Grid.ColumnDefinitions>
 
-    <!-- ===== Tabs (top) ===== -->
-    <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
-      <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-          <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-              <ui:Button x:Name="BtnLoadImage"
+        <!-- ===== Tabs (top) ===== -->
+        <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
+            <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <ui:Button x:Name="BtnLoadImage"
                          Margin="0,0,8,0"
                          MinWidth="120"
                          ToolTip="Open an image"
@@ -135,7 +135,7 @@
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0"/>
 
-                        <GroupBox Header="Layouts" Margin="0,0,0,12" Width="553" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}">
+                        <GroupBox Header="Layouts" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
                             <StackPanel>
 
                                 <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
@@ -153,41 +153,40 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <ui:Button Command="{Binding LayoutProfiles.RefreshCommand}"
-                             Margin="0,0,4,0" Width="100" Height="45">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0" Width="507">
+                                    <ui:Button Command="{Binding LayoutProfiles.RefreshCommand}" Width="85" Height="45" VerticalAlignment="Center" Padding="0,5,0,6" Margin="4,0,0,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Width="102">
                                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowClockwise24}" Margin="0,0,8,0" FontSize="16"/>
                                             <TextBlock Text="Refresh" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </ui:Button>
                                     <ui:Button Command="{Binding LayoutProfiles.LoadSelectedCommand}"
-                             Margin="0,0,4,0" Width="100" Height="45">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                             Margin="4,0,4,0" Width="73" Height="45" Padding="0,5,0,6">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Width="75">
                                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowRight24}" Margin="0,0,8,0" FontSize="16"/>
                                             <TextBlock
                                         Text="Load" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </ui:Button>
                                     <ui:Button Margin="0,0,4,0"
-                             Click="SaveCurrentLayoutAs_Click" Width="100" Height="45">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                             Click="SaveCurrentLayoutAs_Click" Width="85" Height="45" Padding="0,5,11,6">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Width="80" RenderTransformOrigin="0.512,0.553">
                                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                             <TextBlock Text="Save as" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </ui:Button>
-                                    <ui:Button Command="{Binding LayoutProfiles.DeleteSelectedCommand}" Height="45" Width="100">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ui:Button Command="{Binding LayoutProfiles.DeleteSelectedCommand}" Height="45" Width="69" Padding="0,5,0,6">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
                                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                                             <TextBlock Text="Delete" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </ui:Button>
                                     <ui:Button Margin="4,0,0,0"
                              Command="{Binding BlankDatasetCommand}"
-                             ToolTip="Create a blank dataset for the current layout" Height="45" Width="100">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                             ToolTip="Create a blank dataset for the current layout" Height="45" Width="72" Padding="4,5,4,6">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
                                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
-                                            <TextBlock Text="Blank " VerticalAlignment="Center"/>
+                                            <TextBlock Text="Blank "/>
                                         </StackPanel>
                                     </ui:Button>
                                 </StackPanel>
@@ -197,117 +196,110 @@
 
                         <GroupBox x:Name="MasterRoiGroup"
                       Header="Master ROI"
-                      Margin="0,0,0,12" Height="409" ScrollViewer.VerticalScrollBarVisibility="Disabled" FontSize="16">
+                      Margin="0,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" FontSize="16" Width="437" HorizontalAlignment="Left">
                             <Grid Margin="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="10*"/>
-                                    <ColumnDefinition Width="241*"/>
-                                    <ColumnDefinition Width="250*"/>
+                                    <ColumnDefinition Width="179*"/>
+                                    <ColumnDefinition Width="204*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Column="0" Margin="0,0,33,191" Grid.ColumnSpan="3">
-                                    <TextBlock Text="Master 1" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <Grid>
+                                <StackPanel Grid.Column="0" Grid.ColumnSpan="2">
+                                    <TextBlock Text="Master 1" FontWeight="SemiBold" Margin="0,0,0,6" Width="165" HorizontalAlignment="Left"/>
+                                    <Grid Width="218" HorizontalAlignment="Left">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" MinWidth="49"/>
                                             <ColumnDefinition/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Shape:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
-                                        <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Height="37" Margin="27,0,256,0">
+                                        <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Height="37" HorizontalAlignment="Left" Width="135" Margin="1,0,0,0">
                                             <ComboBoxItem Content="Rectángulo"/>
                                             <ComboBoxItem Content="Círculo"/>
                                             <ComboBoxItem Content="Annulus"/>
                                         </ComboBox>
                                     </Grid>
-                                    <Grid Margin="0,0,0,6">
+                                    <Grid Margin="0,0,0,6" Width="216" HorizontalAlignment="Left">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto" MinWidth="50"/>
+                                            <ColumnDefinition/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" RenderTransformOrigin="0.521,0.527" Margin="38,0,260,0"/>
+                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
+                                        <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" RenderTransformOrigin="0.521,0.527" HorizontalAlignment="Left" Width="135" Height="37"/>
                                     </Grid>
-                                    <WrapPanel Width="420">
+                                    <WrapPanel Width="112" RenderTransformOrigin="0.515,0.547" HorizontalAlignment="Left" Margin="65,0,0,0">
                                         <ui:Button x:Name="BtnEditM1"
                                MinHeight="26"
                                Padding="8,4"
-                               Click="BtnEditM1_Click" Height="36" Width="133" HorizontalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                               Click="BtnEditM1_Click" Height="37" Width="37" HorizontalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="22" Width="18">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                                <TextBlock Text="Edit M1" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                         <ui:Button x:Name="BtnM1_Remove"
                                MinHeight="26"
                                Padding="8,4"
-                               Margin="4,0,0,0"
-                               Click="BtnM1_Remove_Click">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                               Click="BtnM1_Remove_Click" Width="37" Height="37" VerticalAlignment="Stretch" HorizontalAlignment="Left">
+                                            <StackPanel Orientation="Horizontal" Height="22" HorizontalAlignment="Left" RenderTransformOrigin="1,0.521" Width="17">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
-                                                <TextBlock Text="Remove" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                         <ui:Button x:Name="BtnM1_Create"
                                MinHeight="26"
                                Padding="8,4"
-                               Click="BtnM1_Create_Click" HorizontalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                               Click="BtnM1_Create_Click" Width="37" Height="37" HorizontalAlignment="Left">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="18" Width="15">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
-                                                <TextBlock Text="Create" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                     </WrapPanel>
                                 </StackPanel>
 
-                                <StackPanel Margin="0,181,124,0" Height="190" VerticalAlignment="Top" Grid.ColumnSpan="3">
-                                    <TextBlock Text="Master 2" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                    <Grid Margin="0,0,0,6">
+                                <StackPanel Grid.Column="2" HorizontalAlignment="Left" Width="188" Margin="10,0,0,0">
+                                    <TextBlock Text="Master 2" FontWeight="SemiBold" Width="146"/>
+                                    <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="ComboM2Role" Grid.Column="1" Width="140"/>
-                                    </Grid>
-                                    <Grid Margin="0,0,0,8">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Text="Shape:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <ComboBox x:Name="ComboM2Shape" Grid.Column="1" Width="140">
+                                        <TextBlock Text="Shape:" VerticalAlignment="Top" Margin="0,10,8,0"/>
+                                        <ComboBox x:Name="ComboM2Shape" Grid.Column="1" HorizontalAlignment="Left" Width="135" Margin="0,5,0,0" VerticalAlignment="Top">
                                             <ComboBoxItem Content="Rectángulo"/>
                                             <ComboBoxItem Content="Círculo"/>
                                             <ComboBoxItem Content="Annulus"/>
                                         </ComboBox>
                                     </Grid>
-                                    <WrapPanel Width="493">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" MinWidth="40"/>
+                                            <ColumnDefinition/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
+                                        <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="10,0,0,0" Height="37" HorizontalAlignment="Left" Width="135"/>
+                                    </Grid>
+                                    <WrapPanel Width="118" HorizontalAlignment="Left" Margin="60,7,0,0">
                                         <ui:Button x:Name="BtnEditM2"
                                MinHeight="26"
                                Padding="8,4"
                                Margin="4,0,0,0"
-                               Click="BtnEditM2_Click">
+                               Click="BtnEditM2_Click" Width="37" Height="37">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                                <TextBlock Text="Edit Master 2" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                         <ui:Button x:Name="BtnM2_Remove"
                                MinHeight="26"
                                Padding="8,4"
-                               Click="BtnM2_Remove_Click" Width="104" HorizontalAlignment="Center">
+                               Click="BtnM2_Remove_Click" Width="37" HorizontalAlignment="Center" Height="37">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
-                                                <TextBlock Text="Remove" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                         <ui:Button x:Name="BtnM2_Create"
                                MinHeight="26"
                                Padding="8,4"
-                               Click="BtnM2_Create_Click" RenderTransformOrigin="4.067,0.5" HorizontalAlignment="Center" Width="120">
+                               Click="BtnM2_Create_Click" RenderTransformOrigin="4.067,0.5" HorizontalAlignment="Center" Width="37" Height="37">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
-                                                <TextBlock Text="Create" VerticalAlignment="Center"/>
                                             </StackPanel>
                                         </ui:Button>
                                     </WrapPanel>
@@ -324,118 +316,96 @@
                                 </StackPanel>
                             </ui:Button>
                         </WrapPanel>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-
-                            <GroupBox Header="Analyze Options" Width="260" Height="381" Margin="0,0,0,0" Padding="8,16,8,8" ScrollViewer.CanContentScroll="True">
-                                <StackPanel Margin="8,4,0,0">
-                                    <StackPanel Height="102" CanVerticallyScroll="True">
-                                        <CheckBox x:Name="ChkDisableRot"
+                        <GroupBox Header="Analyze Options" Width="260" Height="204" Padding="8,16,8,8" ScrollViewer.CanContentScroll="True" HorizontalAlignment="Left">
+                            <StackPanel Margin="8,4,0,0">
+                                <StackPanel Height="102" CanVerticallyScroll="True">
+                                    <CheckBox x:Name="ChkDisableRot"
                               Content="Disable rot"
                               IsChecked="{Binding DisableRot, Mode=TwoWay}"/>
-                                        <CheckBox x:Name="ChkScaleLock"
+                                    <CheckBox x:Name="ChkScaleLock"
                               Content="Lock scale"
                               IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
-                                        <CheckBox x:Name="ChkUseLocalMatcher"
+                                    <CheckBox x:Name="ChkUseLocalMatcher"
                               Content="Use local matcher"
                               ToolTip="Force local matcher"
                               IsChecked="True"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                        <TextBlock Text="Position tolerance (px)"
-                               Width="146"
-                               VerticalAlignment="Center"/>
-                                        <TextBox Width="76"
-                             Text="{Binding AnalyzePosTolerancePx, Mode=TwoWay, StringFormat=\{0:F2\}, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                        <TextBlock Text="Angle tolerance (deg)"
-                               Width="146"
-                               VerticalAlignment="Center"/>
-                                        <TextBox Width="70"
-                             Text="{Binding AnalyzeAngToleranceDeg, Mode=TwoWay, StringFormat=\{0:F2\}, UpdateSourceTrigger=PropertyChanged}"/>
-                                    </StackPanel>
-                                    <ui:Button x:Name="BtnAnalyzeMaster"
-                             Click="BtnAnalyzeMaster_Click">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
-                                            <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </ui:Button>
                                 </StackPanel>
-                            </GroupBox>
-
-                            <StackPanel Orientation="Vertical">
-                                <GroupBox Header="Master 1 Analyze" Width="260">
-                                    <StackPanel Margin="8,4,0,0">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                            <ComboBox x:Name="ComboFeature" Width="110"
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0"/>
+                                <ui:Button x:Name="BtnAnalyzeMaster"
+                             Click="BtnAnalyzeMaster_Click">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ui:Button>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Master 1 Analyze" Width="260" UseLayoutRounding="False">
+                            <StackPanel Margin="8,4,0,0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="ComboFeature" Width="110"
                                 SelectedValuePath="Content"
                                 SelectedValue="{Binding AnalyzeFeatureM1, Mode=TwoWay}">
-                                                <ComboBoxItem Content="auto"/>
-                                                <ComboBoxItem Content="sift"/>
-                                                <ComboBoxItem Content="orb"/>
-                                                <ComboBoxItem Content="tm_rot"/>
-                                                <ComboBoxItem Content="edges"/>
-                                            </ComboBox>
-                                        </StackPanel>
+                                        <ComboBoxItem Content="auto"/>
+                                        <ComboBoxItem Content="sift"/>
+                                        <ComboBoxItem Content="orb"/>
+                                        <ComboBoxItem Content="tm_rot"/>
+                                        <ComboBoxItem Content="edges"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                            <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtThr" Width="40"
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtThr" Width="40"
                                Margin="4,0,0,0"
                                Text="{Binding AnalyzeThrM1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </GroupBox>
-
-                                <GroupBox Header="Master 2 Analyze" Width="260">
-                                    <StackPanel Margin="8,4,0,0">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                            <ComboBox x:Name="ComboFeatureM2" Width="110"
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Master 2 Analyze" Width="260">
+                            <StackPanel Margin="8,4,0,0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="ComboFeatureM2" Width="110"
                                 SelectedValuePath="Content"
                                 SelectedValue="{Binding AnalyzeFeatureM2, Mode=TwoWay}">
-                                                <ComboBoxItem Content="auto"/>
-                                                <ComboBoxItem Content="sift"/>
-                                                <ComboBoxItem Content="orb"/>
-                                                <ComboBoxItem Content="tm_rot"/>
-                                                <ComboBoxItem Content="edges"/>
-                                            </ComboBox>
-                                        </StackPanel>
+                                        <ComboBoxItem Content="auto"/>
+                                        <ComboBoxItem Content="sift"/>
+                                        <ComboBoxItem Content="orb"/>
+                                        <ComboBoxItem Content="tm_rot"/>
+                                        <ComboBoxItem Content="edges"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                            <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtThrM2" Width="40"
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtThrM2" Width="40"
                                Margin="4,0,0,0"
                                Text="{Binding AnalyzeThrM2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </GroupBox>
-
-                                <GroupBox Header="Match Options" Width="260">
-                                    <StackPanel Margin="8,4,0,0">
-                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
-                                            <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
-                                            <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtSMin" Width="60" Margin="4,0,8,0" Text="0.95"/>
-                                            <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
-                                            <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
-                                        </StackPanel>
-                                        <WrapPanel>
-                                            <ui:Button x:Name="BtnSavePreset" Click="BtnSavePreset_Click" Margin="0,0,8,0">
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
-                                                    <TextBlock Text="Save Preset" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </ui:Button>
-                                        </WrapPanel>
-                                    </StackPanel>
-                                </GroupBox>
+                                </StackPanel>
                             </StackPanel>
-                        </StackPanel>
+                        </GroupBox>
+                        <GroupBox Header="Match Options" Width="260">
+                            <StackPanel Margin="8,4,0,0">
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
+                                    <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtSMin" Width="60" Margin="4,0,8,0" Text="0.95"/>
+                                    <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
+                                </StackPanel>
+                                <WrapPanel>
+                                    <ui:Button x:Name="BtnSavePreset" Click="BtnSavePreset_Click" Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
+                                            <TextBlock Text="Save Preset" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ui:Button>
+                                </WrapPanel>
+                            </StackPanel>
+                        </GroupBox>
 
                         <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
                             <StackPanel Margin="8,4,0,0">
@@ -1259,45 +1229,45 @@
             </TabItem>
         </TabControl>
 
-    <Border Grid.Row="1" Grid.Column="0"
+        <Border Grid.Row="1" Grid.Column="0"
             BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
             Background="#F7F7F7">
-      <StackPanel Margin="8">
-        <ui:Button Style="{StaticResource LeftNavButtonStyle}">
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" FontSize="18" Margin="0,0,10,0"/>
-            <TextBlock Text="Layout Setup" VerticalAlignment="Center"/>
-          </StackPanel>
-        </ui:Button>
-        <ui:Button Style="{StaticResource LeftNavButtonStyle}">
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}" FontSize="18" Margin="0,0,10,0"/>
-            <TextBlock Text="ROIs Management" VerticalAlignment="Center"/>
-          </StackPanel>
-        </ui:Button>
-        <ui:Button Style="{StaticResource LeftNavButtonStyle}">
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlayCircle24}" FontSize="18" Margin="0,0,10,0"/>
-            <TextBlock Text="Batch Inspection" VerticalAlignment="Center"/>
-          </StackPanel>
-        </ui:Button>
-        <ui:Button Style="{StaticResource LeftNavButtonStyle}" Margin="0">
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" FontSize="18" Margin="0,0,10,0"/>
-            <TextBlock Text="Comms" VerticalAlignment="Center"/>
-          </StackPanel>
-        </ui:Button>
-      </StackPanel>
-    </Border>
+            <StackPanel Margin="8">
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" FontSize="18" Margin="0,0,10,0"/>
+                        <TextBlock Text="Layout Setup" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}" FontSize="18" Margin="0,0,10,0"/>
+                        <TextBlock Text="ROIs Management" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlayCircle24}" FontSize="18" Margin="0,0,10,0"/>
+                        <TextBlock Text="Batch Inspection" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}" Margin="0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" FontSize="18" Margin="0,0,10,0"/>
+                        <TextBlock Text="Comms" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+            </StackPanel>
+        </Border>
 
-      <!-- ===== Viewer/Canvas (right) ===== -->
-      <Grid Grid.Column="2" Grid.RowSpan="2" x:Name="ViewerHost">
-        <Grid Margin="10">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
+        <!-- ===== Viewer/Canvas (right) ===== -->
+        <Grid Grid.Column="2" Grid.RowSpan="2" x:Name="ViewerHost">
+            <Grid Margin="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
                 <AdornerDecorator Grid.Row="1" Margin="0,8,0,0">
                     <Grid Background="#111">
@@ -1523,28 +1493,28 @@
               Panel.ZIndex="999"
               Grid.RowSpan="2"
               Grid.ColumnSpan="3">
-          <Border Width="360"
+            <Border Width="360"
                   Padding="18"
                   Background="White"
                   CornerRadius="12"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center">
-            <StackPanel>
-              <TextBlock x:Name="BusyTitleText"
+                <StackPanel>
+                    <TextBlock x:Name="BusyTitleText"
                          Text="Working..."
                          FontSize="20"
                          FontWeight="SemiBold"
                          Margin="0,0,0,12"/>
-              <ProgressBar x:Name="BusyProgress"
+                    <ProgressBar x:Name="BusyProgress"
                            Height="6"
                            Width="260"
                            IsIndeterminate="True"/>
-              <TextBlock Text="Please wait..."
+                    <TextBlock Text="Please wait..."
                          FontSize="12"
                          Margin="0,12,0,0"
                          Opacity="0.7"/>
-            </StackPanel>
-          </Border>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Window>

@@ -17,125 +17,92 @@
         <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
         <conv:BoolToBrushConverter x:Key="BoolToBrush" />
         <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
-        <Style x:Key="ForegroundWhiteStyle" TargetType="{x:Type StackPanel}">
-            <Setter Property="TextElement.Foreground" Value="Black"/>
-        </Style>
-        <Style x:Key="FluentShadowButtonBase" TargetType="{x:Type ui:Button}">
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
-            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect BlurRadius="0" ShadowDepth="0" Opacity="0"/>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Effect">
-                        <Setter.Value>
-                            <DropShadowEffect BlurRadius="12" ShadowDepth="1" Opacity="0.18"/>
-                        </Setter.Value>
-                    </Setter>
-                </Trigger>
-                <Trigger Property="IsPressed" Value="True">
-                    <Setter Property="Effect">
-                        <Setter.Value>
-                            <DropShadowEffect BlurRadius="10" ShadowDepth="0" Opacity="0.12"/>
-                        </Setter.Value>
-                    </Setter>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
-        <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Margin" Value="8,0,0,0"/>
-            <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
-        </Style>
-        <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}" BasedOn="{StaticResource FluentShadowButtonBase}">
-            <Setter Property="Appearance" Value="Secondary"/>
-            <Setter Property="FontSize" Value="20"/>
-            <Setter Property="Height" Value="52"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Padding" Value="12,8"/>
-            <Setter Property="Margin" Value="0,0,0,8"/>
-        </Style>
-        <Style TargetType="GroupBox">
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#CCCCCC"/>
-            <Setter Property="Background" Value="#F5F5F5"/>
-            <Setter Property="Padding" Value="8"/>
-            <Setter Property="Foreground" Value="Black"/>
-            <Setter Property="FontWeight" Value="Normal"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Margin" Value="0,0,0,12"/>
-        </Style>
+        <Style TargetType="GroupBox" BasedOn="{StaticResource CardGroupBoxStyle}" />
     </Window.Resources>
+
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Control" Key="O" Command="ApplicationCommands.Open" />
+        <KeyBinding Modifiers="Control" Key="S" Command="ApplicationCommands.Save" />
+        <KeyBinding Modifiers="Control" Key="L" Command="ApplicationCommands.Find" />
+        <KeyBinding Modifiers="Control" Key="E" Command="ApplicationCommands.Print" />
+        <KeyBinding Key="F5" Command="NavigationCommands.Refresh" />
+    </Window.InputBindings>
 
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="NavColumn" Width="220" MinWidth="180" />
+            <ColumnDefinition x:Name="SidePanelColumn" Width="520" MinWidth="420" />
             <ColumnDefinition Width="Auto" />
-            <ColumnDefinition x:Name="SidePanelColumn" Width="560" MinWidth="560" />
             <ColumnDefinition />
         </Grid.ColumnDefinitions>
+
+        <!-- ===== Top bar ===== -->
+        <Border Grid.Row="0" Grid.ColumnSpan="4" Padding="16,10" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left" Spacing="12">
+                    <TextBlock Text="BrakeDiscInspector" FontWeight="Bold" FontSize="18" />
+                    <TextBlock Text="|" Opacity="0.6" />
+                    <TextBlock Text="{DynamicResource PrimaryActions}" FontWeight="SemiBold" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Spacing="8" VerticalAlignment="Center">
+                    <ComboBox x:Name="ThemeSelector"
+                              Width="140"
+                              SelectionChanged="ThemeSelector_OnSelectionChanged"
+                              ToolTip="Toggle light/dark/auto theme">
+                        <ComboBoxItem Content="{DynamicResource ThemeAuto}" />
+                        <ComboBoxItem Content="{DynamicResource ThemeLight}" />
+                        <ComboBoxItem Content="{DynamicResource ThemeDark}" />
+                    </ComboBox>
+                    <ui:Button x:Name="TogglePanelButton"
+                               Style="{StaticResource IconTextButtonStyle}"
+                               Click="TogglePanelButton_OnClick"
+                               Tag="{x:Static ui:SymbolRegular.ChevronLeft24}"
+                               ToolTip="{DynamicResource CollapsePanel}"
+                               Content="{DynamicResource CollapsePanel}" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
 
         <!-- ===== Tabs (top) ===== -->
         <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
             <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12" Spacing="8">
                             <ui:Button x:Name="BtnLoadImage"
-                         Margin="0,0,8,0"
-                         MinWidth="120"
-                         ToolTip="Open an image"
-                         Click="BtnLoadImage_Click" Height="48" Width="154">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Image24}" Margin="0,0,8,0" FontSize="16"/>
-                                    <TextBlock Text="Load Picture" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </ui:Button>
+                                       Style="{StaticResource IconTextButtonStyle}"
+                                       MinWidth="140"
+                                       ToolTip="{DynamicResource LoadPictureTooltip}"
+                                       Tag="{x:Static ui:SymbolRegular.Image24}"
+                                       Content="{DynamicResource LoadImage}"
+                                       Click="BtnLoadImage_Click" />
                             <ui:Button x:Name="BtnLoadLayout"
-                         Margin="0,0,8,0"
-                         MinWidth="120"
-                         Click="BtnLoadLayout_Click" Height="48" Width="138">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0" FontSize="16"/>
-                                    <TextBlock Text="Load Layout" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </ui:Button>
+                                       Style="{StaticResource IconTextButtonStyle}"
+                                       MinWidth="140"
+                                       ToolTip="{DynamicResource LoadLayoutTooltip}"
+                                       Tag="{x:Static ui:SymbolRegular.Folder24}"
+                                       Content="{DynamicResource LoadLayout}"
+                                       Click="BtnLoadLayout_Click" />
                             <ui:Button x:Name="BtnSaveLayout"
-                         MinWidth="120"
-                         Click="BtnSaveLayout_Click" Height="52" Width="140">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="43" Width="118">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
-                                    <TextBlock Text="Save Layout" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                                        <TextBlock.RenderTransform>
-                                            <TransformGroup>
-                                                <ScaleTransform/>
-                                                <SkewTransform AngleX="0"/>
-                                                <RotateTransform/>
-                                                <TranslateTransform X="0"/>
-                                            </TransformGroup>
-                                        </TextBlock.RenderTransform>
-                                    </TextBlock>
-                                </StackPanel>
-                            </ui:Button>
+                                       Style="{StaticResource IconTextButtonStyle}"
+                                       MinWidth="140"
+                                       ToolTip="{DynamicResource SaveLayoutTooltip}"
+                                       Tag="{x:Static ui:SymbolRegular.Save24}"
+                                       Content="{DynamicResource SaveLayout}"
+                                       Click="BtnSaveLayout_Click" />
                         </StackPanel>
-                        <CheckBox Content="Layout Autosave"
+                        <CheckBox Content="{DynamicResource LayoutAutosave}"
                       IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=Window}}"
                       />
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0"/>
 
-                        <GroupBox Header="Layouts" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
+                        <GroupBox Header="{DynamicResource Layouts}" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
                             <StackPanel>
 
                                 <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
@@ -213,8 +180,8 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Shape:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
                                         <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Height="37" HorizontalAlignment="Left" Width="135" Margin="1,0,0,0">
-                                            <ComboBoxItem Content="Rectángulo"/>
-                                            <ComboBoxItem Content="Círculo"/>
+                                            <ComboBoxItem Content="Rectangle"/>
+                                            <ComboBoxItem Content="Circle"/>
                                             <ComboBoxItem Content="Annulus"/>
                                         </ComboBox>
                                     </Grid>
@@ -263,8 +230,8 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Text="Shape:" VerticalAlignment="Top" Margin="0,10,8,0"/>
                                         <ComboBox x:Name="ComboM2Shape" Grid.Column="1" HorizontalAlignment="Left" Width="135" Margin="0,5,0,0" VerticalAlignment="Top">
-                                            <ComboBoxItem Content="Rectángulo"/>
-                                            <ComboBoxItem Content="Círculo"/>
+                                            <ComboBoxItem Content="Rectangle"/>
+                                            <ComboBoxItem Content="Circle"/>
                                             <ComboBoxItem Content="Annulus"/>
                                         </ComboBox>
                                     </Grid>
@@ -1260,8 +1227,10 @@
             </StackPanel>
         </Border>
 
+        <GridSplitter Grid.Row="1" Grid.Column="2" Style="{StaticResource PanelGridSplitterStyle}" ShowsPreview="True" ResizeBehavior="PreviousAndNext" DragCompleted="PanelSplitter_OnDragCompleted" />
+
         <!-- ===== Viewer/Canvas (right) ===== -->
-        <Grid Grid.Column="2" Grid.RowSpan="2" x:Name="ViewerHost">
+        <Grid Grid.Column="3" Grid.Row="1" x:Name="ViewerHost">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -1487,12 +1456,37 @@
                 </Border>
             </Grid>
         </Grid>
+        <Border Grid.Row="2" Grid.ColumnSpan="4" Padding="12,10" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="0" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="{DynamicResource StatusBackend}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding DataContext.HealthSummary, ElementName=WorkflowHost}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Text="{DynamicResource StatusMode}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding ModeStatusText, RelativeSource={RelativeSource AncestorType=Window}}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Right" Spacing="8" VerticalAlignment="Center">
+                    <ui:ProgressRing Width="18" Height="18" IsActive="{Binding DataContext.IsBusy, ElementName=WorkflowHost}" />
+                    <TextBlock Text="{Binding BusyStatusText, RelativeSource={RelativeSource AncestorType=Window}}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <Grid x:Name="BusyOverlay"
               Background="#66000000"
               Visibility="Collapsed"
               Panel.ZIndex="999"
-              Grid.RowSpan="2"
-              Grid.ColumnSpan="3">
+              Grid.RowSpan="3"
+              Grid.ColumnSpan="4">
             <Border Width="360"
                   Padding="18"
                   Background="White"

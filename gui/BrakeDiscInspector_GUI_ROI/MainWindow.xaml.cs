@@ -66,6 +66,8 @@ using WRect = System.Windows.Rect; // CODEX: alias for WPF rectangles.
 using WPoint = System.Windows.Point; // CODEX: alias for WPF points.
 using WInt32Rect = System.Windows.Int32Rect; // CODEX: alias for WPF Int32Rect.
 // --- END: UI/OCV type aliases ---
+using BrakeDiscInspector_GUI_ROI.Properties;
+using Wpf.Ui.Controls;
 
 namespace BrakeDiscInspector_GUI_ROI
 {
@@ -106,6 +108,29 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _layoutAutosaveEnabled;
         private bool _hasAppliedLayoutSnapshot;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
+        private double _lastSidePanelWidth = 520;
+        private bool _isPanelCollapsed;
+        private string _modeStatusText = "Ready";
+        public string ModeStatusText
+        {
+            get => _modeStatusText;
+            private set
+            {
+                _modeStatusText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _busyStatusText = "Idle";
+        public string BusyStatusText
+        {
+            get => _busyStatusText;
+            private set
+            {
+                _busyStatusText = value;
+                OnPropertyChanged();
+            }
+        }
 
         private IDisposable FreezeRoiRepositionScope([CallerMemberName] string? scope = null)
             => new ActionOnDispose(
@@ -3357,6 +3382,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 InitializeComponent();
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent() OK"); // CODEX: string interpolation compatibility.
 
+                ConfigureCommandBindings();
+                ApplySavedUiPreferences();
+                UpdateBusyStatus();
+                UpdateModeStatusText();
+
                 GuiLog.Info($"[BOOT] MainWindow ctor → ApplyDrawToolSelection()"); // CODEX: string interpolation compatibility.
                 ApplyDrawToolSelection(_currentDrawTool, updateViewModel: false);
                 GuiLog.Info($"[BOOT] MainWindow ctor → ApplyDrawToolSelection OK"); // CODEX: string interpolation compatibility.
@@ -3441,6 +3471,181 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Error($"[BOOT] MainWindow ctor FAILED", ex); // CODEX: string interpolation compatibility.
                 throw; // importante: re-lanzar para que VS lo muestre
             }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            Settings.Default.SidePanelWidth = _lastSidePanelWidth;
+            Settings.Default.IsSidePanelCollapsed = _isPanelCollapsed;
+            Settings.Default.Save();
+            base.OnClosed(e);
+        }
+
+        private void ConfigureCommandBindings()
+        {
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (_, _) => BtnLoadImage_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (_, _) => BtnSaveLayout_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Find, (_, _) => BtnLoadLayout_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Print, (_, _) => ViewModel?.InferFromCurrentRoiCommand.Execute(null), (_, e) => e.CanExecute = ViewModel?.InferFromCurrentRoiCommand?.CanExecute(null) == true && CanExecuteWhenIdle()));
+            CommandBindings.Add(new CommandBinding(NavigationCommands.Refresh, (_, _) => BtnAnalyzeMaster_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
+        }
+
+        private bool CanExecuteWhenIdle()
+        {
+            return ViewModel?.IsBusy != true;
+        }
+
+        private void ApplySavedUiPreferences()
+        {
+            try
+            {
+                _lastSidePanelWidth = SidePanelColumn.Width.Value;
+                var settings = Settings.Default;
+                if (settings.SidePanelWidth > SidePanelColumn.MinWidth)
+                {
+                    _lastSidePanelWidth = settings.SidePanelWidth;
+                    SidePanelColumn.Width = new GridLength(settings.SidePanelWidth);
+                }
+
+                SetPanelCollapsed(settings.IsSidePanelCollapsed, false);
+                SetThemeSelection(settings.ThemePreference);
+                ApplyTheme(settings.ThemePreference);
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[ui] failed to apply saved preferences", ex);
+            }
+        }
+
+        private void UpdatePanelToggleLabel()
+        {
+            if (TogglePanelButton == null)
+            {
+                return;
+            }
+
+            var label = GetResourceString(_isPanelCollapsed ? "ExpandPanel" : "CollapsePanel", _isPanelCollapsed ? "Expand panel" : "Collapse panel");
+            TogglePanelButton.Content = label;
+            TogglePanelButton.ToolTip = label;
+            TogglePanelButton.Tag = _isPanelCollapsed ? SymbolRegular.ChevronRight24 : SymbolRegular.ChevronLeft24;
+        }
+
+        private void SetPanelCollapsed(bool collapsed, bool updateSettings = true)
+        {
+            if (SidePanelColumn == null || NavColumn == null)
+            {
+                return;
+            }
+
+            if (collapsed)
+            {
+                if (SidePanelColumn.ActualWidth > 1)
+                {
+                    _lastSidePanelWidth = SidePanelColumn.ActualWidth;
+                }
+
+                SidePanelColumn.Width = new GridLength(0);
+                NavColumn.Width = new GridLength(0);
+            }
+            else
+            {
+                var targetWidth = Math.Max(_lastSidePanelWidth, SidePanelColumn.MinWidth);
+                SidePanelColumn.Width = new GridLength(targetWidth);
+                NavColumn.Width = new GridLength(Math.Max(NavColumn.MinWidth, NavColumn.Width.Value > 0 ? NavColumn.Width.Value : 200));
+            }
+
+            _isPanelCollapsed = collapsed;
+            UpdatePanelToggleLabel();
+
+            if (updateSettings)
+            {
+                Settings.Default.IsSidePanelCollapsed = collapsed;
+                Settings.Default.SidePanelWidth = _lastSidePanelWidth;
+                Settings.Default.Save();
+            }
+        }
+
+        private void TogglePanelButton_OnClick(object sender, RoutedEventArgs e)
+        {
+            SetPanelCollapsed(!_isPanelCollapsed);
+        }
+
+        private void PanelSplitter_OnDragCompleted(object sender, DragCompletedEventArgs e)
+        {
+            if (_isPanelCollapsed)
+            {
+                return;
+            }
+
+            _lastSidePanelWidth = SidePanelColumn.ActualWidth;
+            Settings.Default.SidePanelWidth = _lastSidePanelWidth;
+            Settings.Default.Save();
+        }
+
+        private void ThemeSelector_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (ThemeSelector?.SelectedItem is ComboBoxItem item)
+            {
+                ApplyTheme(item.Content?.ToString());
+            }
+        }
+
+        private void SetThemeSelection(string? preference)
+        {
+            var normalized = string.IsNullOrWhiteSpace(preference) ? "Auto" : preference;
+            if (ThemeSelector == null)
+            {
+                return;
+            }
+
+            ThemeSelector.SelectedIndex = normalized.Equals("Dark", StringComparison.OrdinalIgnoreCase)
+                ? 2
+                : normalized.Equals("Light", StringComparison.OrdinalIgnoreCase)
+                    ? 1
+                    : 0;
+        }
+
+        private void ApplyTheme(string? preference)
+        {
+            var desired = string.IsNullOrWhiteSpace(preference) ? "Auto" : preference;
+            try
+            {
+                var themeDictionary = Application.Current.Resources.MergedDictionaries.OfType<ThemesDictionary>().FirstOrDefault();
+                if (themeDictionary != null)
+                {
+                    themeDictionary.Theme = desired;
+                }
+                Settings.Default.ThemePreference = desired;
+                Settings.Default.Save();
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error($"[theme] failed to set theme {desired}", ex); // CODEX: string interpolation compatibility.
+            }
+        }
+
+        private string GetResourceString(string key, string fallback)
+        {
+            return TryFindResource(key) as string ?? fallback;
+        }
+
+        private void UpdateBusyStatus()
+        {
+            BusyStatusText = CanExecuteWhenIdle()
+                ? GetResourceString("StatusIdle", "Idle")
+                : GetResourceString("StatusBusy", "Working");
+        }
+
+        private void UpdateModeStatusText()
+        {
+            if (_editModeActive)
+            {
+                ModeStatusText = "ROI editing";
+                return;
+            }
+
+            var roi = ViewModel?.SelectedInspectionRoi;
+            ModeStatusText = roi != null ? $"Inspecting ROI {roi.Index}" : "Ready";
         }
 
         private void SyncPresetUiFromLayoutAnalyzeOptions()
@@ -7985,6 +8190,12 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 RequestBatchHeatmapPlacement($"vm-global:{e.PropertyName}", ViewModel); // CODEX: ensure global VM changes still capture the ROI index at schedule time.
             }
+            else if (string.Equals(e.PropertyName, nameof(Workflow.WorkflowViewModel.IsBusy), StringComparison.Ordinal))
+            {
+                Dispatcher.Invoke(UpdateBusyStatus);
+            }
+
+            Dispatcher.Invoke(UpdateModeStatusText);
         }
 
         private void WorkflowViewModelOnBatchStarted(object? sender, EventArgs e)

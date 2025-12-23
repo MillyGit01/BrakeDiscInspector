@@ -953,7 +953,7 @@
                         </ui:Button>
 
                         <!-- ▶ Play = Start/Resume -->
-                        <ui:Button Style="{StaticResource IconOnlyButton}"
+                        <ui:Button Style="{StaticResource IconOnlyButtonStyle}"
                        ToolTip="Play / Start or Resume"
                        AutomationProperties.Name="Play"
                        Command="{Binding StartBatchCommand}">
@@ -961,7 +961,7 @@
                         </ui:Button>
 
                         <!-- ⏸ Pause -->
-                        <ui:Button Style="{StaticResource IconOnlyButton}"
+                        <ui:Button Style="{StaticResource IconOnlyButtonStyle}"
                        ToolTip="Pause"
                        AutomationProperties.Name="Pause"
                        Command="{Binding PauseBatchCommand}">
@@ -969,7 +969,7 @@
                         </ui:Button>
 
                         <!-- ■ Stop -->
-                        <ui:Button Style="{StaticResource IconOnlyButton}"
+                        <ui:Button Style="{StaticResource IconOnlyButtonStyle}"
                        ToolTip="Stop"
                        AutomationProperties.Name="Stop"
                        Command="{Binding StopBatchCommand}">

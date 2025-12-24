@@ -99,8 +99,6 @@
                     <CheckBox Content="{DynamicResource LayoutAutosave}"
                               IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=Window}}"/>
 
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0"/>
-
                     <GroupBox Header="{DynamicResource Layouts}" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
                         <StackPanel>
 
@@ -119,16 +117,16 @@
                                 </ListBox.ItemTemplate>
                             </ListBox>
 
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" Width="507">
+                            <WrapPanel Margin="0,8,0,0">
                                 <ui:Button Command="{Binding LayoutProfiles.RefreshCommand}" Width="85" Height="45" VerticalAlignment="Center" Padding="0,5,0,6" Margin="4,0,0,0">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Width="102">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
                                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowClockwise24}" Margin="0,0,8,0" FontSize="16"/>
                                         <TextBlock Text="Refresh" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </ui:Button>
                                 <ui:Button Command="{Binding LayoutProfiles.LoadSelectedCommand}"
                                            Margin="4,0,4,0" Width="73" Height="45" Padding="0,5,0,6">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Width="75">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowRight24}" Margin="0,0,8,0" FontSize="16"/>
                                         <TextBlock
                                             Text="Load" VerticalAlignment="Center"/>
@@ -136,7 +134,7 @@
                                 </ui:Button>
                                 <ui:Button Margin="0,0,4,0"
                                            Click="SaveCurrentLayoutAs_Click" Width="85" Height="45" Padding="0,5,11,6">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" Width="80" RenderTransformOrigin="0.512,0.553">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" RenderTransformOrigin="0.512,0.553">
                                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                         <TextBlock Text="Save as" VerticalAlignment="Center"/>
                                     </StackPanel>
@@ -155,7 +153,7 @@
                                         <TextBlock Text="Blank "/>
                                     </StackPanel>
                                 </ui:Button>
-                            </StackPanel>
+                            </WrapPanel>
 
                         </StackPanel>
                     </GroupBox>

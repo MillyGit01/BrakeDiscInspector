@@ -67,7 +67,6 @@ using WPoint = System.Windows.Point; // CODEX: alias for WPF points.
 using WInt32Rect = System.Windows.Int32Rect; // CODEX: alias for WPF Int32Rect.
 // --- END: UI/OCV type aliases ---
 using BrakeDiscInspector_GUI_ROI.Properties;
-using Wpf.Ui.Controls;
 
 namespace BrakeDiscInspector_GUI_ROI
 {
@@ -3527,7 +3526,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var label = GetResourceString(_isPanelCollapsed ? "ExpandPanel" : "CollapsePanel", _isPanelCollapsed ? "Expand panel" : "Collapse panel");
             TogglePanelButton.Content = label;
             TogglePanelButton.ToolTip = label;
-            TogglePanelButton.Tag = _isPanelCollapsed ? SymbolRegular.ChevronRight24 : SymbolRegular.ChevronLeft24;
+            TogglePanelButton.Tag = _isPanelCollapsed ? Wpf.Ui.Controls.SymbolRegular.ChevronRight24 : Wpf.Ui.Controls.SymbolRegular.ChevronLeft24;
         }
 
         private void SetPanelCollapsed(bool collapsed, bool updateSettings = true)

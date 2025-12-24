@@ -14,8 +14,8 @@
         <Setter Property="ContentTemplate">
             <Setter.Value>
                 <DataTemplate>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                        <ui:SymbolIcon Symbol="{Binding RelativeSource={RelativeSource AncestorType=ui:Button}, Path=Tag}" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{Binding RelativeSource={RelativeSource AncestorType=ui:Button}, Path=Tag}" FontSize="16" Margin="0,0,8,0" />
                         <TextBlock Text="{Binding}" VerticalAlignment="Center" />
                     </StackPanel>
                 </DataTemplate>

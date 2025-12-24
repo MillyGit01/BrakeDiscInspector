@@ -3612,10 +3612,33 @@ namespace BrakeDiscInspector_GUI_ROI
                 : desired;
             try
             {
-                var themeDictionary = Application.Current.Resources.MergedDictionaries.OfType<ThemesDictionary>().FirstOrDefault();
+                var themeDictionary = Application.Current.Resources.MergedDictionaries
+                    .FirstOrDefault(dictionary => dictionary.GetType().Name == "ThemesDictionary");
                 if (themeDictionary != null)
                 {
-                    themeDictionary.Theme = themeValue;
+                    var themeProperty = themeDictionary.GetType().GetProperty("Theme");
+                    if (themeProperty != null && themeProperty.CanWrite)
+                    {
+                        var targetType = themeProperty.PropertyType;
+                        object? resolvedValue = themeValue;
+
+                        if (targetType.IsEnum)
+                        {
+                            if (Enum.TryParse(targetType, themeValue, true, out var parsed))
+                            {
+                                resolvedValue = parsed;
+                            }
+                        }
+                        else if (targetType != typeof(string) && targetType != typeof(object))
+                        {
+                            resolvedValue = null;
+                        }
+
+                        if (resolvedValue != null)
+                        {
+                            themeProperty.SetValue(themeDictionary, resolvedValue);
+                        }
+                    }
                 }
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();

@@ -444,10 +444,10 @@
                                     </ui:Button.Style>
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddOkInspection1"
-                                           Margin="4,0,0,0"
-                                           Padding="4,2"
                                            Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
-                                           CommandParameter="{Binding Inspection1}">
+                                           CommandParameter="{Binding Inspection1}"
+                                           Margin="4,0,0,0"
+                                           Padding="4,2">
                                     <ui:Button.Style>
                                         <Style TargetType="{x:Type ui:Button}">
                                             <Setter Property="IsEnabled" Value="True"/>

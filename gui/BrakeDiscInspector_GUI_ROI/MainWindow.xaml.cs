@@ -3607,12 +3607,15 @@ namespace BrakeDiscInspector_GUI_ROI
         private void ApplyTheme(string? preference)
         {
             var desired = string.IsNullOrWhiteSpace(preference) ? "Auto" : preference;
+            var themeValue = desired.Equals("Auto", StringComparison.OrdinalIgnoreCase)
+                ? "Light"
+                : desired;
             try
             {
                 var themeDictionary = Application.Current.Resources.MergedDictionaries.OfType<ThemesDictionary>().FirstOrDefault();
                 if (themeDictionary != null)
                 {
-                    themeDictionary.Theme = desired;
+                    themeDictionary.Theme = themeValue;
                 }
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();

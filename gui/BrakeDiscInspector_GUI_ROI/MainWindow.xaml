@@ -44,16 +44,17 @@
         <!-- ===== Top bar ===== -->
         <Border Grid.Row="0" Grid.ColumnSpan="4" Padding="16,10" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,0,0,1">
             <DockPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left" Spacing="12">
-                    <TextBlock Text="BrakeDiscInspector" FontWeight="Bold" FontSize="18" />
-                    <TextBlock Text="|" Opacity="0.6" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left">
+                    <TextBlock Text="BrakeDiscInspector" FontWeight="Bold" FontSize="18" Margin="0,0,12,0" />
+                    <TextBlock Text="|" Opacity="0.6" Margin="0,0,12,0" />
                     <TextBlock Text="{DynamicResource PrimaryActions}" FontWeight="SemiBold" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Spacing="8" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
                     <ComboBox x:Name="ThemeSelector"
                               Width="140"
                               SelectionChanged="ThemeSelector_OnSelectionChanged"
-                              ToolTip="Toggle light/dark/auto theme">
+                              ToolTip="Toggle light/dark/auto theme"
+                              Margin="0,0,8,0">
                         <ComboBoxItem Content="{DynamicResource ThemeAuto}" />
                         <ComboBoxItem Content="{DynamicResource ThemeLight}" />
                         <ComboBoxItem Content="{DynamicResource ThemeDark}" />
@@ -73,7 +74,7 @@
             <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                             <ui:Button x:Name="BtnLoadImage"
                                        Style="{StaticResource IconTextButtonStyle}"
                                        MinWidth="140"
@@ -1464,18 +1465,18 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Orientation="Horizontal" Grid.Column="0" Spacing="6" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource StatusBackend}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding DataContext.HealthSummary, ElementName=WorkflowHost}" />
+                    <TextBlock Text="{Binding DataContext.HealthSummary, ElementName=WorkflowHost}" Margin="6,0,0,0" />
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource StatusMode}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding ModeStatusText, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    <TextBlock Text="{Binding ModeStatusText, RelativeSource={RelativeSource AncestorType=Window}}" Margin="6,0,0,0" />
                 </StackPanel>
 
-                <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Right" Spacing="8" VerticalAlignment="Center">
-                    <ui:ProgressRing Width="18" Height="18" IsActive="{Binding DataContext.IsBusy, ElementName=WorkflowHost}" />
+                <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                    <ui:ProgressRing Width="18" Height="18" IsIndeterminate="{Binding DataContext.IsBusy, ElementName=WorkflowHost}" Margin="0,0,8,0" />
                     <TextBlock Text="{Binding BusyStatusText, RelativeSource={RelativeSource AncestorType=Window}}" />
                 </StackPanel>
             </Grid>

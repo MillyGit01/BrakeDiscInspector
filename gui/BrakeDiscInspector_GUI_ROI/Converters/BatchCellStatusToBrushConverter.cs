@@ -3,16 +3,11 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
-using BrakeDiscInspector_GUI_ROI.Workflow;
 
 namespace BrakeDiscInspector_GUI_ROI.Converters
 {
     public sealed class BatchCellStatusToBrushConverter : IValueConverter
     {
-        public Brush OkBrush { get; set; } = Brushes.LimeGreen;
-        public Brush NokBrush { get; set; } = Brushes.Red;
-        public Brush UnknownBrush { get; set; } = Brushes.Gray;
-
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (targetType != typeof(Brush) && !targetType.IsAssignableFrom(typeof(Brush)))
@@ -20,22 +15,54 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
                 return DependencyProperty.UnsetValue;
             }
 
-            if (value is not BatchCellStatus status)
+            if (value == null || value == DependencyProperty.UnsetValue)
             {
-                return UnknownBrush;
+                return Brushes.Gray;
             }
 
-            return status switch
+            if (value is bool boolValue)
             {
-                BatchCellStatus.Ok => OkBrush,
-                BatchCellStatus.Nok => NokBrush,
-                _ => UnknownBrush,
-            };
+                return boolValue ? Brushes.LimeGreen : Brushes.IndianRed;
+            }
+
+            if (value is string textValue)
+            {
+                return MapStatusText(textValue);
+            }
+
+            if (value is Enum || value is int)
+            {
+                return MapStatusText(value.ToString());
+            }
+
+            return Brushes.Gray;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            throw new NotSupportedException();
+            return DependencyProperty.UnsetValue;
+        }
+
+        private static Brush MapStatusText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text) || text.Trim() == "-")
+            {
+                return Brushes.Gray;
+            }
+
+            if (text.IndexOf("OK", StringComparison.OrdinalIgnoreCase) >= 0
+                || text.IndexOf("PASS", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return Brushes.LimeGreen;
+            }
+
+            if (text.IndexOf("NG", StringComparison.OrdinalIgnoreCase) >= 0
+                || text.IndexOf("FAIL", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return Brushes.IndianRed;
+            }
+
+            return Brushes.Gray;
         }
     }
 }

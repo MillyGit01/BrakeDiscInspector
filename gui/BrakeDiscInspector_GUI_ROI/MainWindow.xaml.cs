@@ -14621,6 +14621,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BtnM2S_Save_Click(object sender, RoutedEventArgs e) => SaveFor(MasterState.DrawM2_Search);
         private void BtnM2S_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(MasterState.DrawM2_Search);
 
+        private void BtnAddOkInspection1_Click()
+        {
+
+        }
+
         private void BtnEditM2_Click(object sender, RoutedEventArgs e)
         {
             if (_layout == null)

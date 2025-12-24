@@ -69,39 +69,91 @@
             </DockPanel>
         </Border>
 
-        <!-- ===== Tabs (top) ===== -->
-        <TabControl Grid.Row="1" Grid.Column="1" x:Name="MainTabs" TabStripPlacement="Top">
-            <TabItem x:Name="TabSetupInspect" Header="Setup &amp; Inspection">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="SetupInspectRoot" Margin="8" Orientation="Vertical">
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                            <ui:Button x:Name="BtnLoadImage"
-                                       Style="{StaticResource IconTextButtonStyle}"
-                                       MinWidth="140"
-                                       ToolTip="{DynamicResource LoadPictureTooltip}"
-                                       Tag="{x:Static ui:SymbolRegular.Image24}"
-                                       Content="{DynamicResource LoadImage}"
-                                       Click="BtnLoadImage_Click" />
-                            <ui:Button x:Name="BtnLoadLayout"
-                                       Style="{StaticResource IconTextButtonStyle}"
-                                       MinWidth="140"
-                                       ToolTip="{DynamicResource LoadLayoutTooltip}"
-                                       Tag="{x:Static ui:SymbolRegular.Folder24}"
-                                       Content="{DynamicResource LoadLayout}"
-                                       Click="BtnLoadLayout_Click" />
-                            <ui:Button x:Name="BtnSaveLayout"
-                                       Style="{StaticResource IconTextButtonStyle}"
-                                       MinWidth="140"
-                                       ToolTip="{DynamicResource SaveLayoutTooltip}"
-                                       Tag="{x:Static ui:SymbolRegular.Save24}"
-                                       Content="{DynamicResource SaveLayout}"
-                                       Click="BtnSaveLayout_Click" />
-                        </StackPanel>
-                        <CheckBox Content="{DynamicResource LayoutAutosave}"
-                      IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=Window}}"
-                      />
+        <!-- ===== Side Panel Host ===== -->
+        <Grid Grid.Row="1" Grid.Column="1" x:Name="SidePanelHost">
+            <ScrollViewer x:Name="LayoutSetupPanel" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="8" Orientation="Vertical">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <ui:Button x:Name="BtnLoadImage"
+                                   Style="{StaticResource IconTextButtonStyle}"
+                                   MinWidth="140"
+                                   ToolTip="{DynamicResource LoadPictureTooltip}"
+                                   Tag="{x:Static ui:SymbolRegular.Image24}"
+                                   Content="{DynamicResource LoadImage}"
+                                   Click="BtnLoadImage_Click" />
+                        <ui:Button x:Name="BtnLoadLayout"
+                                   Style="{StaticResource IconTextButtonStyle}"
+                                   MinWidth="140"
+                                   ToolTip="{DynamicResource LoadLayoutTooltip}"
+                                   Tag="{x:Static ui:SymbolRegular.Folder24}"
+                                   Content="{DynamicResource LoadLayout}"
+                                   Click="BtnLoadLayout_Click" />
+                        <ui:Button x:Name="BtnSaveLayout"
+                                   Style="{StaticResource IconTextButtonStyle}"
+                                   MinWidth="140"
+                                   ToolTip="{DynamicResource SaveLayoutTooltip}"
+                                   Tag="{x:Static ui:SymbolRegular.Save24}"
+                                   Content="{DynamicResource SaveLayout}"
+                                   Click="BtnSaveLayout_Click" />
+                    </StackPanel>
+                    <CheckBox Content="{DynamicResource LayoutAutosave}"
+                              IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=Window}}"/>
 
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0"/>
+                    <GroupBox Header="{DynamicResource Layouts}" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
+                        <StackPanel>
+
+                            <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
+                                     SelectedItem="{Binding LayoutProfiles.SelectedProfile}"
+                                     Height="240">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding DisplayName}" Width="160"/>
+                                            <TextBlock Text="{Binding CreatedUtc, StringFormat=\{0:yyyy-MM-dd HH:mm\}}"
+                                                       Opacity="0.6"
+                                                       Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <WrapPanel Margin="0,8,0,0">
+                                <ui:Button Command="{Binding LayoutProfiles.RefreshCommand}" Width="85" Height="45" VerticalAlignment="Center" Padding="0,5,0,6" Margin="4,0,0,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowClockwise24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ui:Button>
+                                <ui:Button Command="{Binding LayoutProfiles.LoadSelectedCommand}"
+                                           Margin="4,0,4,0" Width="73" Height="45" Padding="0,5,0,6">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowRight24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock
+                                            Text="Load" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ui:Button>
+                                <ui:Button Margin="0,0,4,0"
+                                           Click="SaveCurrentLayoutAs_Click" Width="85" Height="45" Padding="0,5,11,6">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" RenderTransformOrigin="0.512,0.553">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock Text="Save as" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ui:Button>
+                                <ui:Button Command="{Binding LayoutProfiles.DeleteSelectedCommand}" Height="45" Width="69" Padding="0,5,0,6">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock Text="Delete" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ui:Button>
+                                <ui:Button Margin="4,0,0,0"
+                                           Command="{Binding BlankDatasetCommand}"
+                                           ToolTip="Create a blank dataset for the current layout" Height="45" Width="72" Padding="4,5,4,6">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock Text="Blank "/>
+                                    </StackPanel>
+                                </ui:Button>
+                            </WrapPanel>
 
                         <GroupBox Header="{DynamicResource Layouts}" Margin="10,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
                             <StackPanel>

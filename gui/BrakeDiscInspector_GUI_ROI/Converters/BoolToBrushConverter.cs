@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 
@@ -7,18 +8,19 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
 {
     public class BoolToBrushConverter : IValueConverter
     {
-        public Brush OnBrush { get; set; } = Brushes.LimeGreen;
-
-        public Brush OffBrush { get; set; } = Brushes.Gray;
-
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (value is bool flag && flag)
+            if (value == null || value == DependencyProperty.UnsetValue)
             {
-                return OnBrush;
+                return Brushes.Gray;
             }
 
-            return OffBrush;
+            if (value is bool flag)
+            {
+                return flag ? Brushes.LimeGreen : Brushes.IndianRed;
+            }
+
+            return Brushes.Gray;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

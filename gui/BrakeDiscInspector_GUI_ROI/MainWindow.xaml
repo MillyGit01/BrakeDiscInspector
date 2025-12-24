@@ -308,52 +308,59 @@
                                 </ui:Button>
                             </StackPanel>
                         </GroupBox>
-                        <GroupBox Header="Master 1 Analyze" Width="260" UseLayoutRounding="False">
-                            <StackPanel Margin="8,4,0,0">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="ComboFeature" Width="110"
-                                SelectedValuePath="Content"
-                                SelectedValue="{Binding AnalyzeFeatureM1, Mode=TwoWay}">
-                                        <ComboBoxItem Content="auto"/>
-                                        <ComboBoxItem Content="sift"/>
-                                        <ComboBoxItem Content="orb"/>
-                                        <ComboBoxItem Content="tm_rot"/>
-                                        <ComboBoxItem Content="edges"/>
-                                    </ComboBox>
-                                </StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <GroupBox Grid.Column="0" Header="Master 1 Analyze" Width="260" UseLayoutRounding="False">
+                                <StackPanel Margin="8,4,0,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <ComboBox x:Name="ComboFeature" Width="110"
+                                    SelectedValuePath="Content"
+                                    SelectedValue="{Binding AnalyzeFeatureM1, Mode=TwoWay}">
+                                            <ComboBoxItem Content="auto"/>
+                                            <ComboBoxItem Content="sift"/>
+                                            <ComboBoxItem Content="orb"/>
+                                            <ComboBoxItem Content="tm_rot"/>
+                                            <ComboBoxItem Content="edges"/>
+                                        </ComboBox>
+                                    </StackPanel>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                                    <TextBox x:Name="TxtThr" Width="40"
-                               Margin="4,0,0,0"
-                               Text="{Binding AnalyzeThrM1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="TxtThr" Width="40"
+                                   Margin="4,0,0,0"
+                                   Text="{Binding AnalyzeThrM1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
-                        </GroupBox>
-                        <GroupBox Header="Master 2 Analyze" Width="260">
-                            <StackPanel Margin="8,4,0,0">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="ComboFeatureM2" Width="110"
-                                SelectedValuePath="Content"
-                                SelectedValue="{Binding AnalyzeFeatureM2, Mode=TwoWay}">
-                                        <ComboBoxItem Content="auto"/>
-                                        <ComboBoxItem Content="sift"/>
-                                        <ComboBoxItem Content="orb"/>
-                                        <ComboBoxItem Content="tm_rot"/>
-                                        <ComboBoxItem Content="edges"/>
-                                    </ComboBox>
-                                </StackPanel>
+                            </GroupBox>
+                            <GroupBox Grid.Column="2" Header="Master 2 Analyze" Width="260">
+                                <StackPanel Margin="8,4,0,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <ComboBox x:Name="ComboFeatureM2" Width="110"
+                                    SelectedValuePath="Content"
+                                    SelectedValue="{Binding AnalyzeFeatureM2, Mode=TwoWay}">
+                                            <ComboBoxItem Content="auto"/>
+                                            <ComboBoxItem Content="sift"/>
+                                            <ComboBoxItem Content="orb"/>
+                                            <ComboBoxItem Content="tm_rot"/>
+                                            <ComboBoxItem Content="edges"/>
+                                        </ComboBox>
+                                    </StackPanel>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                                    <TextBox x:Name="TxtThrM2" Width="40"
-                               Margin="4,0,0,0"
-                               Text="{Binding AnalyzeThrM2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Thr:" VerticalAlignment="Center"/>
+                                        <TextBox x:Name="TxtThrM2" Width="40"
+                                   Margin="4,0,0,0"
+                                   Text="{Binding AnalyzeThrM2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    </StackPanel>
                                 </StackPanel>
-                            </StackPanel>
-                        </GroupBox>
+                            </GroupBox>
+                        </Grid>
                         <GroupBox Header="Match Options" Width="260">
                             <StackPanel Margin="8,4,0,0">
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,8">

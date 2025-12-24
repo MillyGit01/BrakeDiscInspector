@@ -32,6 +32,9 @@
         <Setter Property="ToolTipService.ShowDuration" Value="30000" />
     </Style>
 
+    <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}"
+           BasedOn="{StaticResource IconOnlyButtonStyle}" />
+
     <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}">
         <Setter Property="Appearance" Value="Secondary" />
         <Setter Property="FontSize" Value="18" />

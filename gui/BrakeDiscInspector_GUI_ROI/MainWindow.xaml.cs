@@ -85,6 +85,14 @@ namespace BrakeDiscInspector_GUI_ROI
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+        private enum SidePanelMode
+        {
+            LayoutSetup,
+            RoiManagement,
+            BatchInspection,
+            Comms
+        }
+
         private int _freezeRoiRepositionCounter;
         private bool _pendingActiveInspectionSync;
         private bool _globalUnlocked = false;
@@ -3381,6 +3389,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 InitializeComponent();
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent() OK"); // CODEX: string interpolation compatibility.
 
+                ShowSidePanel(SidePanelMode.LayoutSetup);
+
                 ConfigureCommandBindings();
                 ApplySavedUiPreferences();
                 UpdateBusyStatus();
@@ -3567,6 +3577,39 @@ namespace BrakeDiscInspector_GUI_ROI
         private void TogglePanelButton_OnClick(object sender, RoutedEventArgs e)
         {
             SetPanelCollapsed(!_isPanelCollapsed);
+        }
+
+        private void ShowSidePanel(SidePanelMode mode)
+        {
+            if (LayoutSetupPanel == null || RoiManagementPanel == null || BatchInspectionPanel == null || CommsPanel == null)
+            {
+                return;
+            }
+
+            LayoutSetupPanel.Visibility = mode == SidePanelMode.LayoutSetup ? Visibility.Visible : Visibility.Collapsed;
+            RoiManagementPanel.Visibility = mode == SidePanelMode.RoiManagement ? Visibility.Visible : Visibility.Collapsed;
+            BatchInspectionPanel.Visibility = mode == SidePanelMode.BatchInspection ? Visibility.Visible : Visibility.Collapsed;
+            CommsPanel.Visibility = mode == SidePanelMode.Comms ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSidePanel(SidePanelMode.LayoutSetup);
+        }
+
+        private void NavRoiManagement_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSidePanel(SidePanelMode.RoiManagement);
+        }
+
+        private void NavBatchInspection_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSidePanel(SidePanelMode.BatchInspection);
+        }
+
+        private void NavComms_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSidePanel(SidePanelMode.Comms);
         }
 
         private void PanelSplitter_OnDragCompleted(object sender, DragCompletedEventArgs e)
@@ -4199,11 +4242,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void EnablePresetsTab(bool enable)
         {
-            if (TabSetupInspect != null && !TabSetupInspect.IsEnabled)
-            {
-                TabSetupInspect.IsEnabled = true;
-            }
-
             var roiGroup = FindName("InspectionRoisGroup") as System.Windows.Controls.GroupBox;
             if (roiGroup != null)
             {
@@ -4336,11 +4374,10 @@ namespace BrakeDiscInspector_GUI_ROI
             bool mastersReady = m1Ready && m2Ready;
 
             // Habilitación de tabs por etapas
-            TabSetupInspect.IsEnabled = true;
             EnablePresetsTab(mastersReady || _hasLoadedImage);     // permite la pestaña de inspección tras cargar imagen o completar masters
 
-            // Selección de tab acorde a estado
-            MainTabs.SelectedItem = TabSetupInspect;
+            // Selección de panel acorde a estado
+            ShowSidePanel(SidePanelMode.RoiManagement);
 
             if (_analysisViewActive && _state != MasterState.Ready)
             {
@@ -6981,10 +7018,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             _analysisViewActive = true;
-            if (MainTabs != null && TabSetupInspect != null)
-            {
-                MainTabs.SelectedItem = TabSetupInspect;
-            }
+            ShowSidePanel(SidePanelMode.RoiManagement);
         }
 
         private string? ResolveRoiLabelText(RoiModel roi)
@@ -8266,15 +8300,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void GoToInspectionTab()
         {
-            if (TabSetupInspect != null)
-            {
-                TabSetupInspect.IsEnabled = true;
-            }
-
-            if (MainTabs != null && TabSetupInspect != null)
-            {
-                MainTabs.SelectedItem = TabSetupInspect;
-            }
+            ShowSidePanel(SidePanelMode.RoiManagement);
         }
 
         private void RedrawAllRois()

@@ -171,7 +171,7 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" Grid.ColumnSpan="2">
-                                <TextBlock Text="Master 1" FontWeight="SemiBold" Margin="0,0,0,6" Width="165" HorizontalAlignment="Left"/>
+                                <TextBlock Text="Master 1" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,6" Width="165" HorizontalAlignment="Left"/>
                                 <Grid Width="218" HorizontalAlignment="Left">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" MinWidth="49"/>
@@ -196,10 +196,9 @@
                                     <ui:Button x:Name="BtnEditM1"
                                                MinHeight="26"
                                                Padding="8,4"
+                                               ToolTip="Edit Master 1"
                                                Click="BtnEditM1_Click" Height="37" Width="37" HorizontalAlignment="Center">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Height="22" Width="18">
-                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                        </StackPanel>
+                                        <ui:SymbolIcon x:Name="IconEditM1" Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
                                     </ui:Button>
                                     <ui:Button x:Name="BtnM1_Remove"
                                                MinHeight="26"
@@ -221,7 +220,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" HorizontalAlignment="Left" Width="188" Margin="10,0,0,0">
-                                <TextBlock Text="Master 2" FontWeight="SemiBold" Width="146"/>
+                                <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -247,10 +246,9 @@
                                                MinHeight="26"
                                                Padding="8,4"
                                                Margin="4,0,0,0"
+                                               ToolTip="Edit Master 2"
                                                Click="BtnEditM2_Click" Width="37" Height="37">
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                        </StackPanel>
+                                        <ui:SymbolIcon x:Name="IconEditM2" Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
                                     </ui:Button>
                                     <ui:Button x:Name="BtnM2_Remove"
                                                MinHeight="26"
@@ -395,32 +393,25 @@
                                           SelectionChanged="InspectionShape_SelectionChanged"/>
                                 <ui:Button x:Name="BtnCreateInspection1"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
-                                           MinHeight="26"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 1"
                                            Tag="1"
                                            Click="BtnCreateInspection_Click">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
-                                        <TextBlock Text="Create ROI 1" VerticalAlignment="Center"/>
-                                    </StackPanel>
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
                                 </ui:Button>
                                 <ui:Button Margin="4,0,0,0"
-                                           Padding="12,4"
-                                           MinHeight="26"
                                            DataContext="{Binding DataContext.InspectionRois[0], ElementName=WorkflowHost}"
                                            Click="BtnToggleEdit_Click"
                                            IsEnabled="{Binding Enabled}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 1"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
                                                     <Setter Property="IsEnabled" Value="False"/>
@@ -431,12 +422,10 @@
                                                 <DataTrigger Binding="{Binding IsEditable}" Value="True">
                                                     <Setter Property="Content">
                                                         <Setter.Value>
-                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
-                                                                <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
-                                                            </StackPanel>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
                                                         </Setter.Value>
                                                     </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 1"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -444,18 +433,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddOkInspection1"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 1 to OK"
                                            Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection1}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -471,18 +457,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddNgInspection1"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 1 to NG"
                                            Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection1}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -498,17 +481,14 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnRemoveInspection1"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Remove ROI 1"
                                            Click="BtnRemoveInspection1_Click">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Remove 1" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -531,32 +511,25 @@
                                           SelectionChanged="InspectionShape_SelectionChanged"/>
                                 <ui:Button x:Name="BtnCreateInspection2"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
-                                           MinHeight="26"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 2"
                                            Tag="2"
                                            Click="BtnCreateInspection_Click">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
-                                        <TextBlock Text="Create ROI 2" VerticalAlignment="Center"/>
-                                    </StackPanel>
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
                                 </ui:Button>
                                 <ui:Button Margin="4,0,0,0"
-                                           Padding="12,4"
-                                           MinHeight="26"
                                            DataContext="{Binding DataContext.InspectionRois[1], ElementName=WorkflowHost}"
                                            Click="BtnToggleEdit_Click"
                                            IsEnabled="{Binding Enabled}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 2"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
                                                     <Setter Property="IsEnabled" Value="False"/>
@@ -567,12 +540,10 @@
                                                 <DataTrigger Binding="{Binding IsEditable}" Value="True">
                                                     <Setter Property="Content">
                                                         <Setter.Value>
-                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
-                                                                <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
-                                                            </StackPanel>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
                                                         </Setter.Value>
                                                     </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 2"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -580,18 +551,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddOkInspection2"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 2 to OK"
                                            Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection2}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -607,18 +575,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddNgInspection2"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 2 to NG"
                                            Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection2}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -634,17 +599,14 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnRemoveInspection2"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Remove ROI 2"
                                            Click="BtnRemoveInspection2_Click">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Remove 2" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -667,32 +629,25 @@
                                           SelectionChanged="InspectionShape_SelectionChanged"/>
                                 <ui:Button x:Name="BtnCreateInspection3"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
-                                           MinHeight="26"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 3"
                                            Tag="3"
                                            Click="BtnCreateInspection_Click">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
-                                        <TextBlock Text="Create ROI 3" VerticalAlignment="Center"/>
-                                    </StackPanel>
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
                                 </ui:Button>
                                 <ui:Button Margin="4,0,0,0"
-                                           Padding="12,4"
-                                           MinHeight="26"
                                            DataContext="{Binding DataContext.InspectionRois[2], ElementName=WorkflowHost}"
                                            Click="BtnToggleEdit_Click"
                                            IsEnabled="{Binding Enabled}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 3"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
                                                     <Setter Property="IsEnabled" Value="False"/>
@@ -703,12 +658,10 @@
                                                 <DataTrigger Binding="{Binding IsEditable}" Value="True">
                                                     <Setter Property="Content">
                                                         <Setter.Value>
-                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
-                                                                <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
-                                                            </StackPanel>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
                                                         </Setter.Value>
                                                     </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 3"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -716,18 +669,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddOkInspection3"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 3 to OK"
                                            Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection3}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -743,18 +693,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddNgInspection3"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 3 to NG"
                                            Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection3}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -770,17 +717,14 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnRemoveInspection3"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Remove ROI 3"
                                            Click="BtnRemoveInspection3_Click">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Remove 3" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -803,32 +747,25 @@
                                           SelectionChanged="InspectionShape_SelectionChanged"/>
                                 <ui:Button x:Name="BtnCreateInspection4"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
-                                           MinHeight="26"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 4"
                                            Tag="4"
                                            Click="BtnCreateInspection_Click">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" Margin="0,0,8,0" FontSize="16"/>
-                                        <TextBlock Text="Create ROI 4" VerticalAlignment="Center"/>
-                                    </StackPanel>
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
                                 </ui:Button>
                                 <ui:Button Margin="4,0,0,0"
-                                           Padding="12,4"
-                                           MinHeight="26"
                                            DataContext="{Binding DataContext.InspectionRois[3], ElementName=WorkflowHost}"
                                            Click="BtnToggleEdit_Click"
                                            IsEnabled="{Binding Enabled}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 4"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
                                                     <Setter Property="IsEnabled" Value="False"/>
@@ -839,12 +776,10 @@
                                                 <DataTrigger Binding="{Binding IsEditable}" Value="True">
                                                     <Setter Property="Content">
                                                         <Setter.Value>
-                                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
-                                                                <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
-                                                            </StackPanel>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
                                                         </Setter.Value>
                                                     </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 4"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -852,18 +787,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddOkInspection4"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 4 to OK"
                                            Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection4}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to OK" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -879,18 +811,15 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnAddNgInspection4"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Add ROI 4 to NG"
                                            Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
                                            CommandParameter="{Binding Inspection4}">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Add to NG" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -906,17 +835,14 @@
                                 </ui:Button>
                                 <ui:Button x:Name="BtnRemoveInspection4"
                                            Margin="4,0,0,0"
-                                           Padding="4,2"
+                                           ToolTip="Remove ROI 4"
                                            Click="BtnRemoveInspection4_Click">
                                     <ui:Button.Style>
-                                        <Style TargetType="{x:Type ui:Button}">
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
                                             <Setter Property="IsEnabled" Value="True"/>
                                             <Setter Property="Content">
                                                 <Setter.Value>
-                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
-                                                        <TextBlock Text="Remove 4" VerticalAlignment="Center"/>
-                                                    </StackPanel>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
                                                 </Setter.Value>
                                             </Setter>
                                             <Style.Triggers>
@@ -1144,12 +1070,56 @@
                     </StackPanel>
 
                     <Grid Grid.Row="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <GroupBox Header="Inputs" Grid.Column="0" Margin="0,0,8,0">
+                        <GroupBox Header="Backend" Grid.ColumnSpan="2" Margin="0,0,0,12"
+                                  DataContext="{Binding DataContext, ElementName=WorkflowHost}">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="Role" VerticalAlignment="Center"/>
+                                <TextBox Grid.Column="1" Margin="8,0" Width="160"
+                                         Text="{Binding RoleId, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                <TextBlock Grid.Row="1" Text="ROI" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Margin="8,4,8,0" Width="160"
+                                         Text="{Binding RoiId, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                <TextBlock Grid.Row="2" Text="Backend" VerticalAlignment="Center"/>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="8,4,8,0">
+                                    <TextBox Width="260" Margin="0,0,8,0"
+                                             Text="{Binding BackendBaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <ui:Button Padding="12,4"
+                                               Command="{Binding RefreshHealthCommand}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pulse24}" Margin="0,0,8,0"/>
+                                            <TextBlock Text="Health" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ui:Button>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="2" Grid.Column="2" Margin="8,4,0,0"
+                                           Text="{Binding HealthSummary}" TextWrapping="Wrap" Width="200"/>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="Inputs" Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
                             <ItemsControl ItemsSource="{Binding Inputs}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -1175,7 +1145,7 @@
                             </ItemsControl>
                         </GroupBox>
 
-                        <GroupBox Header="Outputs" Grid.Column="1">
+                        <GroupBox Header="Outputs" Grid.Row="1" Grid.Column="1">
                             <ItemsControl ItemsSource="{Binding Outputs}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>

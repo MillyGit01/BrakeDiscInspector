@@ -8071,10 +8071,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _editingM1 = false;
                 _activeMaster1Role = null;
-                if (BtnEditM1 != null)
-                {
-                    BtnEditM1.Content = "Edit Master 1";
-                }
+                UpdateMasterEditButtonVisuals();
                 SetMasterFrozen(1, true);
                 RemoveAdornersForMaster(1);
                 changed = true;
@@ -8084,10 +8081,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _editingM2 = false;
                 _activeMaster2Role = null;
-                if (BtnEditM2 != null)
-                {
-                    BtnEditM2.Content = "Edit Master 2";
-                }
+                UpdateMasterEditButtonVisuals();
                 SetMasterFrozen(2, true);
                 RemoveAdornersForMaster(2);
                 changed = true;
@@ -8104,6 +8098,27 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             UpdateWorkflowMasterEditState();
+        }
+
+        private void UpdateMasterEditButtonVisuals()
+        {
+            if (BtnEditM1 != null && IconEditM1 != null)
+            {
+                bool isEditing = _editingM1;
+                IconEditM1.Symbol = isEditing
+                    ? Wpf.Ui.Controls.SymbolRegular.Save24
+                    : Wpf.Ui.Controls.SymbolRegular.Edit24;
+                BtnEditM1.ToolTip = isEditing ? "Save Master 1" : "Edit Master 1";
+            }
+
+            if (BtnEditM2 != null && IconEditM2 != null)
+            {
+                bool isEditing = _editingM2;
+                IconEditM2.Symbol = isEditing
+                    ? Wpf.Ui.Controls.SymbolRegular.Save24
+                    : Wpf.Ui.Controls.SymbolRegular.Edit24;
+                BtnEditM2.ToolTip = isEditing ? "Save Master 2" : "Edit Master 2";
+            }
         }
 
         private void UpdateWorkflowMasterEditState()
@@ -14414,6 +14429,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _activeMaster2Role = null;
             _isDrawing = false;
             _tmpBuffer = null;
+            UpdateMasterEditButtonVisuals();
             UpdateEditableConfigState();
             RedrawOverlaySafe();
             UpdateWizardState();
@@ -14612,7 +14628,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _isDrawing = false;
                 _editingM1 = true;
                 _editModeActive = true;
-                BtnEditM1.Content = "Save Master 1";
+                UpdateMasterEditButtonVisuals();
 
                 RemoveAdornersForMaster(1);
                 AttachAdornersForMaster(1);
@@ -14628,7 +14644,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _editingM1 = false;
                 _activeMaster1Role = null;
                 _editModeActive = _editingM2;
-                BtnEditM1.Content = "Edit Master 1";
+                UpdateMasterEditButtonVisuals();
                 RedrawOverlaySafe();
                 Snack("Master 1 válido.");
             }
@@ -14712,7 +14728,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _isDrawing = false;
                 _editingM2 = true;
                 _editModeActive = true;
-                BtnEditM2.Content = "Save Master 2";
+                UpdateMasterEditButtonVisuals();
 
                 RemoveAdornersForMaster(2);
                 AttachAdornersForMaster(2);
@@ -14728,7 +14744,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _editingM2 = false;
                 _activeMaster2Role = null;
                 _editModeActive = _editingM1;
-                BtnEditM2.Content = "Edit Master 2";
+                UpdateMasterEditButtonVisuals();
                 RedrawOverlaySafe();
                 Snack("Master 2 válido.");
             }

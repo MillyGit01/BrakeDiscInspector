@@ -20,47 +20,15 @@
                 </Style>
             </StackPanel.Resources>
 
-            <GroupBox Header="Backend">
+            <GroupBox Header="Scale">
                 <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-
-                    <TextBlock Text="Role" VerticalAlignment="Center"/>
-                    <TextBox Grid.Column="1" Margin="8,0" Width="160"
-                             Text="{Binding RoleId, UpdateSourceTrigger=PropertyChanged}"/>
-
-                    <TextBlock Grid.Row="1" Text="ROI" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="1" Grid.Column="1" Margin="8,4,8,0" Width="160"
-                             Text="{Binding RoiId, UpdateSourceTrigger=PropertyChanged}"/>
-
-                    <TextBlock Grid.Row="2" Text="mm/px" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="2" Grid.Column="1" Margin="8,4,8,0" Width="120"
+                    <TextBlock Text="mm/px" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Margin="8,0,0,0" Width="120"
                              Text="{Binding MmPerPx, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:F4}}"/>
-
-                    <TextBlock Grid.Row="3" Text="Backend" VerticalAlignment="Center"/>
-                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="8,4,8,0">
-                        <TextBox Width="260" Margin="0,0,8,0"
-                                 Text="{Binding BackendBaseUrl, UpdateSourceTrigger=PropertyChanged}"/>
-                        <ui:Button Padding="12,4"
-                                   Command="{Binding RefreshHealthCommand}">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pulse24}" Margin="0,0,8,0"/>
-                                <TextBlock Text="Health" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </ui:Button>
-                    </StackPanel>
-
-                    <TextBlock Grid.Row="3" Grid.Column="2" Margin="8,4,0,0"
-                               Text="{Binding HealthSummary}" TextWrapping="Wrap" Width="200"/>
                 </Grid>
             </GroupBox>
 

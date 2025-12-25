@@ -1,4 +1,4 @@
-<Window x:Class="BrakeDiscInspector_GUI_ROI.MainWindow"
+<Window
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -8,6 +8,7 @@
         xmlns:workflow="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow"
         xmlns:conv="clr-namespace:BrakeDiscInspector_GUI_ROI.Converters"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="d" x:Class="BrakeDiscInspector_GUI_ROI.MainWindow"
         Title="BrakeDiscInspector"
         WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
@@ -20,7 +21,7 @@
         <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
         <conv:BoolToBrushConverter x:Key="BoolToBrush" />
         <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
-        <Style TargetType="GroupBox" BasedOn="{StaticResource CardGroupBoxStyle}" />
+        <Style TargetType="{x:Type GroupBox}" BasedOn="{StaticResource CardGroupBoxStyle}" />
     </Window.Resources>
 
     <Window.InputBindings>
@@ -100,9 +101,9 @@
                                    Click="BtnSaveLayout_Click" />
                     </StackPanel>
                     <CheckBox Content="{DynamicResource LayoutAutosave}"
-                              IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType=Window}}"/>
+                              IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
 
-                    <GroupBox Header="{DynamicResource Layouts}" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Left">
+                    <GroupBox Header="{DynamicResource Layouts}" Margin="0,0,0,12" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}" HorizontalAlignment="Left">
                         <StackPanel>
                             <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
                                      SelectedItem="{Binding LayoutProfiles.SelectedProfile}"
@@ -935,7 +936,7 @@
                                 IsSnapToTickEnabled="True"
                                 Value="{Binding BatchPausePerRoiSeconds, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                         <TextBlock Margin="0,4,0,0"
-                                   Text="{Binding BatchPausePerRoiSeconds, StringFormat='Delay: {0:0.0}s'}"/>
+                                   Text="{Binding BatchPausePerRoiSeconds, StringFormat=Delay: \{0:0.0\}s}"/>
                     </StackPanel>
 
                     <Grid Grid.Row="2" Margin="8" x:Name="BatchGrid"
@@ -953,8 +954,8 @@
 
                         <!-- Overlay exactamente encima del rectángulo visible de BaseImage -->
                         <Canvas x:Name="Overlay"
-                                Width="{Binding ElementName=BaseImage, Path=ActualWidth}"
-                                Height="{Binding ElementName=BaseImage, Path=ActualHeight}"
+                                Width="{Binding ActualWidth, ElementName=BaseImage}"
+                                Height="{Binding ActualHeight, ElementName=BaseImage}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 IsHitTestVisible="False"
@@ -1135,7 +1136,7 @@
                                                        Width="140"/>
                                             <ui:Button Margin="8,0,0,0"
                                                        Padding="6,2"
-                                                       Command="{Binding DataContext.ToggleInputCommand, RelativeSource={RelativeSource AncestorType=GroupBox}}"
+                                                       Command="{Binding DataContext.ToggleInputCommand, RelativeSource={RelativeSource AncestorType={x:Type GroupBox}}}"
                                                        CommandParameter="{Binding Id}">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,6,0" FontSize="16"/>
@@ -1161,7 +1162,7 @@
                                                        Width="140"/>
                                             <ui:Button Margin="8,0,0,0"
                                                        Padding="6,2"
-                                                       Command="{Binding DataContext.ToggleOutputCommand, RelativeSource={RelativeSource AncestorType=GroupBox}}"
+                                                       Command="{Binding DataContext.ToggleOutputCommand, RelativeSource={RelativeSource AncestorType={x:Type GroupBox}}}"
                                                        CommandParameter="{Binding Id}">
                                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,6,0" FontSize="16"/>
@@ -1234,7 +1235,7 @@
                        HorizontalAlignment="Left"
                        VerticalAlignment="Top"
                        SnapsToDevicePixels="True"
-                       Opacity="{Binding HeatmapOverlayOpacity, RelativeSource={RelativeSource AncestorType=Window}}"
+                       Opacity="{Binding HeatmapOverlayOpacity, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                        Visibility="Collapsed"
                        Panel.ZIndex="1"/>
                             <Canvas x:Name="CanvasROI"
@@ -1306,16 +1307,16 @@
                   DataContext="{Binding DataContext, ElementName=WorkflowHost}">
                     <StackPanel Orientation="Horizontal">
                         <StackPanel.Resources>
-                            <Style TargetType="Button">
+                            <Style TargetType="{x:Type Button}">
                                 <Setter Property="Foreground" Value="White"/>
                             </Style>
-                            <Style TargetType="ToggleButton">
+                            <Style TargetType="{x:Type ToggleButton}">
                                 <Setter Property="Foreground" Value="White"/>
                             </Style>
-                            <Style TargetType="CheckBox">
+                            <Style TargetType="{x:Type CheckBox}">
                                 <Setter Property="Foreground" Value="White"/>
                             </Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="{x:Type TextBlock}">
                                 <Setter Property="Foreground" Value="White"/>
                             </Style>
                         </StackPanel.Resources>
@@ -1457,12 +1458,12 @@
 
                 <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource StatusMode}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding ModeStatusText, RelativeSource={RelativeSource AncestorType=Window}}" Margin="6,0,0,0" />
+                    <TextBlock Text="{Binding ModeStatusText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Margin="6,0,0,0" />
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <ui:ProgressRing Width="18" Height="18" IsIndeterminate="{Binding DataContext.IsBusy, ElementName=WorkflowHost}" Margin="0,0,8,0" />
-                    <TextBlock Text="{Binding BusyStatusText, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    <TextBlock Text="{Binding BusyStatusText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
                 </StackPanel>
             </Grid>
         </Border>

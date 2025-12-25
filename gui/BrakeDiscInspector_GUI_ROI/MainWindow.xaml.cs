@@ -3583,6 +3583,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (LayoutSetupPanel == null || RoiManagementPanel == null || BatchInspectionPanel == null || CommsPanel == null)
             {
+                GuiLog.Warn("[ui] ShowSidePanel skipped: one or more panels are null (check x:Name bindings).");
                 return;
             }
 

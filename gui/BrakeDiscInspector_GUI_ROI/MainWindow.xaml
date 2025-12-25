@@ -1208,25 +1208,30 @@
             BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
             Background="#F7F7F7">
             <StackPanel Margin="8">
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}">
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                           Click="NavLayoutSetup_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" FontSize="18" Margin="0,0,10,0"/>
                         <TextBlock Text="Layout Setup" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}">
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                           Click="NavRoiManagement_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}" FontSize="18" Margin="0,0,10,0"/>
                         <TextBlock Text="ROIs Management" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}">
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                           Click="NavBatchInspection_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlayCircle24}" FontSize="18" Margin="0,0,10,0"/>
                         <TextBlock Text="Batch Inspection" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}" Margin="0">
+                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                           Click="NavComms_Click"
+                           Margin="0">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" FontSize="18" Margin="0,0,10,0"/>
                         <TextBlock Text="Comms" VerticalAlignment="Center"/>

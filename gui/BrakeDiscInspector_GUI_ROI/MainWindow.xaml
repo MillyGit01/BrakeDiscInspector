@@ -35,7 +35,6 @@
 
         <SolidColorBrush x:Key="BrushAppBackground" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
         <SolidColorBrush x:Key="UI.Brush.Foreground" Color="Black" />
-        <SolidColorBrush x:Key="UI.Brush.Accent" Color="#FF4B9EEA" />
         <SolidColorBrush x:Key="UI.Brush.ButtonForeground" Color="Black" />
         <SolidColorBrush x:Key="UI.Brush.ButtonBackground" Color="#FFE5E5E5" />
         <SolidColorBrush x:Key="UI.Brush.ButtonBackgroundHover" Color="#FFD5D5D5" />
@@ -74,7 +73,7 @@
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.35"
-                                              Color="{Binding Color, Source={StaticResource UI.Brush.Accent}}" />
+                                              Color="{DynamicResource UI.Color.Accent}" />
                         </Setter.Value>
                     </Setter>
                 </Trigger>

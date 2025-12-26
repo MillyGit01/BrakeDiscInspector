@@ -1,0 +1,11 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Accent color (change this key when switching theme if needed) -->
+    <Color x:Key="UI.Color.Accent">#39FF14</Color>
+
+    <!-- Accent brush derived from the accent color -->
+    <SolidColorBrush x:Key="UI.Brush.Accent"
+                     Color="{DynamicResource UI.Color.Accent}" />
+
+</ResourceDictionary>

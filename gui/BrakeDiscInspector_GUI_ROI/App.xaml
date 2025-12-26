@@ -8,6 +8,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Resources/Strings.xaml" />
+                <ResourceDictionary Source="Styles/GuiTokens.xaml" />
                 <ResourceDictionary Source="Styles/ThemeResources.xaml" />
                 <ResourceDictionary Source="Styles/Controls.xaml" />
                 <ui:ThemesDictionary Theme="Light" />

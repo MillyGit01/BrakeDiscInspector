@@ -3363,6 +3363,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _analysisViewActive;
         private DispatcherTimer? _snackTimer;
         private readonly TimeSpan _snackDuration = TimeSpan.FromSeconds(7);
+        private DispatcherTimer? _guiSetupSaveTimer;
+        private string _pendingGuiSetupSaveReason = "Unknown";
         private readonly Dictionary<string, object> _defaultGuiResources = new();
         private readonly List<string> _availableFontFamilies = new() { "Segoe UI", "Calibri", "Arial", "Consolas" };
         private bool _isGuiSetupInitializing;
@@ -3437,6 +3439,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     _snackTimer.Stop();
                     HideSnackVisual();
+                };
+
+                _guiSetupSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                _guiSetupSaveTimer.Tick += (_, _) =>
+                {
+                    _guiSetupSaveTimer.Stop();
+                    PersistGuiSetup(_pendingGuiSetupSaveReason);
                 };
 
                 Closing += MainWindow_OnClosing;
@@ -3675,6 +3684,8 @@ namespace BrakeDiscInspector_GUI_ROI
                         }
                     }
                 }
+                GuiSetupSettingsService.Apply(App.CurrentGuiSetup);
+                SyncGuiSetupPanelFromResources();
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();
             }
@@ -3700,6 +3711,25 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private void RequestPersistGuiSetup(string reason)
+        {
+            _pendingGuiSetupSaveReason = reason;
+            if (_guiSetupSaveTimer == null)
+            {
+                PersistGuiSetup(reason);
+                return;
+            }
+
+            _guiSetupSaveTimer.Stop();
+            _guiSetupSaveTimer.Start();
+        }
+
+        private void FlushGuiSetupPersistence(string reason)
+        {
+            _guiSetupSaveTimer?.Stop();
+            PersistGuiSetup(reason);
+        }
+
         private void SetupGuiButton_Click(object sender, RoutedEventArgs e)
         {
             if (GuiSetupPopup == null)
@@ -3713,13 +3743,13 @@ namespace BrakeDiscInspector_GUI_ROI
         private void ThemeLightButton_Click(object sender, RoutedEventArgs e)
         {
             ApplyTheme("Light");
-            PersistGuiSetup("ThemeLight");
+            RequestPersistGuiSetup("ThemeLight");
         }
 
         private void ThemeDarkButton_Click(object sender, RoutedEventArgs e)
         {
             ApplyTheme("Dark");
-            PersistGuiSetup("ThemeDark");
+            RequestPersistGuiSetup("ThemeDark");
         }
 
         private void InitializeGuiSetupPanel()
@@ -3749,12 +3779,10 @@ namespace BrakeDiscInspector_GUI_ROI
             _defaultGuiResources.Clear();
             foreach (var key in FontFamilyResourceKeys.Concat(FontSizeResourceKeys).Concat(BrushResourceKeys))
             {
-                if (!Resources.Contains(key))
+                if (!TryGetResourceValue(key, out object? value))
                 {
                     continue;
                 }
-
-                var value = Resources[key];
                 if (value is SolidColorBrush brush)
                 {
                     _defaultGuiResources[key] = new SolidColorBrush(brush.Color);
@@ -3805,7 +3833,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is ComboBox combo && combo.Tag is string key && combo.SelectedItem is string familyName)
             {
                 SetFontFamilyResource(key, familyName);
-                PersistGuiSetup("FontFamilyChanged");
+                RequestPersistGuiSetup("FontFamilyChanged");
             }
         }
 
@@ -3819,7 +3847,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is Slider slider && slider.Tag is string key)
             {
                 SetDoubleResource(key, slider.Value);
-                PersistGuiSetup("FontSizeChanged");
+                RequestPersistGuiSetup("FontSizeChanged");
             }
         }
 
@@ -3834,7 +3862,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (TryApplyColorText(textBox, key))
                 {
-                    PersistGuiSetup("ColorTextChanged");
+                    RequestPersistGuiSetup("ColorTextChanged");
                 }
             }
         }
@@ -3847,7 +3875,7 @@ namespace BrakeDiscInspector_GUI_ROI
             TryApplyColorText(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
             TryApplyColorText(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
             TryApplyColorText(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
-            PersistGuiSetup("ApplyColors");
+            RequestPersistGuiSetup("ApplyColors");
         }
 
         private void ResetGuiDefaultsButton_Click(object sender, RoutedEventArgs e)
@@ -3873,6 +3901,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             SyncGuiSetupPanelFromResources();
+            RequestPersistGuiSetup("ResetDefaults");
         }
 
         private void CloseGuiSetupButton_Click(object sender, RoutedEventArgs e)
@@ -3881,6 +3910,11 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 GuiSetupPopup.IsOpen = false;
             }
+        }
+
+        private void GuiSetupPopup_Closed(object? sender, EventArgs e)
+        {
+            FlushGuiSetupPersistence("GuiSetupClosed");
         }
 
         private void SetComboSelectionFromResource(ComboBox? combo, string key)
@@ -3987,23 +4021,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void SetResourceValue(string key, object value)
         {
-            if (Resources.Contains(key))
-            {
-                Resources[key] = value;
-            }
-            else if (Application.Current.Resources.Contains(key))
+            if (Application.Current != null)
             {
                 Application.Current.Resources[key] = value;
-            }
-            else
-            {
-                Resources[key] = value;
             }
         }
 
         private void MainWindow_OnClosing(object? sender, CancelEventArgs e)
         {
-            PersistGuiSetup("WindowClosing");
+            FlushGuiSetupPersistence("WindowClosing");
         }
 
         private bool TryGetResourceValue<T>(string key, out T? value)

@@ -121,6 +121,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
 
         public static GuiSetupSettings CaptureCurrent(Window? window)
         {
+            Log("[CAPTURE] start");
             var settings = new GuiSetupSettings
             {
                 Theme = Settings.Default.ThemePreference
@@ -129,9 +130,14 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             var fontFamilies = new Dictionary<string, string>();
             foreach (var key in FontFamilyKeys)
             {
-                if (TryFindResource(window, key, out var value) && value is FontFamily family)
+                if (TryGetEffectiveResource(window, key, out var value, out var source) && value is FontFamily family)
                 {
                     fontFamilies[key] = family.Source;
+                    LogCapture(key, source, family.Source);
+                }
+                else
+                {
+                    LogCapture(key, source, value);
                 }
             }
 
@@ -143,16 +149,26 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             var fontSizes = new Dictionary<string, double>();
             foreach (var key in FontSizeKeys)
             {
-                if (TryFindResource(window, key, out var value))
+                if (TryGetEffectiveResource(window, key, out var value, out var source))
                 {
                     if (value is double size)
                     {
                         fontSizes[key] = size;
+                        LogCapture(key, source, size.ToString(CultureInfo.InvariantCulture));
                     }
                     else if (value is float floatSize)
                     {
                         fontSizes[key] = floatSize;
+                        LogCapture(key, source, floatSize.ToString(CultureInfo.InvariantCulture));
                     }
+                    else
+                    {
+                        LogCapture(key, source, value);
+                    }
+                }
+                else
+                {
+                    LogCapture(key, source, value);
                 }
             }
 
@@ -164,16 +180,26 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             var brushes = new Dictionary<string, string>();
             foreach (var key in BrushKeys)
             {
-                if (TryFindResource(window, key, out var value))
+                if (TryGetEffectiveResource(window, key, out var value, out var source))
                 {
                     if (value is SolidColorBrush brush)
                     {
                         brushes[key] = brush.Color.ToString();
+                        LogCapture(key, source, brush.Color.ToString());
                     }
                     else if (value is Color color)
                     {
                         brushes[key] = color.ToString();
+                        LogCapture(key, source, color.ToString());
                     }
+                    else
+                    {
+                        LogCapture(key, source, value);
+                    }
+                }
+                else
+                {
+                    LogCapture(key, source, value);
                 }
             }
 
@@ -182,17 +208,26 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 settings.Brushes = brushes;
             }
 
-            if (TryFindResource(window, AccentColorKey, out var accentValue) && accentValue is Color accentColor)
+            if (TryGetEffectiveResource(window, AccentColorKey, out var accentValue, out var accentSource)
+                && accentValue is Color accentColor)
             {
                 settings.Accent = accentColor.ToString();
+                LogCapture(AccentColorKey, accentSource, accentColor.ToString());
             }
-            else if (TryFindResource(window, AccentBrushKey, out var accentBrush) && accentBrush is SolidColorBrush accent)
+            else if (TryGetEffectiveResource(window, AccentBrushKey, out var accentBrush, out var accentBrushSource)
+                     && accentBrush is SolidColorBrush accent)
             {
                 settings.Accent = accent.Color.ToString();
+                LogCapture(AccentBrushKey, accentBrushSource, accent.Color.ToString());
             }
             else if (settings.Brushes != null && settings.Brushes.TryGetValue(AccentBrushKey, out var accentHex))
             {
                 settings.Accent = accentHex;
+                LogCapture(AccentBrushKey, "Snapshot", accentHex);
+            }
+            else
+            {
+                LogCapture(AccentBrushKey, "fallback", null);
             }
 
             return settings;
@@ -205,6 +240,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 return;
             }
 
+            var updatedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (settings.FontFamilies != null)
             {
                 foreach (var pair in settings.FontFamilies)
@@ -212,6 +248,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                     if (!string.IsNullOrWhiteSpace(pair.Value))
                     {
                         SetResourceValue(pair.Key, new FontFamily(pair.Value));
+                        updatedKeys.Add(pair.Key);
                     }
                 }
             }
@@ -221,6 +258,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 foreach (var pair in settings.FontSizes)
                 {
                     SetResourceValue(pair.Key, pair.Value);
+                    updatedKeys.Add(pair.Key);
                 }
             }
 
@@ -233,10 +271,13 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                         if (string.Equals(pair.Key, AccentBrushKey, StringComparison.OrdinalIgnoreCase))
                         {
                             SetAccentResources(color);
+                            updatedKeys.Add(AccentColorKey);
+                            updatedKeys.Add(pair.Key);
                         }
                         else
                         {
                             SetBrushResource(pair.Key, color);
+                            updatedKeys.Add(pair.Key);
                         }
                     }
                 }
@@ -245,28 +286,48 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             if (!string.IsNullOrWhiteSpace(settings.Accent) && TryParseColor(settings.Accent, out var accentColor))
             {
                 SetAccentResources(accentColor);
+                updatedKeys.Add(AccentColorKey);
+                updatedKeys.Add(AccentBrushKey);
             }
+
+            var summary = updatedKeys.Count > 0
+                ? string.Join(", ", updatedKeys)
+                : "none";
+            Log($"[APPLY] dictionary=Application keys=[{summary}]");
         }
 
-        private static bool TryFindResource(Window? window, string key, out object? value)
+        private static bool TryGetEffectiveResource(Window? window, string key, out object? value, out string source)
         {
             value = null;
+            source = "fallback";
             if (window != null)
             {
-                var fromWindow = window.TryFindResource(key);
-                if (fromWindow != null)
+                if (window.Resources.Contains(key))
                 {
-                    value = fromWindow;
+                    var windowValue = window.Resources[key];
+                    if (Application.Current != null && Application.Current.Resources.Contains(key))
+                    {
+                        var appValue = Application.Current.Resources[key];
+                        if (!Equals(windowValue, appValue))
+                        {
+                            value = appValue;
+                            source = "Application";
+                            return true;
+                        }
+                    }
+
+                    value = windowValue;
+                    source = "Window";
                     return true;
                 }
             }
 
             if (Application.Current != null)
             {
-                var fromApp = Application.Current.TryFindResource(key);
-                if (fromApp != null)
+                if (Application.Current.Resources.Contains(key))
                 {
-                    value = fromApp;
+                    value = Application.Current.Resources[key];
+                    source = "Application";
                     return true;
                 }
             }
@@ -346,6 +407,19 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             {
                 // swallow logging failures
             }
+        }
+
+        private static void LogCapture(string key, string source, object? value)
+        {
+            var valueText = value switch
+            {
+                null => "<missing>",
+                Color color => color.ToString(),
+                SolidColorBrush brush => brush.Color.ToString(),
+                FontFamily family => family.Source,
+                _ => value.ToString() ?? "<unknown>"
+            };
+            Log($"[CAPTURE] key={key} source={source} value={valueText}");
         }
 
         private static string BuildSnapshot(GuiSetupSettings settings)

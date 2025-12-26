@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <FontFamily x:Key="UI.FontFamily.Body">Segoe UI</FontFamily>
+    <FontFamily x:Key="UI.FontFamily.Header">Segoe UI</FontFamily>
+
+    <sys:Double x:Key="UI.FontSize.WindowTitle">20</sys:Double>
+    <sys:Double x:Key="UI.FontSize.SectionTitle">16</sys:Double>
+    <sys:Double x:Key="UI.FontSize.GroupHeader">16</sys:Double>
+    <sys:Double x:Key="UI.FontSize.ControlLabel">13</sys:Double>
+    <sys:Double x:Key="UI.FontSize.ControlText">13</sys:Double>
+    <sys:Double x:Key="UI.FontSize.ButtonText">13</sys:Double>
+    <sys:Double x:Key="UI.FontSize.CheckBox">13</sys:Double>
+
+    <SolidColorBrush x:Key="UI.Brush.Foreground" Color="Black" />
+    <SolidColorBrush x:Key="UI.Brush.ButtonForeground" Color="Black" />
+    <SolidColorBrush x:Key="UI.Brush.ButtonBackground" Color="#FFE5E5E5" />
+    <SolidColorBrush x:Key="UI.Brush.ButtonBackgroundHover" Color="#FFD5D5D5" />
+    <SolidColorBrush x:Key="UI.Brush.GroupHeaderForeground" Color="Black" />
+</ResourceDictionary>

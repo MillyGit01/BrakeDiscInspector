@@ -3367,28 +3367,28 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _isGuiSetupInitializing;
         private static readonly string[] FontFamilyResourceKeys =
         {
-            "FontFamilyTitle",
-            "FontFamilyHeader",
-            "FontFamilyLabel",
-            "FontFamilyButton",
-            "FontFamilyTextBox",
-            "FontFamilyComboBox"
+            "UI.FontFamily.Body",
+            "UI.FontFamily.Header"
         };
         private static readonly string[] FontSizeResourceKeys =
         {
-            "FontSizeTitle",
-            "FontSizeHeader",
-            "FontSizeLabel",
-            "FontSizeButton",
-            "FontSizeTextBox",
-            "FontSizeComboBox"
+            "UI.FontSize.WindowTitle",
+            "UI.FontSize.SectionTitle",
+            "UI.FontSize.GroupHeader",
+            "UI.FontSize.ControlLabel",
+            "UI.FontSize.ControlText",
+            "UI.FontSize.ButtonText",
+            "UI.FontSize.CheckBox"
         };
         private static readonly string[] BrushResourceKeys =
         {
             "BrushAppBackground",
-            "BrushAppForeground",
-            "BrushButtonBackground",
-            "BrushButtonForeground"
+            "UI.Brush.Foreground",
+            "UI.Brush.Accent",
+            "UI.Brush.ButtonBackground",
+            "UI.Brush.ButtonBackgroundHover",
+            "UI.Brush.ButtonForeground",
+            "UI.Brush.GroupHeaderForeground"
         };
 
         private void AppendResizeLog(string msg)
@@ -3707,12 +3707,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var combos = new[]
             {
-                TitleFontFamilyCombo,
                 HeaderFontFamilyCombo,
-                LabelFontFamilyCombo,
-                ButtonFontFamilyCombo,
-                TextBoxFontFamilyCombo,
-                ComboBoxFontFamilyCombo
+                BodyFontFamilyCombo
             };
 
             foreach (var combo in combos)
@@ -3757,24 +3753,23 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             _isGuiSetupInitializing = true;
 
-            SetComboSelectionFromResource(TitleFontFamilyCombo, "FontFamilyTitle");
-            SetComboSelectionFromResource(HeaderFontFamilyCombo, "FontFamilyHeader");
-            SetComboSelectionFromResource(LabelFontFamilyCombo, "FontFamilyLabel");
-            SetComboSelectionFromResource(ButtonFontFamilyCombo, "FontFamilyButton");
-            SetComboSelectionFromResource(TextBoxFontFamilyCombo, "FontFamilyTextBox");
-            SetComboSelectionFromResource(ComboBoxFontFamilyCombo, "FontFamilyComboBox");
+            SetComboSelectionFromResource(HeaderFontFamilyCombo, "UI.FontFamily.Header");
+            SetComboSelectionFromResource(BodyFontFamilyCombo, "UI.FontFamily.Body");
 
-            SetSliderValueFromResource(TitleFontSizeSlider, "FontSizeTitle");
-            SetSliderValueFromResource(HeaderFontSizeSlider, "FontSizeHeader");
-            SetSliderValueFromResource(LabelFontSizeSlider, "FontSizeLabel");
-            SetSliderValueFromResource(ButtonFontSizeSlider, "FontSizeButton");
-            SetSliderValueFromResource(TextBoxFontSizeSlider, "FontSizeTextBox");
-            SetSliderValueFromResource(ComboBoxFontSizeSlider, "FontSizeComboBox");
+            SetSliderValueFromResource(WindowTitleFontSizeSlider, "UI.FontSize.WindowTitle");
+            SetSliderValueFromResource(SectionTitleFontSizeSlider, "UI.FontSize.SectionTitle");
+            SetSliderValueFromResource(GroupHeaderFontSizeSlider, "UI.FontSize.GroupHeader");
+            SetSliderValueFromResource(ControlLabelFontSizeSlider, "UI.FontSize.ControlLabel");
+            SetSliderValueFromResource(ControlTextFontSizeSlider, "UI.FontSize.ControlText");
+            SetSliderValueFromResource(ButtonTextFontSizeSlider, "UI.FontSize.ButtonText");
+            SetSliderValueFromResource(CheckBoxFontSizeSlider, "UI.FontSize.CheckBox");
 
-            SetColorTextFromResource(ForegroundColorBox, "BrushAppForeground");
-            SetColorTextFromResource(BackgroundColorBox, "BrushAppBackground");
-            SetColorTextFromResource(ButtonBackgroundColorBox, "BrushButtonBackground");
-            SetColorTextFromResource(ButtonForegroundColorBox, "BrushButtonForeground");
+            SetColorTextFromResource(ForegroundColorBox, "UI.Brush.Foreground");
+            SetColorTextFromResource(AccentColorBox, "UI.Brush.Accent");
+            SetColorTextFromResource(ButtonBackgroundColorBox, "UI.Brush.ButtonBackground");
+            SetColorTextFromResource(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
+            SetColorTextFromResource(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
+            SetColorTextFromResource(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
 
             _isGuiSetupInitializing = false;
         }
@@ -3820,10 +3815,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void ApplyColorsButton_Click(object sender, RoutedEventArgs e)
         {
-            TryApplyColorText(ForegroundColorBox, "BrushAppForeground");
-            TryApplyColorText(BackgroundColorBox, "BrushAppBackground");
-            TryApplyColorText(ButtonBackgroundColorBox, "BrushButtonBackground");
-            TryApplyColorText(ButtonForegroundColorBox, "BrushButtonForeground");
+            TryApplyColorText(ForegroundColorBox, "UI.Brush.Foreground");
+            TryApplyColorText(AccentColorBox, "UI.Brush.Accent");
+            TryApplyColorText(ButtonBackgroundColorBox, "UI.Brush.ButtonBackground");
+            TryApplyColorText(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
+            TryApplyColorText(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
+            TryApplyColorText(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
         }
 
         private void ResetGuiDefaultsButton_Click(object sender, RoutedEventArgs e)

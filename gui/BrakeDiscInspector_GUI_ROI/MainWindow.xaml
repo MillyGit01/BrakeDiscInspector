@@ -74,7 +74,7 @@
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.35"
-                                              Color="{Binding Color, Source={DynamicResource UI.Brush.Accent}}" />
+                                              Color="{Binding Color, Source={StaticResource UI.Brush.Accent}}" />
                         </Setter.Value>
                     </Setter>
                 </Trigger>

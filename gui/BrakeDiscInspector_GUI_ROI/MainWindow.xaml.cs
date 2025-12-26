@@ -3367,7 +3367,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private string _pendingGuiSetupSaveReason = "Unknown";
         private readonly Dictionary<string, object> _defaultGuiResources = new();
         private readonly List<string> _availableFontFamilies = new() { "Segoe UI", "Calibri", "Arial", "Consolas" };
-        private bool _isGuiSetupInitializing;
+        private bool _isGuiSetupSyncingControls;
+        private bool _isGuiSetupInitialized;
         private static readonly string[] FontFamilyResourceKeys =
         {
             "UI.FontFamily.Body",
@@ -3416,6 +3417,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
+                _isGuiSetupInitialized = false;
+                _isGuiSetupSyncingControls = true;
+
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent()"); // CODEX: string interpolation compatibility.
                 InitializeComponent();
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent() OK"); // CODEX: string interpolation compatibility.
@@ -3447,8 +3451,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     _guiSetupSaveTimer.Stop();
                     PersistGuiSetup(_pendingGuiSetupSaveReason);
                 };
-
-                Closing += MainWindow_OnClosing;
 
                 this.SizeChanged += (s, e) =>
                 {
@@ -3685,7 +3687,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                 }
                 GuiSetupSettingsService.Apply(App.CurrentGuiSetup);
-                SyncGuiSetupPanelFromResources();
+                SyncSetupGuiControlsFromResources();
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();
             }
@@ -3737,6 +3739,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            if (!GuiSetupPopup.IsOpen)
+            {
+                SyncSetupGuiControlsFromResources();
+            }
+
             GuiSetupPopup.IsOpen = !GuiSetupPopup.IsOpen;
         }
 
@@ -3754,8 +3761,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void InitializeGuiSetupPanel()
         {
-            _isGuiSetupInitializing = true;
-
             var combos = new[]
             {
                 HeaderFontFamilyCombo,
@@ -3770,8 +3775,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            SyncGuiSetupPanelFromResources();
-            _isGuiSetupInitializing = false;
+            SyncSetupGuiControlsFromResources();
+            _isGuiSetupInitialized = true;
         }
 
         private void CaptureDefaultGuiResources()
@@ -3798,35 +3803,62 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private void SyncGuiSetupPanelFromResources()
+        private void SyncSetupGuiControlsFromResources()
         {
-            _isGuiSetupInitializing = true;
+            GuiSetupSettingsService.Log("[UI] sync controls from resources start");
+            _isGuiSetupSyncingControls = true;
+            try
+            {
+                SetComboSelectionFromResource(HeaderFontFamilyCombo, "UI.FontFamily.Header");
+                SetComboSelectionFromResource(BodyFontFamilyCombo, "UI.FontFamily.Body");
 
-            SetComboSelectionFromResource(HeaderFontFamilyCombo, "UI.FontFamily.Header");
-            SetComboSelectionFromResource(BodyFontFamilyCombo, "UI.FontFamily.Body");
+                SetSliderValueFromResource(WindowTitleFontSizeSlider, "UI.FontSize.WindowTitle");
+                SetSliderValueFromResource(SectionTitleFontSizeSlider, "UI.FontSize.SectionTitle");
+                SetSliderValueFromResource(GroupHeaderFontSizeSlider, "UI.FontSize.GroupHeader");
+                SetSliderValueFromResource(ControlLabelFontSizeSlider, "UI.FontSize.ControlLabel");
+                SetSliderValueFromResource(ControlTextFontSizeSlider, "UI.FontSize.ControlText");
+                SetSliderValueFromResource(ButtonTextFontSizeSlider, "UI.FontSize.ButtonText");
+                SetSliderValueFromResource(CheckBoxFontSizeSlider, "UI.FontSize.CheckBox");
 
-            SetSliderValueFromResource(WindowTitleFontSizeSlider, "UI.FontSize.WindowTitle");
-            SetSliderValueFromResource(SectionTitleFontSizeSlider, "UI.FontSize.SectionTitle");
-            SetSliderValueFromResource(GroupHeaderFontSizeSlider, "UI.FontSize.GroupHeader");
-            SetSliderValueFromResource(ControlLabelFontSizeSlider, "UI.FontSize.ControlLabel");
-            SetSliderValueFromResource(ControlTextFontSizeSlider, "UI.FontSize.ControlText");
-            SetSliderValueFromResource(ButtonTextFontSizeSlider, "UI.FontSize.ButtonText");
-            SetSliderValueFromResource(CheckBoxFontSizeSlider, "UI.FontSize.CheckBox");
+                SetColorTextFromResource(ForegroundColorBox, "UI.Brush.Foreground");
+                SetColorTextFromResource(AccentColorBox, "UI.Brush.Accent");
+                SetColorTextFromResource(ButtonBackgroundColorBox, "UI.Brush.ButtonBackground");
+                SetColorTextFromResource(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
+                SetColorTextFromResource(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
+                SetColorTextFromResource(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
+            }
+            finally
+            {
+                _isGuiSetupSyncingControls = false;
+                GuiSetupSettingsService.Log("[UI] sync controls from resources end");
+            }
+        }
 
-            SetColorTextFromResource(ForegroundColorBox, "UI.Brush.Foreground");
-            SetColorTextFromResource(AccentColorBox, "UI.Brush.Accent");
-            SetColorTextFromResource(ButtonBackgroundColorBox, "UI.Brush.ButtonBackground");
-            SetColorTextFromResource(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
-            SetColorTextFromResource(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
-            SetColorTextFromResource(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
-
-            _isGuiSetupInitializing = false;
+        private bool ShouldIgnoreGuiSetupEvent(FrameworkElement? source, string reason)
+        {
+            var popupOpen = GuiSetupPopup?.IsOpen == true;
+            var name = source?.Name ?? source?.GetType().Name ?? "UnknownControl";
+            GuiSetupSettingsService.Log($"[UI] ignore {name} reason={reason} popupOpen={popupOpen} initialized={_isGuiSetupInitialized} syncing={_isGuiSetupSyncingControls}");
+            return true;
         }
 
         private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_isGuiSetupInitializing)
+            if (!_isGuiSetupInitialized)
             {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "not-initialized");
+                return;
+            }
+
+            if (_isGuiSetupSyncingControls)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "syncing");
+                return;
+            }
+
+            if (GuiSetupPopup != null && !GuiSetupPopup.IsOpen)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "popup-closed");
                 return;
             }
 
@@ -3839,8 +3871,21 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void FontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_isGuiSetupInitializing)
+            if (!_isGuiSetupInitialized)
             {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "not-initialized");
+                return;
+            }
+
+            if (_isGuiSetupSyncingControls)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "syncing");
+                return;
+            }
+
+            if (GuiSetupPopup != null && !GuiSetupPopup.IsOpen)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "popup-closed");
                 return;
             }
 
@@ -3853,8 +3898,21 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void ColorTextBox_LostFocus(object sender, RoutedEventArgs e)
         {
-            if (_isGuiSetupInitializing)
+            if (!_isGuiSetupInitialized)
             {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "not-initialized");
+                return;
+            }
+
+            if (_isGuiSetupSyncingControls)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "syncing");
+                return;
+            }
+
+            if (GuiSetupPopup != null && !GuiSetupPopup.IsOpen)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "popup-closed");
                 return;
             }
 
@@ -3900,7 +3958,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            SyncGuiSetupPanelFromResources();
+            SyncSetupGuiControlsFromResources();
             RequestPersistGuiSetup("ResetDefaults");
         }
 
@@ -3924,7 +3982,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (TryGetResourceValue(key, out FontFamily? family) && family != null)
+            if (GuiSetupSettingsService.TryGetEffectiveResource(this, key, out var value, out _) && value is FontFamily family)
             {
                 if (!_availableFontFamilies.Any(name => string.Equals(name, family.Source, StringComparison.OrdinalIgnoreCase)))
                 {
@@ -3943,9 +4001,16 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (TryGetResourceValue(key, out double size))
+            if (GuiSetupSettingsService.TryGetEffectiveResource(this, key, out var value, out _))
             {
-                slider.Value = size;
+                if (value is double size)
+                {
+                    slider.Value = size;
+                }
+                else if (value is float floatSize)
+                {
+                    slider.Value = floatSize;
+                }
             }
         }
 
@@ -3956,9 +4021,16 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (TryGetResourceValue(key, out SolidColorBrush? brush) && brush != null)
+            if (GuiSetupSettingsService.TryGetEffectiveResource(this, key, out var value, out _))
             {
-                textBox.Text = brush.Color.ToString();
+                if (value is SolidColorBrush brush)
+                {
+                    textBox.Text = brush.Color.ToString();
+                }
+                else if (value is Color color)
+                {
+                    textBox.Text = color.ToString();
+                }
             }
         }
 
@@ -4027,9 +4099,26 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private void MainWindow_OnClosing(object? sender, CancelEventArgs e)
+        private void PersistGuiSetupNow(string reason)
         {
-            FlushGuiSetupPersistence("WindowClosing");
+            var settings = GuiSetupSettingsService.CaptureCurrent(this);
+            App.CurrentGuiSetup = settings;
+            GuiSetupSettingsService.Log($"[Persist] start reason={reason} path={GuiSetupSettingsService.ConfigPath}");
+            GuiSetupSettingsService.Save(settings);
+            GuiSetupSettingsService.Log($"[Persist] ok reason={reason}");
+        }
+
+        private void MainWindow_Closing(object? sender, CancelEventArgs e)
+        {
+            try
+            {
+                _guiSetupSaveTimer?.Stop();
+                PersistGuiSetupNow("WindowClosing");
+            }
+            catch (Exception ex)
+            {
+                GuiSetupSettingsService.LogError("[Persist] FAIL reason=WindowClosing", ex);
+            }
         }
 
         private bool TryGetResourceValue<T>(string key, out T? value)

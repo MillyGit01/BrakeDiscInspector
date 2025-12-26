@@ -53,6 +53,7 @@ using ROI = BrakeDiscInspector_GUI_ROI.RoiModel;
 using RoiShapeType = BrakeDiscInspector_GUI_ROI.RoiShape;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Helpers;
+using BrakeDiscInspector_GUI_ROI.Services;
 // --- BEGIN: UI/OCV type aliases ---
 using SW = System.Windows;
 using SWM = System.Windows.Media;
@@ -3438,6 +3439,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     HideSnackVisual();
                 };
 
+                Closing += MainWindow_OnClosing;
+
                 this.SizeChanged += (s, e) =>
                 {
                     try
@@ -3674,6 +3677,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();
+                GuiSetupSettingsService.Save(GuiSetupSettingsService.CaptureCurrent(this));
             }
             catch (Exception ex)
             {
@@ -3784,6 +3788,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is ComboBox combo && combo.Tag is string key && combo.SelectedItem is string familyName)
             {
                 SetFontFamilyResource(key, familyName);
+                GuiSetupSettingsService.Save(GuiSetupSettingsService.CaptureCurrent(this));
             }
         }
 
@@ -3797,6 +3802,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is Slider slider && slider.Tag is string key)
             {
                 SetDoubleResource(key, slider.Value);
+                GuiSetupSettingsService.Save(GuiSetupSettingsService.CaptureCurrent(this));
             }
         }
 
@@ -3809,7 +3815,10 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (sender is TextBox textBox && textBox.Tag is string key)
             {
-                TryApplyColorText(textBox, key);
+                if (TryApplyColorText(textBox, key))
+                {
+                    GuiSetupSettingsService.Save(GuiSetupSettingsService.CaptureCurrent(this));
+                }
             }
         }
 
@@ -3821,6 +3830,7 @@ namespace BrakeDiscInspector_GUI_ROI
             TryApplyColorText(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
             TryApplyColorText(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
             TryApplyColorText(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
+            GuiSetupSettingsService.Save(GuiSetupSettingsService.CaptureCurrent(this));
         }
 
         private void ResetGuiDefaultsButton_Click(object sender, RoutedEventArgs e)
@@ -3944,6 +3954,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void SetBrushResource(string key, Color color)
         {
+            if (string.Equals(key, "UI.Brush.Accent", StringComparison.OrdinalIgnoreCase))
+            {
+                SetResourceValue("UI.Color.Accent", color);
+            }
+
             var brush = new SolidColorBrush(color);
             if (brush.CanFreeze)
             {
@@ -3967,6 +3982,11 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 Resources[key] = value;
             }
+        }
+
+        private void MainWindow_OnClosing(object? sender, CancelEventArgs e)
+        {
+            GuiSetupSettingsService.Save(GuiSetupSettingsService.CaptureCurrent(this));
         }
 
         private bool TryGetResourceValue<T>(string key, out T? value)

@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BrakeDiscInspector_GUI_ROI"
         xmlns:m="clr-namespace:BrakeDiscInspector_GUI_ROI.Models"
+        xmlns:services="clr-namespace:BrakeDiscInspector_GUI_ROI.Services"
         xmlns:workflow="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow"
         xmlns:conv="clr-namespace:BrakeDiscInspector_GUI_ROI.Converters"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -436,6 +437,18 @@
                                            Fill="{DynamicResource UI.Brush.GroupHeaderForeground}"
                                            Margin="8,0,0,0"/>
                             </Grid>
+                        </StackPanel>
+
+                        <TextBlock Text="Diagnostics" Style="{StaticResource HeaderTextStyle}" Margin="0,0,0,6"/>
+                        <StackPanel Margin="0,0,0,16">
+                            <TextBlock TextWrapping="Wrap">
+                                <Run Text="Config: "/>
+                                <Run Text="{x:Static services:GuiSetupSettingsService.ConfigPath}"/>
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap">
+                                <Run Text="Log: "/>
+                                <Run Text="{x:Static services:GuiSetupSettingsService.GuiSetupLogPath}"/>
+                            </TextBlock>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

@@ -3677,7 +3677,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();
-                SaveCurrentGuiSetup();
             }
             catch (Exception ex)
             {
@@ -3685,11 +3684,20 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        private void SaveCurrentGuiSetup()
+        private void PersistGuiSetup(string reason)
         {
-            var settings = GuiSetupSettingsService.CaptureCurrent(this);
-            App.CurrentGuiSetup = settings;
-            GuiSetupSettingsService.Save(settings);
+            try
+            {
+                var settings = GuiSetupSettingsService.CaptureCurrent(this);
+                App.CurrentGuiSetup = settings;
+                GuiSetupSettingsService.Log($"[Persist] start reason={reason} path={GuiSetupSettingsService.ConfigPath}");
+                GuiSetupSettingsService.Save(settings);
+                GuiSetupSettingsService.Log($"[Persist] ok reason={reason}");
+            }
+            catch (Exception ex)
+            {
+                GuiSetupSettingsService.Log($"[Persist] FAIL reason={reason}", ex);
+            }
         }
 
         private void SetupGuiButton_Click(object sender, RoutedEventArgs e)
@@ -3705,11 +3713,13 @@ namespace BrakeDiscInspector_GUI_ROI
         private void ThemeLightButton_Click(object sender, RoutedEventArgs e)
         {
             ApplyTheme("Light");
+            PersistGuiSetup("ThemeLight");
         }
 
         private void ThemeDarkButton_Click(object sender, RoutedEventArgs e)
         {
             ApplyTheme("Dark");
+            PersistGuiSetup("ThemeDark");
         }
 
         private void InitializeGuiSetupPanel()
@@ -3795,7 +3805,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is ComboBox combo && combo.Tag is string key && combo.SelectedItem is string familyName)
             {
                 SetFontFamilyResource(key, familyName);
-                SaveCurrentGuiSetup();
+                PersistGuiSetup("FontFamilyChanged");
             }
         }
 
@@ -3809,7 +3819,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (sender is Slider slider && slider.Tag is string key)
             {
                 SetDoubleResource(key, slider.Value);
-                SaveCurrentGuiSetup();
+                PersistGuiSetup("FontSizeChanged");
             }
         }
 
@@ -3824,7 +3834,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (TryApplyColorText(textBox, key))
                 {
-                    SaveCurrentGuiSetup();
+                    PersistGuiSetup("ColorTextChanged");
                 }
             }
         }
@@ -3837,7 +3847,7 @@ namespace BrakeDiscInspector_GUI_ROI
             TryApplyColorText(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
             TryApplyColorText(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
             TryApplyColorText(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
-            SaveCurrentGuiSetup();
+            PersistGuiSetup("ApplyColors");
         }
 
         private void ResetGuiDefaultsButton_Click(object sender, RoutedEventArgs e)
@@ -3993,7 +4003,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void MainWindow_OnClosing(object? sender, CancelEventArgs e)
         {
-            SaveCurrentGuiSetup();
+            PersistGuiSetup("WindowClosing");
         }
 
         private bool TryGetResourceValue<T>(string key, out T? value)

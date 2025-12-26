@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -47,14 +48,23 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             "BrakeDiscInspector",
             "gui_setup.json");
 
+        public static string LogDirectory => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BrakeDiscInspector",
+            "logs");
+
+        public static string GuiSetupLogPath => Path.Combine(LogDirectory, "gui_setup.log");
+
         public static string GetSettingsPath() => ConfigPath;
 
         public static GuiSetupSettings LoadOrDefault()
         {
             try
             {
+                Log($"[LOAD] start path={ConfigPath} exists={File.Exists(ConfigPath)}");
                 if (!File.Exists(ConfigPath))
                 {
+                    Log("[LOAD] missing -> defaults");
                     return new GuiSetupSettings();
                 }
 
@@ -64,11 +74,14 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                     PropertyNameCaseInsensitive = true
                 });
 
-                return settings ?? new GuiSetupSettings();
+                var resolved = settings ?? new GuiSetupSettings();
+                Log($"[LOAD] ok {BuildSnapshot(resolved)}");
+                return resolved;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[gui-setup] Failed to load settings from '{ConfigPath}': {ex}");
+                Log("[LOAD] FAIL -> defaults", ex);
                 return new GuiSetupSettings();
             }
         }
@@ -77,11 +90,13 @@ namespace BrakeDiscInspector_GUI_ROI.Services
         {
             if (settings == null)
             {
+                Log("[SAVE] skipped (settings null)");
                 return;
             }
 
             try
             {
+                Log($"[SAVE] start path={ConfigPath} {BuildSnapshot(settings)}");
                 var directory = Path.GetDirectoryName(ConfigPath);
                 if (!string.IsNullOrWhiteSpace(directory))
                 {
@@ -94,10 +109,13 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 });
 
                 File.WriteAllText(ConfigPath, json);
+                var info = new FileInfo(ConfigPath);
+                Log($"[SAVE] ok bytes={json.Length} lastWrite={info.LastWriteTime:O}");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[gui-setup] Failed to save settings to '{ConfigPath}': {ex}");
+                Log("[SAVE] FAIL", ex);
             }
         }
 
@@ -308,6 +326,89 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             }
 
             return false;
+        }
+
+        public static void Log(string message, Exception? ex = null)
+        {
+            try
+            {
+                Directory.CreateDirectory(LogDirectory);
+                var timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                var entry = $"[{timestamp}] {message}";
+                if (ex != null)
+                {
+                    entry = $"{entry}{Environment.NewLine}{ex}";
+                }
+
+                File.AppendAllText(GuiSetupLogPath, entry + Environment.NewLine);
+            }
+            catch
+            {
+                // swallow logging failures
+            }
+        }
+
+        private static string BuildSnapshot(GuiSetupSettings settings)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(settings.Theme))
+            {
+                parts.Add($"theme={settings.Theme}");
+            }
+
+            if (TryGetFontSize(settings, "UI.FontSize.WindowTitle", out var titleSize))
+            {
+                parts.Add($"title={titleSize.ToString("0.#", CultureInfo.InvariantCulture)}");
+            }
+
+            if (TryGetFontSize(settings, "UI.FontSize.ControlText", out var controlText))
+            {
+                parts.Add($"control={controlText.ToString("0.#", CultureInfo.InvariantCulture)}");
+            }
+
+            if (TryGetFontSize(settings, "UI.FontSize.ButtonText", out var buttonText))
+            {
+                parts.Add($"button={buttonText.ToString("0.#", CultureInfo.InvariantCulture)}");
+            }
+
+            if (TryGetBrush(settings, "UI.Brush.Foreground", out var foreground))
+            {
+                parts.Add($"fg={foreground}");
+            }
+
+            if (TryGetBrush(settings, "UI.Brush.ButtonBackground", out var buttonBg))
+            {
+                parts.Add($"btnBg={buttonBg}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(settings.Accent))
+            {
+                parts.Add($"accent={settings.Accent}");
+            }
+
+            return parts.Count > 0 ? $"snapshot={string.Join(" ", parts)}" : "snapshot=empty";
+        }
+
+        private static bool TryGetFontSize(GuiSetupSettings settings, string key, out double value)
+        {
+            value = default;
+            if (settings.FontSizes == null)
+            {
+                return false;
+            }
+
+            return settings.FontSizes.TryGetValue(key, out value);
+        }
+
+        private static bool TryGetBrush(GuiSetupSettings settings, string key, out string value)
+        {
+            value = string.Empty;
+            if (settings.Brushes == null)
+            {
+                return false;
+            }
+
+            return settings.Brushes.TryGetValue(key, out value) && !string.IsNullOrWhiteSpace(value);
         }
     }
 }

@@ -22,57 +22,59 @@
         <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
         <conv:BoolToBrushConverter x:Key="BoolToBrush" />
         <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
-        <FontFamily x:Key="FontFamilyTitle">Segoe UI</FontFamily>
-        <FontFamily x:Key="FontFamilyHeader">Segoe UI</FontFamily>
-        <FontFamily x:Key="FontFamilyLabel">Segoe UI</FontFamily>
-        <FontFamily x:Key="FontFamilyButton">Segoe UI</FontFamily>
-        <FontFamily x:Key="FontFamilyTextBox">Segoe UI</FontFamily>
-        <FontFamily x:Key="FontFamilyComboBox">Segoe UI</FontFamily>
+        <FontFamily x:Key="UI.FontFamily.Body">Segoe UI</FontFamily>
+        <FontFamily x:Key="UI.FontFamily.Header">Segoe UI</FontFamily>
 
-        <sys:Double x:Key="FontSizeTitle">20</sys:Double>
-        <sys:Double x:Key="FontSizeHeader">16</sys:Double>
-        <sys:Double x:Key="FontSizeLabel">13</sys:Double>
-        <sys:Double x:Key="FontSizeButton">13</sys:Double>
-        <sys:Double x:Key="FontSizeTextBox">13</sys:Double>
-        <sys:Double x:Key="FontSizeComboBox">13</sys:Double>
+        <sys:Double x:Key="UI.FontSize.WindowTitle">20</sys:Double>
+        <sys:Double x:Key="UI.FontSize.SectionTitle">16</sys:Double>
+        <sys:Double x:Key="UI.FontSize.GroupHeader">16</sys:Double>
+        <sys:Double x:Key="UI.FontSize.ControlLabel">13</sys:Double>
+        <sys:Double x:Key="UI.FontSize.ControlText">13</sys:Double>
+        <sys:Double x:Key="UI.FontSize.ButtonText">13</sys:Double>
+        <sys:Double x:Key="UI.FontSize.CheckBox">13</sys:Double>
 
         <SolidColorBrush x:Key="BrushAppBackground" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
-        <SolidColorBrush x:Key="BrushAppForeground" Color="Black" />
-        <SolidColorBrush x:Key="BrushButtonBackground" Color="#FFE5E5E5" />
-        <SolidColorBrush x:Key="BrushButtonForeground" Color="Black" />
+        <SolidColorBrush x:Key="UI.Brush.Foreground" Color="Black" />
+        <SolidColorBrush x:Key="UI.Brush.Accent" Color="#FF4B9EEA" />
+        <SolidColorBrush x:Key="UI.Brush.ButtonForeground" Color="Black" />
+        <SolidColorBrush x:Key="UI.Brush.ButtonBackground" Color="#FFE5E5E5" />
+        <SolidColorBrush x:Key="UI.Brush.ButtonBackgroundHover" Color="#FFD5D5D5" />
+        <SolidColorBrush x:Key="UI.Brush.GroupHeaderForeground" Color="Black" />
 
         <Style x:Key="TitleTextStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="{DynamicResource FontFamilyTitle}" />
-            <Setter Property="FontSize" Value="{DynamicResource FontSizeTitle}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Header}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.WindowTitle}" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource BrushAppForeground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
         </Style>
         <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="{DynamicResource FontFamilyHeader}" />
-            <Setter Property="FontSize" Value="{DynamicResource FontSizeHeader}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Header}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.SectionTitle}" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource BrushAppForeground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
         </Style>
         <Style x:Key="LabelTextStyle" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="{DynamicResource FontFamilyLabel}" />
-            <Setter Property="FontSize" Value="{DynamicResource FontSizeLabel}" />
-            <Setter Property="Foreground" Value="{DynamicResource BrushAppForeground}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ControlLabel}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
         </Style>
         <Style TargetType="TextBlock" BasedOn="{StaticResource LabelTextStyle}" />
 
         <Style x:Key="AppButtonStyle" TargetType="{x:Type ui:Button}">
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="{DynamicResource BrushButtonBackground}" />
-            <Setter Property="Foreground" Value="{DynamicResource BrushButtonForeground}" />
-            <Setter Property="FontFamily" Value="{DynamicResource FontFamilyButton}" />
-            <Setter Property="FontSize" Value="{DynamicResource FontSizeButton}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
             <Setter Property="Padding" Value="10,6" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                     <Setter Property="Effect">
                         <Setter.Value>
-                            <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.35" />
+                            <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.35"
+                                              Color="{Binding Color, Source={DynamicResource UI.Brush.Accent}}" />
                         </Setter.Value>
                     </Setter>
                 </Trigger>
@@ -81,24 +83,22 @@
         <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource AppButtonStyle}" />
 
         <Style TargetType="TextBox">
-            <Setter Property="FontFamily" Value="{DynamicResource FontFamilyTextBox}" />
-            <Setter Property="FontSize" Value="{DynamicResource FontSizeTextBox}" />
-            <Setter Property="Foreground" Value="{DynamicResource BrushAppForeground}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ControlText}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
         </Style>
         <Style TargetType="ComboBox">
-            <Setter Property="FontFamily" Value="{DynamicResource FontFamilyComboBox}" />
-            <Setter Property="FontSize" Value="{DynamicResource FontSizeComboBox}" />
-            <Setter Property="Foreground" Value="{DynamicResource BrushAppForeground}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ControlText}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.CheckBox}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
         </Style>
 
         <Style TargetType="{x:Type GroupBox}" BasedOn="{StaticResource CardGroupBoxStyle}">
-            <Setter Property="HeaderTemplate">
-                <Setter.Value>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding}" Style="{StaticResource HeaderTextStyle}" />
-                    </DataTemplate>
-                </Setter.Value>
-            </Setter>
         </Style>
     </Window.Resources>
 
@@ -177,147 +177,153 @@
                         <StackPanel Margin="0,0,0,16">
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="160"/>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="70"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Title font" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="TitleFontFamilyCombo"
-                                          Grid.Column="1"
-                                          Tag="FontFamilyTitle"
-                                          Margin="8,0"
-                                          SelectionChanged="FontFamilyCombo_SelectionChanged"/>
-                                <Slider x:Name="TitleFontSizeSlider"
-                                        Grid.Column="2"
-                                        Tag="FontSizeTitle"
-                                        Minimum="10"
-                                        Maximum="28"
-                                        ValueChanged="FontSizeSlider_ValueChanged"/>
-                                <TextBox Grid.Column="3"
-                                         IsReadOnly="True"
-                                         TextAlignment="Center"
-                                         Text="{Binding ElementName=TitleFontSizeSlider, Path=Value, StringFormat=F0}"/>
-                            </Grid>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="160"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Header font" VerticalAlignment="Center"/>
                                 <ComboBox x:Name="HeaderFontFamilyCombo"
                                           Grid.Column="1"
-                                          Tag="FontFamilyHeader"
+                                          Tag="UI.FontFamily.Header"
                                           Margin="8,0"
                                           SelectionChanged="FontFamilyCombo_SelectionChanged"/>
-                                <Slider x:Name="HeaderFontSizeSlider"
-                                        Grid.Column="2"
-                                        Tag="FontSizeHeader"
-                                        Minimum="10"
-                                        Maximum="26"
-                                        ValueChanged="FontSizeSlider_ValueChanged"/>
-                                <TextBox Grid.Column="3"
-                                         IsReadOnly="True"
-                                         TextAlignment="Center"
-                                         Text="{Binding ElementName=HeaderFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Body font" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="BodyFontFamilyCombo"
+                                          Grid.Column="1"
+                                          Tag="UI.FontFamily.Body"
+                                          Margin="8,0"
+                                          SelectionChanged="FontFamilyCombo_SelectionChanged"/>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="160"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Label font" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="LabelFontFamilyCombo"
-                                          Grid.Column="1"
-                                          Tag="FontFamilyLabel"
-                                          Margin="8,0"
-                                          SelectionChanged="FontFamilyCombo_SelectionChanged"/>
-                                <Slider x:Name="LabelFontSizeSlider"
-                                        Grid.Column="2"
-                                        Tag="FontSizeLabel"
-                                        Minimum="10"
-                                        Maximum="22"
+                                <TextBlock Text="Window Title" VerticalAlignment="Center"/>
+                                <Slider x:Name="WindowTitleFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.WindowTitle"
+                                        Minimum="12"
+                                        Maximum="32"
                                         ValueChanged="FontSizeSlider_ValueChanged"/>
-                                <TextBox Grid.Column="3"
+                                <TextBox Grid.Column="2"
                                          IsReadOnly="True"
                                          TextAlignment="Center"
-                                         Text="{Binding ElementName=LabelFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                                         Text="{Binding ElementName=WindowTitleFontSizeSlider, Path=Value, StringFormat=F0}"/>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="160"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Button font" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="ButtonFontFamilyCombo"
-                                          Grid.Column="1"
-                                          Tag="FontFamilyButton"
-                                          Margin="8,0"
-                                          SelectionChanged="FontFamilyCombo_SelectionChanged"/>
-                                <Slider x:Name="ButtonFontSizeSlider"
-                                        Grid.Column="2"
-                                        Tag="FontSizeButton"
+                                <TextBlock Text="Section Title" VerticalAlignment="Center"/>
+                                <Slider x:Name="SectionTitleFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.SectionTitle"
                                         Minimum="10"
-                                        Maximum="22"
+                                        Maximum="28"
                                         ValueChanged="FontSizeSlider_ValueChanged"/>
-                                <TextBox Grid.Column="3"
+                                <TextBox Grid.Column="2"
                                          IsReadOnly="True"
                                          TextAlignment="Center"
-                                         Text="{Binding ElementName=ButtonFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                                         Text="{Binding ElementName=SectionTitleFontSizeSlider, Path=Value, StringFormat=F0}"/>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="160"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="TextBox font" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="TextBoxFontFamilyCombo"
-                                          Grid.Column="1"
-                                          Tag="FontFamilyTextBox"
-                                          Margin="8,0"
-                                          SelectionChanged="FontFamilyCombo_SelectionChanged"/>
-                                <Slider x:Name="TextBoxFontSizeSlider"
-                                        Grid.Column="2"
-                                        Tag="FontSizeTextBox"
+                                <TextBlock Text="Group Header" VerticalAlignment="Center"/>
+                                <Slider x:Name="GroupHeaderFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.GroupHeader"
+                                        Minimum="10"
+                                        Maximum="28"
+                                        ValueChanged="FontSizeSlider_ValueChanged"/>
+                                <TextBox Grid.Column="2"
+                                         IsReadOnly="True"
+                                         TextAlignment="Center"
+                                         Text="{Binding ElementName=GroupHeaderFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="70"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Control Label" VerticalAlignment="Center"/>
+                                <Slider x:Name="ControlLabelFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.ControlLabel"
                                         Minimum="10"
                                         Maximum="22"
                                         ValueChanged="FontSizeSlider_ValueChanged"/>
-                                <TextBox Grid.Column="3"
+                                <TextBox Grid.Column="2"
                                          IsReadOnly="True"
                                          TextAlignment="Center"
-                                         Text="{Binding ElementName=TextBoxFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                                         Text="{Binding ElementName=ControlLabelFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="70"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Control Text" VerticalAlignment="Center"/>
+                                <Slider x:Name="ControlTextFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.ControlText"
+                                        Minimum="10"
+                                        Maximum="22"
+                                        ValueChanged="FontSizeSlider_ValueChanged"/>
+                                <TextBox Grid.Column="2"
+                                         IsReadOnly="True"
+                                         TextAlignment="Center"
+                                         Text="{Binding ElementName=ControlTextFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="70"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Button Text" VerticalAlignment="Center"/>
+                                <Slider x:Name="ButtonTextFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.ButtonText"
+                                        Minimum="10"
+                                        Maximum="22"
+                                        ValueChanged="FontSizeSlider_ValueChanged"/>
+                                <TextBox Grid.Column="2"
+                                         IsReadOnly="True"
+                                         TextAlignment="Center"
+                                         Text="{Binding ElementName=ButtonTextFontSizeSlider, Path=Value, StringFormat=F0}"/>
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="160"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="70"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="ComboBox font" VerticalAlignment="Center"/>
-                                <ComboBox x:Name="ComboBoxFontFamilyCombo"
-                                          Grid.Column="1"
-                                          Tag="FontFamilyComboBox"
-                                          Margin="8,0"
-                                          SelectionChanged="FontFamilyCombo_SelectionChanged"/>
-                                <Slider x:Name="ComboBoxFontSizeSlider"
-                                        Grid.Column="2"
-                                        Tag="FontSizeComboBox"
+                                <TextBlock Text="CheckBox" VerticalAlignment="Center"/>
+                                <Slider x:Name="CheckBoxFontSizeSlider"
+                                        Grid.Column="1"
+                                        Tag="UI.FontSize.CheckBox"
                                         Minimum="10"
                                         Maximum="22"
                                         ValueChanged="FontSizeSlider_ValueChanged"/>
-                                <TextBox Grid.Column="3"
+                                <TextBox Grid.Column="2"
                                          IsReadOnly="True"
                                          TextAlignment="Center"
-                                         Text="{Binding ElementName=ComboBoxFontSizeSlider, Path=Value, StringFormat=F0}"/>
+                                         Text="{Binding ElementName=CheckBoxFontSizeSlider, Path=Value, StringFormat=F0}"/>
                             </Grid>
                         </StackPanel>
 
@@ -329,16 +335,16 @@
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="40"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Primary text color" VerticalAlignment="Center"/>
+                                <TextBlock Text="Foreground" VerticalAlignment="Center"/>
                                 <TextBox x:Name="ForegroundColorBox"
                                          Grid.Column="1"
-                                         Tag="BrushAppForeground"
+                                         Tag="UI.Brush.Foreground"
                                          LostFocus="ColorTextBox_LostFocus"/>
                                 <Rectangle Grid.Column="2"
                                            Width="24"
                                            Height="24"
                                            Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource BrushAppForeground}"
+                                           Fill="{DynamicResource UI.Brush.Foreground}"
                                            Margin="8,0,0,0"/>
                             </Grid>
                             <Grid Margin="0,0,0,8">
@@ -347,16 +353,16 @@
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="40"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Interface background color" VerticalAlignment="Center"/>
-                                <TextBox x:Name="BackgroundColorBox"
+                                <TextBlock Text="Accent" VerticalAlignment="Center"/>
+                                <TextBox x:Name="AccentColorBox"
                                          Grid.Column="1"
-                                         Tag="BrushAppBackground"
+                                         Tag="UI.Brush.Accent"
                                          LostFocus="ColorTextBox_LostFocus"/>
                                 <Rectangle Grid.Column="2"
                                            Width="24"
                                            Height="24"
                                            Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource BrushAppBackground}"
+                                           Fill="{DynamicResource UI.Brush.Accent}"
                                            Margin="8,0,0,0"/>
                             </Grid>
                             <Grid Margin="0,0,0,8">
@@ -365,16 +371,52 @@
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="40"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Button background color" VerticalAlignment="Center"/>
+                                <TextBlock Text="Button Background" VerticalAlignment="Center"/>
                                 <TextBox x:Name="ButtonBackgroundColorBox"
                                          Grid.Column="1"
-                                         Tag="BrushButtonBackground"
+                                         Tag="UI.Brush.ButtonBackground"
                                          LostFocus="ColorTextBox_LostFocus"/>
                                 <Rectangle Grid.Column="2"
                                            Width="24"
                                            Height="24"
                                            Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource BrushButtonBackground}"
+                                           Fill="{DynamicResource UI.Brush.ButtonBackground}"
+                                           Margin="8,0,0,0"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="40"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Hover Background" VerticalAlignment="Center"/>
+                                <TextBox x:Name="ButtonHoverBackgroundColorBox"
+                                         Grid.Column="1"
+                                         Tag="UI.Brush.ButtonBackgroundHover"
+                                         LostFocus="ColorTextBox_LostFocus"/>
+                                <Rectangle Grid.Column="2"
+                                           Width="24"
+                                           Height="24"
+                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                                           Fill="{DynamicResource UI.Brush.ButtonBackgroundHover}"
+                                           Margin="8,0,0,0"/>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="180"/>
+                                    <ColumnDefinition Width="140"/>
+                                    <ColumnDefinition Width="40"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Button Foreground" VerticalAlignment="Center"/>
+                                <TextBox x:Name="ButtonForegroundColorBox"
+                                         Grid.Column="1"
+                                         Tag="UI.Brush.ButtonForeground"
+                                         LostFocus="ColorTextBox_LostFocus"/>
+                                <Rectangle Grid.Column="2"
+                                           Width="24"
+                                           Height="24"
+                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                                           Fill="{DynamicResource UI.Brush.ButtonForeground}"
                                            Margin="8,0,0,0"/>
                             </Grid>
                             <Grid>
@@ -383,23 +425,23 @@
                                     <ColumnDefinition Width="140"/>
                                     <ColumnDefinition Width="40"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Button foreground color" VerticalAlignment="Center"/>
-                                <TextBox x:Name="ButtonForegroundColorBox"
+                                <TextBlock Text="Group Header Foreground" VerticalAlignment="Center"/>
+                                <TextBox x:Name="GroupHeaderForegroundColorBox"
                                          Grid.Column="1"
-                                         Tag="BrushButtonForeground"
+                                         Tag="UI.Brush.GroupHeaderForeground"
                                          LostFocus="ColorTextBox_LostFocus"/>
                                 <Rectangle Grid.Column="2"
                                            Width="24"
                                            Height="24"
                                            Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource BrushButtonForeground}"
+                                           Fill="{DynamicResource UI.Brush.GroupHeaderForeground}"
                                            Margin="8,0,0,0"/>
                             </Grid>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                            <ui:Button Content="Apply Colors" Style="{StaticResource AppButtonStyle}" Margin="0,0,8,0" Click="ApplyColorsButton_Click"/>
-                            <ui:Button Content="Reset Defaults" Style="{StaticResource AppButtonStyle}" Margin="0,0,8,0" Click="ResetGuiDefaultsButton_Click"/>
+                            <ui:Button Content="Apply" Style="{StaticResource AppButtonStyle}" Margin="0,0,8,0" Click="ApplyColorsButton_Click"/>
+                            <ui:Button Content="Reset" Style="{StaticResource AppButtonStyle}" Margin="0,0,8,0" Click="ResetGuiDefaultsButton_Click"/>
                             <ui:Button Content="Close" Style="{StaticResource AppButtonStyle}" Click="CloseGuiSetupButton_Click"/>
                         </StackPanel>
                     </StackPanel>
@@ -496,11 +538,11 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="RoiManagementPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible" FontSize="14">
+            <ScrollViewer x:Name="RoiManagementPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible">
                 <StackPanel Margin="8" Orientation="Vertical">
                     <GroupBox x:Name="MasterRoiGroup"
                               Header="Master ROI"
-                              Margin="10,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" FontSize="20" Width="441" HorizontalAlignment="Left">
+                              Margin="10,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" Width="441" HorizontalAlignment="Left">
                         <Grid Margin="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="10*"/>
@@ -509,7 +551,7 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" Grid.ColumnSpan="2">
-                                <TextBlock Text="Master 1" FontWeight="SemiBold" FontSize="18" Margin="0,0,0,6" Width="165" HorizontalAlignment="Left"/>
+                                <TextBlock Text="Master 1" FontWeight="SemiBold" Margin="0,0,0,6" Width="165" HorizontalAlignment="Left"/>
                                 <Grid Width="218" HorizontalAlignment="Left">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" MinWidth="49"/>
@@ -558,7 +600,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" HorizontalAlignment="Left" Width="188" Margin="10,0,0,0">
-                                <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146" HorizontalAlignment="Left" Margin="0,0,0,6"/>
+                                <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146" HorizontalAlignment="Left"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -625,7 +667,7 @@
                             <ColumnDefinition Width="9"/>
                             <ColumnDefinition Width="Auto" MinWidth="228"/>
                         </Grid.ColumnDefinitions>
-                        <GroupBox Header="Analyze Options M1" UseLayoutRounding="False" Grid.Column="0" Margin="10,0,10,11" FontSize="16">
+                        <GroupBox Header="Analyze Options M1" UseLayoutRounding="False" Grid.Column="0" Margin="10,0,10,11">
                             <StackPanel Margin="0,4,0,0">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="195">
                                     <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0" HorizontalAlignment="Left"/>
@@ -648,7 +690,7 @@
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
-                        <GroupBox Header="Analyze Options" Grid.Column="2" Margin="0,0,0,12" FontSize="16">
+                        <GroupBox Header="Analyze Options" Grid.Column="2" Margin="0,0,0,12">
                             <StackPanel Margin="8,4,0,0">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>

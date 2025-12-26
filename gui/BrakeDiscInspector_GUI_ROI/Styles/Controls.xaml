@@ -11,6 +11,10 @@
         <Setter Property="Appearance" Value="Secondary" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+        <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+        <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
         <Setter Property="Effect" Value="{x:Null}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="ToolTipService.ShowDuration" Value="30000" />
@@ -26,9 +30,11 @@
         </Setter>
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                 <Setter Property="Effect">
                     <Setter.Value>
-                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.25" Color="Black" />
+                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.25"
+                                          Color="{Binding Color, Source={DynamicResource UI.Brush.Accent}}" />
                     </Setter.Value>
                 </Setter>
             </Trigger>
@@ -43,13 +49,17 @@
         <Setter Property="Appearance" Value="Secondary" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
+        <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
         <Setter Property="Effect" Value="{x:Null}" />
         <Setter Property="ToolTipService.ShowDuration" Value="30000" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                 <Setter Property="Effect">
                     <Setter.Value>
-                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.25" Color="Black" />
+                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.25"
+                                          Color="{Binding Color, Source={DynamicResource UI.Brush.Accent}}" />
                     </Setter.Value>
                 </Setter>
             </Trigger>
@@ -61,7 +71,8 @@
 
     <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}">
         <Setter Property="Appearance" Value="Secondary" />
-        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+        <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
         <Setter Property="Height" Value="48" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="BorderBrush" Value="Transparent" />
@@ -71,9 +82,11 @@
         <Setter Property="Margin" Value="0,0,0,8" />
         <Style.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                 <Setter Property="Effect">
                     <Setter.Value>
-                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.25" Color="Black" />
+                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.25"
+                                          Color="{Binding Color, Source={DynamicResource UI.Brush.Accent}}" />
                     </Setter.Value>
                 </Setter>
             </Trigger>
@@ -86,6 +99,9 @@
         <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}" />
         <Setter Property="BorderBrush" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Header}" />
+        <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.GroupHeader}" />
+        <Setter Property="Foreground" Value="{DynamicResource UI.Brush.GroupHeaderForeground}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="GroupBox">
@@ -96,7 +112,11 @@
                             SnapsToDevicePixels="True">
                         <DockPanel>
                             <Border DockPanel.Dock="Top" Padding="0,0,0,8">
-                                <TextBlock Text="{TemplateBinding Header}" FontWeight="SemiBold" />
+                                <TextBlock Text="{TemplateBinding Header}"
+                                           FontFamily="{TemplateBinding FontFamily}"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           FontWeight="SemiBold" />
                             </Border>
                             <ContentPresenter />
                         </DockPanel>

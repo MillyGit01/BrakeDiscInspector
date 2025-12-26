@@ -162,11 +162,11 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="RoiManagementPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible">
+            <ScrollViewer x:Name="RoiManagementPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible" FontSize="14">
                 <StackPanel Margin="8" Orientation="Vertical">
                     <GroupBox x:Name="MasterRoiGroup"
                               Header="Master ROI"
-                              Margin="10,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" FontSize="16" Width="441" HorizontalAlignment="Left">
+                              Margin="10,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" FontSize="20" Width="441" HorizontalAlignment="Left">
                         <Grid Margin="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="10*"/>
@@ -224,7 +224,7 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="2" HorizontalAlignment="Left" Width="188" Margin="10,0,0,0">
-                                <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146"/>
+                                <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146" HorizontalAlignment="Left"/>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -285,42 +285,17 @@
                         </ui:Button>
                     </WrapPanel>
 
-                    <GroupBox Header="Analyze Options" Width="240" Height="204" Padding="8,16,8,8" ScrollViewer.CanContentScroll="True" HorizontalAlignment="Left">
-                        <StackPanel Margin="8,4,0,0">
-                            <StackPanel Height="102" CanVerticallyScroll="True">
-                                <CheckBox x:Name="ChkDisableRot"
-                                          Content="Disable rot"
-                                          IsChecked="{Binding DisableRot, Mode=TwoWay}"/>
-                                <CheckBox x:Name="ChkScaleLock"
-                                          Content="Lock scale"
-                                          IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
-                                <CheckBox x:Name="ChkUseLocalMatcher"
-                                          Content="Use local matcher"
-                                          ToolTip="Force local matcher"
-                                          IsChecked="True"/>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0"/>
-                            <ui:Button x:Name="BtnAnalyzeMaster"
-                                       Click="BtnAnalyzeMaster_Click">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
-                                    <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </ui:Button>
-                        </StackPanel>
-                    </GroupBox>
-
                     <Grid Margin="0,12,0,0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto" MinWidth="221"/>
+                            <ColumnDefinition Width="9"/>
+                            <ColumnDefinition Width="Auto" MinWidth="228"/>
                         </Grid.ColumnDefinitions>
-                        <GroupBox Header="Master 1 Analyze" Width="260" UseLayoutRounding="False" Grid.Column="0">
-                            <StackPanel Margin="8,4,0,0">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <ComboBox x:Name="ComboFeature" Width="110"
+                        <GroupBox Header="Analyze Options M1" UseLayoutRounding="False" Grid.Column="0" Margin="10,0,10,11" FontSize="16">
+                            <StackPanel Margin="0,4,0,0">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="195">
+                                    <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0" HorizontalAlignment="Left"/>
+                                    <ComboBox x:Name="ComboFeature" Width="138"
                                               SelectedValuePath="Content"
                                               SelectedValue="{Binding AnalyzeFeatureM1, Mode=TwoWay}">
                                         <ComboBoxItem Content="auto"/>
@@ -332,14 +307,14 @@
                                 </StackPanel>
 
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                    <TextBlock Text="Thr:" VerticalAlignment="Center"/>
-                                    <TextBox x:Name="TxtThr" Width="40"
+                                    <TextBlock Text="Threshold" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TxtThr" Width="128"
                                              Margin="4,0,0,0"
                                              Text="{Binding AnalyzeThrM1, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
-                        <GroupBox Header="Master 2 Analyze" Width="260" Grid.Column="2">
+                        <GroupBox Header="Analyze Options" Grid.Column="2" Margin="0,0,0,12" FontSize="16">
                             <StackPanel Margin="8,4,0,0">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -363,6 +338,30 @@
                             </StackPanel>
                         </GroupBox>
                     </Grid>
+                    <GroupBox Header="Analyze Options" Width="240" Height="204" Padding="8,16,8,8" ScrollViewer.CanContentScroll="True">
+                        <StackPanel Margin="8,4,0,0">
+                            <StackPanel Height="102" CanVerticallyScroll="True">
+                                <CheckBox x:Name="ChkDisableRot"
+                                          Content="Disable rot"
+                                          IsChecked="{Binding DisableRot, Mode=TwoWay}"/>
+                                <CheckBox x:Name="ChkScaleLock"
+                                          Content="Lock scale"
+                                          IsChecked="{Binding ScaleLock, Mode=TwoWay}"/>
+                                <CheckBox x:Name="ChkUseLocalMatcher"
+                                          Content="Use local matcher"
+                                          ToolTip="Force local matcher"
+                                          IsChecked="True"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0"/>
+                            <ui:Button x:Name="BtnAnalyzeMaster"
+                                       Click="BtnAnalyzeMaster_Click">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
+                                    <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ui:Button>
+                        </StackPanel>
+                    </GroupBox>
 
                     <GroupBox Header="Match Options" Width="260">
                         <StackPanel Margin="8,4,0,0">

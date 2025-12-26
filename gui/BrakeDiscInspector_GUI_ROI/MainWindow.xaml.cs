@@ -3362,6 +3362,34 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _analysisViewActive;
         private DispatcherTimer? _snackTimer;
         private readonly TimeSpan _snackDuration = TimeSpan.FromSeconds(7);
+        private readonly Dictionary<string, object> _defaultGuiResources = new();
+        private readonly List<string> _availableFontFamilies = new() { "Segoe UI", "Calibri", "Arial", "Consolas" };
+        private bool _isGuiSetupInitializing;
+        private static readonly string[] FontFamilyResourceKeys =
+        {
+            "FontFamilyTitle",
+            "FontFamilyHeader",
+            "FontFamilyLabel",
+            "FontFamilyButton",
+            "FontFamilyTextBox",
+            "FontFamilyComboBox"
+        };
+        private static readonly string[] FontSizeResourceKeys =
+        {
+            "FontSizeTitle",
+            "FontSizeHeader",
+            "FontSizeLabel",
+            "FontSizeButton",
+            "FontSizeTextBox",
+            "FontSizeComboBox"
+        };
+        private static readonly string[] BrushResourceKeys =
+        {
+            "BrushAppBackground",
+            "BrushAppForeground",
+            "BrushButtonBackground",
+            "BrushButtonForeground"
+        };
 
         private void AppendResizeLog(string msg)
         {
@@ -3388,6 +3416,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent()"); // CODEX: string interpolation compatibility.
                 InitializeComponent();
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent() OK"); // CODEX: string interpolation compatibility.
+
+                CaptureDefaultGuiResources();
+                InitializeGuiSetupPanel();
 
                 ShowSidePanel(SidePanelMode.LayoutSetup);
 
@@ -3517,26 +3548,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 SetPanelCollapsed(settings.IsSidePanelCollapsed, false);
-                SetThemeSelection(settings.ThemePreference);
                 ApplyTheme(settings.ThemePreference);
             }
             catch (Exception ex)
             {
                 GuiLog.Error("[ui] failed to apply saved preferences", ex);
             }
-        }
-
-        private void UpdatePanelToggleLabel()
-        {
-            if (TogglePanelButton == null)
-            {
-                return;
-            }
-
-            var label = GetResourceString(_isPanelCollapsed ? "ExpandPanel" : "CollapsePanel", _isPanelCollapsed ? "Expand panel" : "Collapse panel");
-            TogglePanelButton.Content = label;
-            TogglePanelButton.ToolTip = label;
-            TogglePanelButton.Tag = _isPanelCollapsed ? Wpf.Ui.Controls.SymbolRegular.ChevronRight24 : Wpf.Ui.Controls.SymbolRegular.ChevronLeft24;
         }
 
         private void SetPanelCollapsed(bool collapsed, bool updateSettings = true)
@@ -3564,7 +3581,6 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             _isPanelCollapsed = collapsed;
-            UpdatePanelToggleLabel();
 
             if (updateSettings)
             {
@@ -3572,11 +3588,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 Settings.Default.SidePanelWidth = _lastSidePanelWidth;
                 Settings.Default.Save();
             }
-        }
-
-        private void TogglePanelButton_OnClick(object sender, RoutedEventArgs e)
-        {
-            SetPanelCollapsed(!_isPanelCollapsed);
         }
 
         private void ShowSidePanel(SidePanelMode mode)
@@ -3625,29 +3636,6 @@ namespace BrakeDiscInspector_GUI_ROI
             Settings.Default.Save();
         }
 
-        private void ThemeSelector_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (ThemeSelector?.SelectedItem is ComboBoxItem item)
-            {
-                ApplyTheme(item.Content?.ToString());
-            }
-        }
-
-        private void SetThemeSelection(string? preference)
-        {
-            var normalized = string.IsNullOrWhiteSpace(preference) ? "Auto" : preference;
-            if (ThemeSelector == null)
-            {
-                return;
-            }
-
-            ThemeSelector.SelectedIndex = normalized.Equals("Dark", StringComparison.OrdinalIgnoreCase)
-                ? 2
-                : normalized.Equals("Light", StringComparison.OrdinalIgnoreCase)
-                    ? 1
-                    : 0;
-        }
-
         private void ApplyTheme(string? preference)
         {
             var desired = string.IsNullOrWhiteSpace(preference) ? "Auto" : preference;
@@ -3691,6 +3679,320 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 GuiLog.Error($"[theme] failed to set theme {desired}", ex); // CODEX: string interpolation compatibility.
             }
+        }
+
+        private void SetupGuiButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (GuiSetupPopup == null)
+            {
+                return;
+            }
+
+            GuiSetupPopup.IsOpen = !GuiSetupPopup.IsOpen;
+        }
+
+        private void ThemeLightButton_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme("Light");
+        }
+
+        private void ThemeDarkButton_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme("Dark");
+        }
+
+        private void InitializeGuiSetupPanel()
+        {
+            _isGuiSetupInitializing = true;
+
+            var combos = new[]
+            {
+                TitleFontFamilyCombo,
+                HeaderFontFamilyCombo,
+                LabelFontFamilyCombo,
+                ButtonFontFamilyCombo,
+                TextBoxFontFamilyCombo,
+                ComboBoxFontFamilyCombo
+            };
+
+            foreach (var combo in combos)
+            {
+                if (combo != null)
+                {
+                    combo.ItemsSource = _availableFontFamilies;
+                }
+            }
+
+            SyncGuiSetupPanelFromResources();
+            _isGuiSetupInitializing = false;
+        }
+
+        private void CaptureDefaultGuiResources()
+        {
+            _defaultGuiResources.Clear();
+            foreach (var key in FontFamilyResourceKeys.Concat(FontSizeResourceKeys).Concat(BrushResourceKeys))
+            {
+                if (!Resources.Contains(key))
+                {
+                    continue;
+                }
+
+                var value = Resources[key];
+                if (value is SolidColorBrush brush)
+                {
+                    _defaultGuiResources[key] = new SolidColorBrush(brush.Color);
+                }
+                else if (value is FontFamily family)
+                {
+                    _defaultGuiResources[key] = new FontFamily(family.Source);
+                }
+                else
+                {
+                    _defaultGuiResources[key] = value;
+                }
+            }
+        }
+
+        private void SyncGuiSetupPanelFromResources()
+        {
+            _isGuiSetupInitializing = true;
+
+            SetComboSelectionFromResource(TitleFontFamilyCombo, "FontFamilyTitle");
+            SetComboSelectionFromResource(HeaderFontFamilyCombo, "FontFamilyHeader");
+            SetComboSelectionFromResource(LabelFontFamilyCombo, "FontFamilyLabel");
+            SetComboSelectionFromResource(ButtonFontFamilyCombo, "FontFamilyButton");
+            SetComboSelectionFromResource(TextBoxFontFamilyCombo, "FontFamilyTextBox");
+            SetComboSelectionFromResource(ComboBoxFontFamilyCombo, "FontFamilyComboBox");
+
+            SetSliderValueFromResource(TitleFontSizeSlider, "FontSizeTitle");
+            SetSliderValueFromResource(HeaderFontSizeSlider, "FontSizeHeader");
+            SetSliderValueFromResource(LabelFontSizeSlider, "FontSizeLabel");
+            SetSliderValueFromResource(ButtonFontSizeSlider, "FontSizeButton");
+            SetSliderValueFromResource(TextBoxFontSizeSlider, "FontSizeTextBox");
+            SetSliderValueFromResource(ComboBoxFontSizeSlider, "FontSizeComboBox");
+
+            SetColorTextFromResource(ForegroundColorBox, "BrushAppForeground");
+            SetColorTextFromResource(BackgroundColorBox, "BrushAppBackground");
+            SetColorTextFromResource(ButtonBackgroundColorBox, "BrushButtonBackground");
+            SetColorTextFromResource(ButtonForegroundColorBox, "BrushButtonForeground");
+
+            _isGuiSetupInitializing = false;
+        }
+
+        private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isGuiSetupInitializing)
+            {
+                return;
+            }
+
+            if (sender is ComboBox combo && combo.Tag is string key && combo.SelectedItem is string familyName)
+            {
+                SetFontFamilyResource(key, familyName);
+            }
+        }
+
+        private void FontSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_isGuiSetupInitializing)
+            {
+                return;
+            }
+
+            if (sender is Slider slider && slider.Tag is string key)
+            {
+                SetDoubleResource(key, slider.Value);
+            }
+        }
+
+        private void ColorTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (_isGuiSetupInitializing)
+            {
+                return;
+            }
+
+            if (sender is TextBox textBox && textBox.Tag is string key)
+            {
+                TryApplyColorText(textBox, key);
+            }
+        }
+
+        private void ApplyColorsButton_Click(object sender, RoutedEventArgs e)
+        {
+            TryApplyColorText(ForegroundColorBox, "BrushAppForeground");
+            TryApplyColorText(BackgroundColorBox, "BrushAppBackground");
+            TryApplyColorText(ButtonBackgroundColorBox, "BrushButtonBackground");
+            TryApplyColorText(ButtonForegroundColorBox, "BrushButtonForeground");
+        }
+
+        private void ResetGuiDefaultsButton_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var pair in _defaultGuiResources)
+            {
+                if (pair.Value is SolidColorBrush brush)
+                {
+                    SetBrushResource(pair.Key, brush.Color);
+                }
+                else if (pair.Value is FontFamily family)
+                {
+                    SetFontFamilyResource(pair.Key, family.Source);
+                }
+                else if (pair.Value is double size)
+                {
+                    SetDoubleResource(pair.Key, size);
+                }
+                else
+                {
+                    SetResourceValue(pair.Key, pair.Value);
+                }
+            }
+
+            SyncGuiSetupPanelFromResources();
+        }
+
+        private void CloseGuiSetupButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (GuiSetupPopup != null)
+            {
+                GuiSetupPopup.IsOpen = false;
+            }
+        }
+
+        private void SetComboSelectionFromResource(ComboBox? combo, string key)
+        {
+            if (combo == null)
+            {
+                return;
+            }
+
+            if (TryGetResourceValue(key, out FontFamily? family) && family != null)
+            {
+                if (!_availableFontFamilies.Any(name => string.Equals(name, family.Source, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _availableFontFamilies.Add(family.Source);
+                }
+
+                combo.SelectedItem = _availableFontFamilies.FirstOrDefault(name => string.Equals(name, family.Source, StringComparison.OrdinalIgnoreCase))
+                                     ?? family.Source;
+            }
+        }
+
+        private void SetSliderValueFromResource(Slider? slider, string key)
+        {
+            if (slider == null)
+            {
+                return;
+            }
+
+            if (TryGetResourceValue(key, out double size))
+            {
+                slider.Value = size;
+            }
+        }
+
+        private void SetColorTextFromResource(TextBox? textBox, string key)
+        {
+            if (textBox == null)
+            {
+                return;
+            }
+
+            if (TryGetResourceValue(key, out SolidColorBrush? brush) && brush != null)
+            {
+                textBox.Text = brush.Color.ToString();
+            }
+        }
+
+        private bool TryApplyColorText(TextBox? textBox, string key)
+        {
+            if (textBox == null)
+            {
+                return false;
+            }
+
+            var text = textBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            try
+            {
+                if (ColorConverter.ConvertFromString(text) is Color color)
+                {
+                    SetBrushResource(key, color);
+                    textBox.Text = color.ToString();
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Warn($"[gui-setup] invalid color '{text}': {ex.Message}");
+            }
+
+            SetColorTextFromResource(textBox, key);
+            return false;
+        }
+
+        private void SetFontFamilyResource(string key, string familyName)
+        {
+            SetResourceValue(key, new FontFamily(familyName));
+        }
+
+        private void SetDoubleResource(string key, double value)
+        {
+            SetResourceValue(key, value);
+        }
+
+        private void SetBrushResource(string key, Color color)
+        {
+            var brush = new SolidColorBrush(color);
+            if (brush.CanFreeze)
+            {
+                brush.Freeze();
+            }
+
+            SetResourceValue(key, brush);
+        }
+
+        private void SetResourceValue(string key, object value)
+        {
+            if (Resources.Contains(key))
+            {
+                Resources[key] = value;
+            }
+            else if (Application.Current.Resources.Contains(key))
+            {
+                Application.Current.Resources[key] = value;
+            }
+            else
+            {
+                Resources[key] = value;
+            }
+        }
+
+        private bool TryGetResourceValue<T>(string key, out T? value)
+        {
+            value = default;
+            if (Resources.Contains(key))
+            {
+                if (Resources[key] is T typed)
+                {
+                    value = typed;
+                    return true;
+                }
+            }
+            else if (Application.Current.Resources.Contains(key))
+            {
+                if (Application.Current.Resources[key] is T typed)
+                {
+                    value = typed;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private string GetResourceString(string key, string fallback)

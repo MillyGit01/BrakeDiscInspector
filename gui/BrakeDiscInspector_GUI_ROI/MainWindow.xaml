@@ -9,7 +9,6 @@
         xmlns:workflow="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow"
         xmlns:conv="clr-namespace:BrakeDiscInspector_GUI_ROI.Converters"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         x:Class="BrakeDiscInspector_GUI_ROI.MainWindow"
         Title="BrakeDiscInspector"
         WindowState="Maximized"
@@ -23,23 +22,7 @@
         <conv:BoolToEditSaveTextConverter x:Key="BoolToEditSaveText" />
         <conv:BoolToBrushConverter x:Key="BoolToBrush" />
         <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
-        <FontFamily x:Key="UI.FontFamily.Body">Segoe UI</FontFamily>
-        <FontFamily x:Key="UI.FontFamily.Header">Segoe UI</FontFamily>
-
-        <sys:Double x:Key="UI.FontSize.WindowTitle">20</sys:Double>
-        <sys:Double x:Key="UI.FontSize.SectionTitle">16</sys:Double>
-        <sys:Double x:Key="UI.FontSize.GroupHeader">16</sys:Double>
-        <sys:Double x:Key="UI.FontSize.ControlLabel">13</sys:Double>
-        <sys:Double x:Key="UI.FontSize.ControlText">13</sys:Double>
-        <sys:Double x:Key="UI.FontSize.ButtonText">13</sys:Double>
-        <sys:Double x:Key="UI.FontSize.CheckBox">13</sys:Double>
-
         <SolidColorBrush x:Key="BrushAppBackground" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
-        <SolidColorBrush x:Key="UI.Brush.Foreground" Color="Black" />
-        <SolidColorBrush x:Key="UI.Brush.ButtonForeground" Color="Black" />
-        <SolidColorBrush x:Key="UI.Brush.ButtonBackground" Color="#FFE5E5E5" />
-        <SolidColorBrush x:Key="UI.Brush.ButtonBackgroundHover" Color="#FFD5D5D5" />
-        <SolidColorBrush x:Key="UI.Brush.GroupHeaderForeground" Color="Black" />
 
         <Style x:Key="TitleTextStyle" TargetType="TextBlock">
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Header}" />
@@ -161,6 +144,7 @@
                PlacementTarget="{Binding ElementName=SetupGuiButton}"
                Placement="Bottom"
                StaysOpen="False"
+               Closed="GuiSetupPopup_Closed"
                AllowsTransparency="True"
                PopupAnimation="Fade">
             <Border Background="{DynamicResource BrushAppBackground}"

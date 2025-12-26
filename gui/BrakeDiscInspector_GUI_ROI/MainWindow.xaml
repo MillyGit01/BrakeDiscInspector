@@ -16,6 +16,7 @@
         Background="{DynamicResource BrushAppBackground}"
         UseLayoutRounding="True"
         Loaded="MainWindow_Loaded"
+        Closing="MainWindow_Closing"
         mc:Ignorable="d">
 
     <Window.Resources>

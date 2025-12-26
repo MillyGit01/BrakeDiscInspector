@@ -296,7 +296,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             Log($"[APPLY] dictionary=Application keys=[{summary}]");
         }
 
-        private static bool TryGetEffectiveResource(Window? window, string key, out object? value, out string source)
+        public static bool TryGetEffectiveResource(Window? window, string key, out object? value, out string source)
         {
             value = null;
             source = "fallback";
@@ -407,6 +407,11 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             {
                 // swallow logging failures
             }
+        }
+
+        public static void LogError(string message, Exception ex)
+        {
+            Log(message, ex);
         }
 
         private static void LogCapture(string key, string source, object? value)

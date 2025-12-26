@@ -12,10 +12,13 @@ namespace BrakeDiscInspector_GUI_ROI
     /// </summary>
     public partial class App : Application
     {
+        public static GuiSetupSettings CurrentGuiSetup { get; set; } = new();
+
         protected override void OnStartup(StartupEventArgs e)
         {
             ResetLogsOnStartup();
             var guiSettings = GuiSetupSettingsService.LoadOrDefault();
+            CurrentGuiSetup = guiSettings;
             GuiSetupSettingsService.Apply(guiSettings);
             ApplyThemePreference(guiSettings.Theme);
             base.OnStartup(e);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -40,11 +41,13 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             "UI.Brush.GroupHeaderForeground"
         };
 
+        // Stored at %LOCALAPPDATA%\BrakeDiscInspector\gui_setup.json for easy diagnostics.
         public static string ConfigPath => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "BrakeDiscInspector",
-            "gui",
             "gui_setup.json");
+
+        public static string GetSettingsPath() => ConfigPath;
 
         public static GuiSetupSettings LoadOrDefault()
         {
@@ -63,8 +66,9 @@ namespace BrakeDiscInspector_GUI_ROI.Services
 
                 return settings ?? new GuiSetupSettings();
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"[gui-setup] Failed to load settings from '{ConfigPath}': {ex}");
                 return new GuiSetupSettings();
             }
         }
@@ -91,9 +95,9 @@ namespace BrakeDiscInspector_GUI_ROI.Services
 
                 File.WriteAllText(ConfigPath, json);
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort persistence; ignore failures.
+                Debug.WriteLine($"[gui-setup] Failed to save settings to '{ConfigPath}': {ex}");
             }
         }
 

@@ -86,6 +86,57 @@ namespace BrakeDiscInspector_GUI_ROI
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+        private void UI(Action action, DispatcherPriority prio = DispatcherPriority.Normal)
+        {
+            void Wrapped()
+            {
+                GuiLog.Info($"[AnalyzeMasters] thread={Thread.CurrentThread.ManagedThreadId} checkAccess={Dispatcher.CheckAccess()}");
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    GuiLog.Error($"[AnalyzeMasters][UI] FAILED: {ex}\n{ex.StackTrace}");
+                    throw;
+                }
+            }
+
+            if (Dispatcher.CheckAccess())
+            {
+                Wrapped();
+            }
+            else
+            {
+                Dispatcher.Invoke(Wrapped, prio);
+            }
+        }
+
+        private Task UIAsync(Action action, DispatcherPriority prio = DispatcherPriority.Normal)
+        {
+            void Wrapped()
+            {
+                GuiLog.Info($"[AnalyzeMasters] thread={Thread.CurrentThread.ManagedThreadId} checkAccess={Dispatcher.CheckAccess()}");
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    GuiLog.Error($"[AnalyzeMasters][UI] FAILED: {ex}\n{ex.StackTrace}");
+                    throw;
+                }
+            }
+
+            if (Dispatcher.CheckAccess())
+            {
+                Wrapped();
+                return Task.CompletedTask;
+            }
+
+            return Dispatcher.InvokeAsync(Wrapped, prio).Task;
+        }
+
         private enum SidePanelMode
         {
             LayoutSetup,
@@ -10956,7 +11007,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var seeded = TrySeedMastersBaselineForCurrentImage("analyze:precheck", force: true);
                 if (!seeded)
                 {
-                    Snack("No se ha podido inicializar la baseline de Masters (faltan ROIs Master en el layout actual o no hay imagen cargada)."); // CODEX: string interpolation compatibility.
+                    UI(() => Snack("No se ha podido inicializar la baseline de Masters (faltan ROIs Master en el layout actual o no hay imagen cargada).")); // CODEX: string interpolation compatibility.
                     AppendLog("[ANALYZE] Masters baseline missing; aborting AnalyzeMastersAsync");
                     return;
                 }
@@ -10966,7 +11017,7 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 try
                 {
-                    await AnalyzeMastersCoreAsync().ConfigureAwait(false);
+                    await AnalyzeMastersCoreAsync();
                     return;
                 }
                 catch (BackendMemoryNotFittedException ex)
@@ -10976,38 +11027,39 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     if (attempt >= 1)
                     {
-                        MessageBox.Show(
+                        UI(() => MessageBox.Show(
                             "No hay memoria preparada en el backend. Ejecuta Fit OK desde Dataset y vuelve a intentarlo.",
                             "Memoria no preparada",
                             MessageBoxButton.OK,
-                            MessageBoxImage.Warning);
+                            MessageBoxImage.Warning));
                         return;
                     }
 
-                    var choice = MessageBox.Show(
+                    var choice = MessageBoxResult.No;
+                    UI(() => choice = MessageBox.Show(
                         "No hay memoria/baseline cargada para inferencia. ¿Quieres ajustarla ahora (Fit OK) y reintentar?",
                         "Memoria no preparada",
                         MessageBoxButton.YesNo,
-                        MessageBoxImage.Information);
+                        MessageBoxImage.Information));
 
                     if (choice != MessageBoxResult.Yes)
                     {
-                        MessageBox.Show(
+                        UI(() => MessageBox.Show(
                             "Operación cancelada. Ejecuta Fit OK desde la pestaña Dataset antes de volver a analizar.",
                             "Memoria no preparada",
                             MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+                            MessageBoxImage.Information));
                         return;
                     }
 
-                    bool fitted = await EnsureMasterBaselinesAsync().ConfigureAwait(false);
+                    bool fitted = await EnsureMasterBaselinesAsync();
                     if (!fitted)
                     {
-                        MessageBox.Show(
+                        UI(() => MessageBox.Show(
                             "No se pudo ajustar la memoria automáticamente. Revisa la carpeta del dataset OK y los logs.",
                             "Fit OK",
                             MessageBoxButton.OK,
-                            MessageBoxImage.Error);
+                            MessageBoxImage.Error));
                         return;
                     }
 
@@ -11017,14 +11069,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 catch (BackendBadRequestException ex)
                 {
                     var detail = ex.Detail ?? ex.Message;
-                    MessageBox.Show($"Error del backend (400): {detail}", "Inferencia", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    UI(() => MessageBox.Show($"Error del backend (400): {detail}", "Inferencia", MessageBoxButton.OK, MessageBoxImage.Warning));
                     return;
                 }
                 catch (Exception ex)
                 {
                     // CODEX: string interpolation compatibility.
                     AppendLog($"[ANALYZE] error inesperado: {ex}");
-                    MessageBox.Show($"Analyze Masters error: {ex.Message}", "Analyze", MessageBoxButton.OK, MessageBoxImage.Error);
+                    UI(() => MessageBox.Show($"Analyze Masters error: {ex.Message}", "Analyze", MessageBoxButton.OK, MessageBoxImage.Error));
                     return;
                 }
             }
@@ -11047,9 +11099,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SWPoint? c1 = null, c2 = null;
             double s1 = 0, s2 = 0;
+            bool useLocalMatcher = false;
+            UI(() => useLocalMatcher = ChkUseLocalMatcher.IsChecked == true);
 
             // 1) Intento local primero (opcional)
-            if (ChkUseLocalMatcher.IsChecked == true)
+            if (useLocalMatcher)
             {
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[ANALYZE] Using local matcher first...");
@@ -11130,7 +11184,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
 
                     return (m1: m1, m2: m2, score1: score1, score2: score2, logs: logs, disableLocal: disableLocal);
-                }).ConfigureAwait(false);
+                });
 
                 foreach (var log in localResult.logs)
                 {
@@ -11139,8 +11193,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 if (localResult.disableLocal)
                 {
-                    Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
-                    ChkUseLocalMatcher.IsChecked = false;
+                    UI(() =>
+                    {
+                        Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
+                        ChkUseLocalMatcher.IsChecked = false;
+                    });
+                    useLocalMatcher = false;
                 }
 
                 if (localResult.m1.HasValue)
@@ -11158,15 +11216,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (c1 is null || c2 is null)
             {
-                if (ChkUseLocalMatcher.IsChecked != true)
+                if (!useLocalMatcher)
                 {
                     AppendLog($"[FLOW] Matcher local deshabilitado; uso backend para detectar masters");
 
                     if (c1 is null)
                     {
                         var inferM1 = await BackendAPI
-                            .InferAsync(_currentImagePathWin, _layout.Master1Pattern!, _preset, AppendLog)
-                            .ConfigureAwait(false);
+                            .InferAsync(_currentImagePathWin, _layout.Master1Pattern!, _preset, AppendLog);
 
                         if (inferM1.ok && inferM1.result != null)
                         {
@@ -11189,8 +11246,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (c2 is null)
                     {
                         var inferM2 = await BackendAPI
-                            .InferAsync(_currentImagePathWin, _layout.Master2Pattern!, _preset, AppendLog)
-                            .ConfigureAwait(false);
+                            .InferAsync(_currentImagePathWin, _layout.Master2Pattern!, _preset, AppendLog);
 
                         if (inferM2.ok && inferM2.result != null)
                         {
@@ -11222,7 +11278,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (c1 is null)
             {
                 LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M1 not found", posTolForLog, angTolForLog);
-                Snack($"No se ha encontrado Master 1 en su zona de búsqueda"); // CODEX: string interpolation compatibility.
+                UI(() => Snack($"No se ha encontrado Master 1 en su zona de búsqueda")); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c1 null");
                 ViewModel?.TraceManual($"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=M1 not found");
@@ -11231,7 +11287,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (c2 is null)
             {
                 LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M2 not found", posTolForLog, angTolForLog);
-                Snack($"No se ha encontrado Master 2 en su zona de búsqueda"); // CODEX: string interpolation compatibility.
+                UI(() => Snack($"No se ha encontrado Master 2 en su zona de búsqueda")); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c2 null");
                 ViewModel?.TraceManual($"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=M2 not found");
@@ -11242,12 +11298,12 @@ namespace BrakeDiscInspector_GUI_ROI
             var mid = new SWPoint((c1.Value.X + c2.Value.X) / 2.0, (c1.Value.Y + c2.Value.Y) / 2.0);
             AppendLog($"[FLOW] mid=({mid.X:0.##},{mid.Y:0.##})");
 
-            EnterAnalysisView();
+            UI(EnterAnalysisView);
 
             _lastM1CenterPx = new CvPoint((int)System.Math.Round(c1.Value.X), (int)System.Math.Round(c1.Value.Y));
             _lastM2CenterPx = new CvPoint((int)System.Math.Round(c2.Value.X), (int)System.Math.Round(c2.Value.Y));
             _lastMidCenterPx = new CvPoint((int)System.Math.Round(mid.X), (int)System.Math.Round(mid.Y));
-            RedrawAnalysisCrosses();
+            UI(RedrawAnalysisCrosses);
 
             ViewModel?.TraceManual(
                 $"[manual-master] OK file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' " +
@@ -11261,7 +11317,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 var crossM2 = c2.Value;
                 var master1Baseline = _layout?.Master1Pattern?.Clone();
                 var master2Baseline = _layout?.Master2Pattern?.Clone();
-                bool scaleLock = GetScaleLockUi();
+                bool scaleLock = false;
+                UI(() => scaleLock = GetScaleLockUi());
 
                 _ = AcceptNewDetectionIfDifferent(
                     crossM1,
@@ -11313,7 +11370,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     // CODEX: string interpolation compatibility.
                     AppendLog($"[UI] Persisted detected ROI into layout: {_lastHeatmapRoi.Role}");
-                    UpdateRoiVisibilityControls();
+                    UI(UpdateRoiVisibilityControls);
                 }
             }
             catch (Exception ex)
@@ -11337,10 +11394,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 RestoreInspectionBaselineForCurrentImage();
             }
 
-            await Dispatcher.InvokeAsync(() =>
+            await UIAsync(() =>
             {
                 try
                 {
+                    LogAnalyzeApplyState();
                     RedrawOverlay();
                     UpdateHeatmapOverlayLayoutAndClip();
                     RedrawAnalysisCrosses();
@@ -11352,20 +11410,61 @@ namespace BrakeDiscInspector_GUI_ROI
                     // CODEX: string interpolation compatibility.
                     AppendLog($"[UI] Post-Analyze refresh failed: {ex.Message}");
                 }
-            });
+            }, DispatcherPriority.Render);
 
             if (_lastInspectionRepositioned)
             {
-                Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección reubicado.");
+                UI(() => Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección reubicado."));
             }
             else
             {
-                Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección NO reubicado (baseline/layout pendiente).");
+                UI(() => Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección NO reubicado (baseline/layout pendiente)."));
             }
             _state = MasterState.Ready;
-            UpdateWizardState();
+            UI(UpdateWizardState);
             // CODEX: string interpolation compatibility.
             AppendLog($"[FLOW] AnalyzeMastersAsync terminado");
+        }
+
+        private void LogAnalyzeApplyState()
+        {
+            GuiLog.Info($"[ApplyAnalyzeResult] thread={Thread.CurrentThread.ManagedThreadId} checkAccess={Dispatcher.CheckAccess()}");
+
+            var m1 = _lastM1CenterPx;
+            var m2 = _lastM2CenterPx;
+            var mid = _lastMidCenterPx;
+            GuiLog.Info($"[ApplyAnalyzeResult] crosses M1=({m1.X},{m1.Y}) M2=({m2.X},{m2.Y}) MID=({mid.X},{mid.Y})");
+
+            if (_layout == null)
+            {
+                GuiLog.Info("[ApplyAnalyzeResult] layout=NULL");
+            }
+            else
+            {
+                LogAnalyzeApplyRoi("Inspection1", _layout.Inspection1);
+                LogAnalyzeApplyRoi("Inspection2", _layout.Inspection2);
+                LogAnalyzeApplyRoi("Inspection3", _layout.Inspection3);
+                LogAnalyzeApplyRoi("Inspection4", _layout.Inspection4);
+                LogAnalyzeApplyRoi("Inspection", _layout.Inspection);
+            }
+
+            if (CanvasROI == null)
+                GuiLog.Info("[ApplyAnalyzeResult] CanvasROI=NULL");
+            if (ImgMain == null)
+                GuiLog.Info("[ApplyAnalyzeResult] ImgMain=NULL");
+            if (HeatmapOverlay == null)
+                GuiLog.Info("[ApplyAnalyzeResult] HeatmapOverlay=NULL");
+        }
+
+        private void LogAnalyzeApplyRoi(string label, RoiModel? roi)
+        {
+            if (roi == null)
+            {
+                GuiLog.Info($"[ApplyAnalyzeResult] {label}=NULL");
+                return;
+            }
+
+            GuiLog.Info($"[ApplyAnalyzeResult] {label}: {DescribeRoi(roi)}");
         }
 
         private async Task<bool> EnsureMasterBaselinesAsync()
@@ -11420,7 +11519,7 @@ namespace BrakeDiscInspector_GUI_ROI
                                 new BackendClient.FitImage(payload.PngBytes, fileName)
                             };
                         },
-                        memoryFit: false).ConfigureAwait(false);
+                        memoryFit: false);
 
                     if (!fitted)
                     {
@@ -12923,6 +13022,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             // CODEX: string interpolation compatibility.
             AppendLog($"[UI] BtnAnalyzeMaster_Click");
+            GuiLog.Info($"[AnalyzeMasters] thread={Thread.CurrentThread.ManagedThreadId} checkAccess={Dispatcher.CheckAccess()}");
 
             // 1) (opcional) snapshot/verificación que ya tienes
             LogPathSnapshot();

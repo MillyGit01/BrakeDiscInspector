@@ -11433,7 +11433,18 @@ namespace BrakeDiscInspector_GUI_ROI
             var m1 = _lastM1CenterPx;
             var m2 = _lastM2CenterPx;
             var mid = _lastMidCenterPx;
-            GuiLog.Info($"[ApplyAnalyzeResult] crosses M1=({m1.X},{m1.Y}) M2=({m2.X},{m2.Y}) MID=({mid.X},{mid.Y})");
+            string FormatCenter(CvPoint? point, string label)
+            {
+                if (point is not CvPoint pt)
+                {
+                    GuiLog.Warn($"[ApplyAnalyzeResult] {label} center is null; skipping.");
+                    return "null";
+                }
+
+                return $"({pt.X},{pt.Y})";
+            }
+
+            GuiLog.Info($"[ApplyAnalyzeResult] crosses M1={FormatCenter(m1, "M1")} M2={FormatCenter(m2, "M2")} MID={FormatCenter(mid, "MID")}");
 
             if (_layout == null)
             {

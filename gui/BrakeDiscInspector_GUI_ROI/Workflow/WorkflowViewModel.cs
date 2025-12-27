@@ -1747,6 +1747,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private void EnsureLayoutOriginalSnapshot()
+        {
+            if (_layoutOriginal == null && _layout != null)
+            {
+                _layoutOriginal = _layout.DeepClone();
+            }
+        }
+
         private void InitializeBatchBaselineRois()
         {
             for (int idx = 1; idx <= _batchBaselineRois.Length; idx++)
@@ -2002,8 +2010,52 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 source = GetBatchBaselineRoi(config.Index) ?? roi;
             }
+            else
+            {
+                var stable = GetLayoutBaselineRoi(config, roi);
+                if (stable != null)
+                {
+                    source = stable;
+                }
+            }
 
             return SeedBaselineForRoi(config, source ?? roi, reason);
+        }
+
+        private RoiModel? GetLayoutBaselineRoi(InspectionRoiConfig? config, RoiModel roi)
+        {
+            if (_layoutOriginal == null)
+            {
+                return null;
+            }
+
+            RoiModel? baseline = null;
+            if (config != null)
+            {
+                baseline = config.Index switch
+                {
+                    1 => _layoutOriginal.Inspection1,
+                    2 => _layoutOriginal.Inspection2,
+                    3 => _layoutOriginal.Inspection3,
+                    4 => _layoutOriginal.Inspection4,
+                    _ => null
+                };
+            }
+
+            if (baseline == null && !string.IsNullOrWhiteSpace(roi.Id))
+            {
+                baseline = new[]
+                    {
+                        _layoutOriginal.Inspection1,
+                        _layoutOriginal.Inspection2,
+                        _layoutOriginal.Inspection3,
+                        _layoutOriginal.Inspection4,
+                        _layoutOriginal.Inspection
+                    }
+                    .FirstOrDefault(r => r != null && string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return baseline;
         }
 
         private void SeedInspectionBaselines(string reason)
@@ -7009,8 +7061,26 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public Task RepositionMastersAsync(string imagePath)
         {
-            InitializeBatchSession();
+            EnsureLayoutOriginalSnapshot();
             return _repositionInspectionRoisAsync(imagePath, CancellationToken.None);
+        }
+
+        public async Task RepositionInspectionRoisAsync(string imagePath)
+        {
+            EnsureLayoutOriginalSnapshot();
+            await _repositionInspectionRoisAsync(imagePath, CancellationToken.None, skipIfAnchorsReady: true)
+                .ConfigureAwait(false);
+
+            if (!TryBuildAnchorContext(out var anchorContext, logError: false))
+            {
+                return;
+            }
+
+            InvokeOnUi(() =>
+            {
+                RepositionInspectionRois(anchorContext);
+                RedrawOverlays();
+            });
         }
 
         public void TraceBatchInspectionRoisSnapshot(string label)

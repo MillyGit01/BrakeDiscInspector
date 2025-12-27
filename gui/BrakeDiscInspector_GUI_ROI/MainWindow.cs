@@ -1,8 +1,11 @@
 using System;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Threading;
+using BrakeDiscInspector_GUI_ROI.Util;
 
 
 namespace BrakeDiscInspector_GUI_ROI
@@ -18,10 +21,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (ViewModel != null)
             {
+                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
+                    "[VISCONF][ANALYZE_MASTER][BACKEND] image='{0}'",
+                    _currentImagePathWin));
                 await ViewModel.RepositionMastersAsync(_currentImagePathWin);
+                await ViewModel.RepositionInspectionRoisAsync(_currentImagePathWin);
             }
 
-            RedrawOverlay();
+            await Dispatcher.InvokeAsync(() => RedrawOverlay(), DispatcherPriority.Render);
         }
 
 

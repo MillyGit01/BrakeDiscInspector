@@ -166,6 +166,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private volatile bool _suspendManualOverlayInvalidations;
         private bool _layoutAutosaveEnabled;
         private bool _hasAppliedLayoutSnapshot;
+        private Mat? _masterTemplateM1;
+        private Mat? _masterTemplateM2;
+        private string? _masterTemplateM1Path;
+        private string? _masterTemplateM2Path;
+        private string? _masterTemplateKey;
         private bool IsRoiRepositionFrozen => _freezeRoiRepositionCounter > 0;
         private double _lastSidePanelWidth = 520;
         private bool _isPanelCollapsed;
@@ -1413,6 +1418,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 $"[layout] Master1PatternImagePath='{_layout?.Master1PatternImagePath}'"));
             AppendLog(FormattableString.Invariant(
                 $"[layout] Master2PatternImagePath='{_layout?.Master2PatternImagePath}'"));
+            RefreshMasterTemplateCache($"layout:{sourceContext}");
             if (_layout?.InspectionRois != null)
             {
                 foreach (var roi in _layout.InspectionRois)
@@ -2362,6 +2368,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 ? "explicit"
                 : (fromFixed ? "fixed" : "layout-fallback");
             decisionInfo.BaselineSource = baselineSource;
+            var baselineM1Center = baselineM1 != null ? baselineM1.GetCenter() : (double.NaN, double.NaN);
+            var baselineM2Center = baselineM2 != null ? baselineM2.GetCenter() : (double.NaN, double.NaN);
+            var baselineM1Point = new SWPoint(baselineM1Center.Item1, baselineM1Center.Item2);
+            var baselineM2Point = new SWPoint(baselineM2Center.Item1, baselineM2Center.Item2);
 
             bool hasLast = !double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X);
             double posTol = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
@@ -2374,9 +2384,12 @@ namespace BrakeDiscInspector_GUI_ROI
             double minScore1 = analyzeOptions?.ThrM1 ?? _workflowViewModel?.AnchorScoreMin ?? 85;
             double minScore2 = analyzeOptions?.ThrM2 ?? _workflowViewModel?.AnchorScoreMin ?? 85;
             bool scoreOk = score1 >= minScore1 && score2 >= minScore2;
+            bool candidateFinite = !double.IsNaN(newM1.X) && !double.IsNaN(newM1.Y) && !double.IsNaN(newM2.X) && !double.IsNaN(newM2.Y);
+            bool candidateValid = scoreOk && candidateFinite;
 
-            bool accept = !hasLast;
+            bool accept = false;
             double dM1 = double.NaN, dM2 = double.NaN, dAng = double.NaN;
+            string reason;
 
             if (hasLast)
             {
@@ -2403,23 +2416,57 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     accept = false;
                 }
+
+                reason = accept
+                    ? (scoreOk ? "score_ok" : "within_tol_low_score")
+                    : "rejected_low_score_or_large_delta";
+            }
+            else
+            {
+                if (!double.IsNaN(baselineM1Point.X) && !double.IsNaN(baselineM2Point.X))
+                {
+                    dM1 = Dist(newM1.X, newM1.Y, baselineM1Point.X, baselineM1Point.Y);
+                    dM2 = Dist(newM2.X, newM2.Y, baselineM2Point.X, baselineM2Point.Y);
+                    double angOld = AngleDeg(baselineM2Point.Y - baselineM1Point.Y, baselineM2Point.X - baselineM1Point.X);
+                    double angNew = AngleDeg(newM2.Y - newM1.Y, newM2.X - newM1.X);
+                    dAng = Math.Abs(angNew - angOld);
+                    if (dAng > 180.0)
+                        dAng = 360.0 - dAng;
+                }
+
+                if (candidateValid)
+                {
+                    accept = true;
+                    reason = "first_detection_use_candidate";
+                }
+                else
+                {
+                    accept = false;
+                    reason = "first_detection_invalid_candidate";
+                }
             }
 
             decisionInfo.Accepted = accept;
-            decisionInfo.Reason = hasLast
-                ? (accept
-                    ? (scoreOk ? "score_ok" : "within_tol_low_score")
-                    : "rejected_low_score_or_large_delta")
-                : "first_detection";
+            decisionInfo.Reason = reason;
 
             InspLog($"[Accept] ΔM1={dM1:F3}px ΔM2={dM2:F3}px ΔAng={dAng:F3}° posTol={posTol:F3} angTol={angTol:F3} score=({score1:0.###},{score2:0.###}) minScore=({minScore1:0.###},{minScore2:0.###}) hasLast={hasLast} accepted={accept} baseline_source={baselineSource}");
 
-            var m1ToApply = (!hasLast || accept) ? newM1 : new SWPoint(_lastAccM1X, _lastAccM1Y);
-            var m2ToApply = (!hasLast || accept) ? newM2 : new SWPoint(_lastAccM2X, _lastAccM2Y);
+            var fallbackM1 = hasLast
+                ? new SWPoint(_lastAccM1X, _lastAccM1Y)
+                : (!double.IsNaN(baselineM1Point.X) ? baselineM1Point : newM1);
+            var fallbackM2 = hasLast
+                ? new SWPoint(_lastAccM2X, _lastAccM2Y)
+                : (!double.IsNaN(baselineM2Point.X) ? baselineM2Point : newM2);
+            var m1ToApply = accept ? newM1 : fallbackM1;
+            var m2ToApply = accept ? newM2 : fallbackM2;
             decisionInfo.AppliedM1 = m1ToApply;
             decisionInfo.AppliedM2 = m2ToApply;
 
             InspLog($"[Accept] decision accepted={accept} anchorsToApply=M1({m1ToApply.X:F3},{m1ToApply.Y:F3}) M2({m2ToApply.X:F3},{m2ToApply.Y:F3}) acceptedAnchors={(accept ? "M1,M2" : "reuse_last")}");
+            var applyAngle = AngleDeg(m2ToApply.Y - m1ToApply.Y, m2ToApply.X - m1ToApply.X);
+            var applyDx = m1ToApply.X - baselineM1Point.X;
+            var applyDy = m1ToApply.Y - baselineM1Point.Y;
+            InspLog($"[APPLY] baselineM1=({baselineM1Point.X:0.###},{baselineM1Point.Y:0.###}) acceptedM1=({m1ToApply.X:0.###},{m1ToApply.Y:0.###}) deltaPx=({applyDx:0.###},{applyDy:0.###}) angle={applyAngle:0.###}");
 
             if (accept)
             {
@@ -2443,7 +2490,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 catch { }
             });
 
-            if (accept || !hasLast)
+            if (accept)
             {
                 _lastAccM1X = newM1.X; _lastAccM1Y = newM1.Y;
                 _lastAccM2X = newM2.X; _lastAccM2Y = newM2.Y;
@@ -2453,10 +2500,96 @@ namespace BrakeDiscInspector_GUI_ROI
             return accept;
         }
 
-        private void LogAnalyzeMasterStartVisConf(string imageKey, string fileName, double posTol, double angTol)
+        private void LogAnalyzeMasterStartVisConf(
+            string imageKey,
+            string fileName,
+            string imagePath,
+            string templateKey,
+            string? templateM1Path,
+            string? templateM2Path,
+            string templateM1Size,
+            string templateM2Size,
+            int imageWidth,
+            int imageHeight,
+            double posTol,
+            double angTol)
         {
             VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER][START] key='{imageKey}' file='{fileName}' posTol={posTol:0.###} angTol={angTol:0.###} layout='{GetCurrentLayoutName()}'"));
+                $"[VISCONF][ANALYZE_MASTER][START] key='{imageKey}' file='{fileName}' path='{imagePath}' " +
+                $"imgSize={imageWidth}x{imageHeight} templateKey='{templateKey}' " +
+                $"templateM1Path='{templateM1Path ?? string.Empty}' templateM2Path='{templateM2Path ?? string.Empty}' " +
+                $"templateM1Size={templateM1Size} templateM2Size={templateM2Size} " +
+                $"posTol={posTol:0.###} angTol={angTol:0.###} layout='{GetCurrentLayoutName()}'"));
+        }
+
+        private void LogAnalyzeMasterMatchVisConf(
+            string imageKey,
+            string fileName,
+            SWPoint rawM1,
+            SWPoint rawM2,
+            double angM1,
+            double angM2,
+            double score1,
+            double score2)
+        {
+            var message = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER][MATCH] key='{0}' file='{1}' " +
+                "rawM1=({2:0.###},{3:0.###}) angM1={4:0.###} " +
+                "rawM2=({5:0.###},{6:0.###}) angM2={7:0.###} " +
+                "score=({8:0.###},{9:0.###})",
+                imageKey,
+                fileName,
+                rawM1.X,
+                rawM1.Y,
+                angM1,
+                rawM2.X,
+                rawM2.Y,
+                angM2,
+                score1,
+                score2);
+            VisConfLog.AnalyzeMaster(message);
+        }
+
+        private void LogAnalyzeMasterPreAcceptVisConf(
+            string imageKey,
+            string fileName,
+            SWPoint baseM1,
+            SWPoint baseM2,
+            SWPoint candM1,
+            SWPoint candM2,
+            double score1,
+            double score2)
+        {
+            var dM1 = Dist(candM1.X, candM1.Y, baseM1.X, baseM1.Y);
+            var dM2 = Dist(candM2.X, candM2.Y, baseM2.X, baseM2.Y);
+            var message = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER][PRE_ACCEPT] key='{0}' file='{1}' " +
+                "baseM1=({2:0.###},{3:0.###}) baseM2=({4:0.###},{5:0.###}) " +
+                "candM1=({6:0.###},{7:0.###}) candM2=({8:0.###},{9:0.###}) " +
+                "dM1={10:0.###} dM2={11:0.###} score=({12:0.###},{13:0.###})",
+                imageKey,
+                fileName,
+                baseM1.X,
+                baseM1.Y,
+                baseM2.X,
+                baseM2.Y,
+                candM1.X,
+                candM1.Y,
+                candM2.X,
+                candM2.Y,
+                dM1,
+                dM2,
+                score1,
+                score2);
+            VisConfLog.AnalyzeMaster(message);
+
+            const double warnDeltaPx = 1.0;
+            const double warnScore = 98.0;
+            if (dM1 <= warnDeltaPx && dM2 <= warnDeltaPx && score1 >= warnScore && score2 >= warnScore)
+            {
+                VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                    $"[VISCONF][ANALYZE_MASTER][WARN] key='{imageKey}' file='{fileName}' candidate ~= baseline with very high score -> possible self-template (template derived from same image)."));
+            }
         }
 
         private void LogAnalyzeMasterRawVisConf(
@@ -5476,6 +5609,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     {
                         _layout.Master1Pattern = null;
                         _layout.Master1PatternImagePath = null;
+                        ClearMasterTemplateCache("clear-master1-pattern");
                         return true;
                     }
                     break;
@@ -5493,6 +5627,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     {
                         _layout.Master2Pattern = null;
                         _layout.Master2PatternImagePath = null;
+                        ClearMasterTemplateCache("clear-master2-pattern");
                         return true;
                     }
                     break;
@@ -10784,6 +10919,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                     SaveRoiCropPreview(_layout.Master1Pattern, "M1_pattern");
                     _layout.Master1PatternImagePath = SaveMasterPatternCanonical(_layout.Master1Pattern, masterIndex: 1);
+                    RefreshMasterTemplateCache("save-master1-pattern");
 
                     _tmpBuffer = null;
                     if (!restoreStateAfterSave)
@@ -10822,6 +10958,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     savedRoi = _layout.Master2Pattern;
                     SaveRoiCropPreview(_layout.Master2Pattern, "M2_pattern");
                     _layout.Master2PatternImagePath = SaveMasterPatternCanonical(_layout.Master2Pattern, masterIndex: 2);
+                    RefreshMasterTemplateCache("save-master2-pattern");
 
                     KeepOnlyMaster2InCanvas();
                     LogHeatmap("KeepOnlyMaster2InCanvas called after saving Master2Pattern.");
@@ -11184,14 +11321,41 @@ namespace BrakeDiscInspector_GUI_ROI
             var analyzeFileName = GetCurrentImageFileName();
             double posTolForLog = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
             double angTolForLog = _layout?.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
-            LogAnalyzeMasterStartVisConf(analyzeImageKey, analyzeFileName, posTolForLog, angTolForLog);
+            var analyzeImagePath = _currentImagePathWin ?? string.Empty;
+            bool useLocalMatcher = false;
+            UI(() => useLocalMatcher = ChkUseLocalMatcher.IsChecked == true);
+
+            var templatesReady = TryEnsureMasterTemplates("analyze-start", out var templateKey);
+            var templateM1Size = _masterTemplateM1 != null ? $"{_masterTemplateM1.Width}x{_masterTemplateM1.Height}" : "0x0";
+            var templateM2Size = _masterTemplateM2 != null ? $"{_masterTemplateM2.Width}x{_masterTemplateM2.Height}" : "0x0";
+            LogAnalyzeMasterStartVisConf(
+                analyzeImageKey,
+                analyzeFileName,
+                analyzeImagePath,
+                templateKey,
+                _layout?.Master1PatternImagePath,
+                _layout?.Master2PatternImagePath,
+                templateM1Size,
+                templateM2Size,
+                _imgW,
+                _imgH,
+                posTolForLog,
+                angTolForLog);
 
             ViewModel?.TraceManual($"[manual-master] analyze file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}'");
 
             SWPoint? c1 = null, c2 = null;
             double s1 = 0, s2 = 0;
-            bool useLocalMatcher = false;
-            UI(() => useLocalMatcher = ChkUseLocalMatcher.IsChecked == true);
+            double a1 = double.NaN, a2 = double.NaN;
+            long loadMs = 0;
+            long matchMs = 0;
+
+            if (useLocalMatcher && !templatesReady)
+            {
+                AppendLog("[analyze-master] Master templates not set. Capture master templates or load a layout with master references before analyzing.");
+                UI(() => Snack("Master templates not set. Load a master reference image or capture templates first."));
+                useLocalMatcher = false;
+            }
 
             // 1) Intento local primero (opcional)
             if (useLocalMatcher)
@@ -11205,8 +11369,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 var localM2Pattern = _layout?.Master2Pattern?.Clone();
                 var localM1Search = _layout?.Master1Search?.Clone();
                 var localM2Search = _layout?.Master2Search?.Clone();
-                var localM1PatternPath = _layout?.Master1PatternImagePath;
-                var localM2PatternPath = _layout?.Master2PatternImagePath;
 
                 var localResult = await Task.Run(() =>
                 {
@@ -11215,21 +11377,29 @@ namespace BrakeDiscInspector_GUI_ROI
                     SWPoint? m2 = null;
                     double score1 = 0;
                     double score2 = 0;
+                    double angle1 = double.NaN;
+                    double angle2 = double.NaN;
+                    long loadMsLocal = 0;
+                    long matchMsLocal = 0;
                     bool disableLocal = false;
 
                     try
                     {
                         logs.Add("[FLOW] Usando matcher local");
+                        var loadSw = Stopwatch.StartNew();
                         using var img = Cv.Cv2.ImRead(localImagePath);
+                        loadSw.Stop();
+                        loadMsLocal = loadSw.ElapsedMilliseconds;
                         Mat? m1Override = null;
                         Mat? m2Override = null;
                         try
                         {
-                            if (localM1Pattern != null)
-                                m1Override = TryLoadMasterPatternOverride(localM1PatternPath, "M1");
-                            if (localM2Pattern != null)
-                                m2Override = TryLoadMasterPatternOverride(localM2PatternPath, "M2");
+                            if (_masterTemplateM1 != null)
+                                m1Override = _masterTemplateM1.Clone();
+                            if (_masterTemplateM2 != null)
+                                m2Override = _masterTemplateM2.Clone();
 
+                            var matchSw = Stopwatch.StartNew();
                             var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, localM1Pattern, localM1Search,
                                 localAnalyze.FeatureM1, localAnalyze.ThrM1, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m1Override,
                                 LogToFileAndUI);
@@ -11237,6 +11407,7 @@ namespace BrakeDiscInspector_GUI_ROI
                             {
                                 m1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
                                 score1 = res1.Score;
+                                angle1 = res1.AngleDeg;
                                 logs.Add($"[LOCAL] M1 hit score={res1.Score:0.###}");
                             }
                             else
@@ -11247,10 +11418,13 @@ namespace BrakeDiscInspector_GUI_ROI
                             var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, localM2Pattern, localM2Search,
                                 localAnalyze.FeatureM2, localAnalyze.ThrM2, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m2Override,
                                 LogToFileAndUI);
+                            matchSw.Stop();
+                            matchMsLocal = matchSw.ElapsedMilliseconds;
                             if (res2.Center.HasValue)
                             {
                                 m2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
                                 score2 = res2.Score;
+                                angle2 = res2.AngleDeg;
                                 logs.Add($"[LOCAL] M2 hit score={res2.Score:0.###}");
                             }
                             else
@@ -11274,7 +11448,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         logs.Add($"[local matcher] ERROR: {ex.Message}");
                     }
 
-                    return (m1: m1, m2: m2, score1: score1, score2: score2, logs: logs, disableLocal: disableLocal);
+                    return (m1: m1, m2: m2, score1: score1, score2: score2, angle1: angle1, angle2: angle2, loadMs: loadMsLocal, matchMs: matchMsLocal, logs: logs, disableLocal: disableLocal);
                 });
 
                 foreach (var log in localResult.logs)
@@ -11296,13 +11470,19 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     c1 = localResult.m1;
                     s1 = localResult.score1;
+                    a1 = localResult.angle1;
                 }
 
                 if (localResult.m2.HasValue)
                 {
                     c2 = localResult.m2;
                     s2 = localResult.score2;
+                    a2 = localResult.angle2;
                 }
+
+                loadMs = localResult.loadMs;
+                matchMs = localResult.matchMs;
+                AppendLog($"[ANALYZE][timing] load_ms={loadMs} match_ms={matchMs}");
             }
 
             if (c1 is null || c2 is null)
@@ -11364,6 +11544,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
+            var rawM1 = c1 ?? new SWPoint(double.NaN, double.NaN);
+            var rawM2 = c2 ?? new SWPoint(double.NaN, double.NaN);
+            LogAnalyzeMasterMatchVisConf(analyzeImageKey, analyzeFileName, rawM1, rawM2, a1, a2, s1, s2);
 
             // 3) Manejo de fallo
             if (c1 is null)
@@ -11420,6 +11603,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 LogAnalyzeMasterRawVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2, s1, s2, posTolPx);
                 LogAnalyzeMasterDeltaVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2);
+                LogAnalyzeMasterPreAcceptVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2, s1, s2);
 
                 _ = AcceptNewDetectionIfDifferent(
                     crossM1,
@@ -11498,6 +11682,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 RestoreInspectionBaselineForCurrentImage();
             }
 
+            var uiApplySw = Stopwatch.StartNew();
             await UIAsync(() =>
             {
                 try
@@ -11515,6 +11700,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     AppendLog($"[UI] Post-Analyze refresh failed: {ex.Message}");
                 }
             }, DispatcherPriority.Render);
+            uiApplySw.Stop();
+            AppendLog($"[ANALYZE][timing] ui_apply_ms={uiApplySw.ElapsedMilliseconds}");
 
             if (_lastInspectionRepositioned)
             {
@@ -12755,6 +12942,104 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[master] Error cargando patrón {tag}: {ex.Message}");
                 return null;
             }
+        }
+
+        private void ClearMasterTemplateCache(string reason)
+        {
+            _masterTemplateM1?.Dispose();
+            _masterTemplateM2?.Dispose();
+            _masterTemplateM1 = null;
+            _masterTemplateM2 = null;
+            _masterTemplateM1Path = null;
+            _masterTemplateM2Path = null;
+            _masterTemplateKey = null;
+            AppendLog($"[master-template] cleared reason={reason}");
+        }
+
+        private static string BuildMasterTemplateKey(string? m1Path, string? m2Path)
+        {
+            static string FormatKeyPart(string? path)
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return "<null>";
+                }
+
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        var info = new FileInfo(path);
+                        return $"{path}|{info.Length}|{info.LastWriteTimeUtc:O}";
+                    }
+                }
+                catch
+                {
+                    // ignore, fall through to raw path
+                }
+
+                return path;
+            }
+
+            return $"{FormatKeyPart(m1Path)}|{FormatKeyPart(m2Path)}";
+        }
+
+        private bool TryEnsureMasterTemplates(string context, out string templateKey)
+        {
+            templateKey = BuildMasterTemplateKey(_layout?.Master1PatternImagePath, _layout?.Master2PatternImagePath);
+            var m1Path = _layout?.Master1PatternImagePath;
+            var m2Path = _layout?.Master2PatternImagePath;
+
+            if (string.IsNullOrWhiteSpace(m1Path) || string.IsNullOrWhiteSpace(m2Path))
+            {
+                AppendLog($"[master-template] missing paths context={context} m1='{m1Path ?? "<null>"}' m2='{m2Path ?? "<null>"}'");
+                return false;
+            }
+
+            if (_masterTemplateM1 == null || !string.Equals(_masterTemplateM1Path, m1Path, StringComparison.OrdinalIgnoreCase))
+            {
+                _masterTemplateM1?.Dispose();
+                _masterTemplateM1 = TryLoadMasterPatternOverride(m1Path, "M1");
+                _masterTemplateM1Path = m1Path;
+            }
+
+            if (_masterTemplateM2 == null || !string.Equals(_masterTemplateM2Path, m2Path, StringComparison.OrdinalIgnoreCase))
+            {
+                _masterTemplateM2?.Dispose();
+                _masterTemplateM2 = TryLoadMasterPatternOverride(m2Path, "M2");
+                _masterTemplateM2Path = m2Path;
+            }
+
+            var ready = _masterTemplateM1 != null && _masterTemplateM2 != null;
+            if (ready)
+            {
+                _masterTemplateKey = templateKey;
+                AppendLog($"[master-template] ready context={context} key='{templateKey}'");
+            }
+            else
+            {
+                AppendLog($"[master-template] failed context={context} key='{templateKey}'");
+            }
+
+            return ready;
+        }
+
+        private void RefreshMasterTemplateCache(string context)
+        {
+            if (_layout == null)
+            {
+                ClearMasterTemplateCache($"layout-null:{context}");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_layout.Master1PatternImagePath) ||
+                string.IsNullOrWhiteSpace(_layout.Master2PatternImagePath))
+            {
+                ClearMasterTemplateCache($"missing-paths:{context}");
+                return;
+            }
+
+            _ = TryEnsureMasterTemplates(context, out _);
         }
 
         private async Task<Workflow.RoiExportResult?> ExportCurrentRoiCanonicalAsync()

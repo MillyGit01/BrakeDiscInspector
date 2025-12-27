@@ -1774,7 +1774,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool _lastDetectionAccepted = false;
 
         // Tolerances (pixels / degrees). Tune if needed.
-        private double _analyzePosTolPx = 1.0;    // <=1 px considered the same
+        private double _analyzePosTolPx = 50.0;    // default tolerance in px for acceptance checks
         private double _analyzeAngTolDeg = 0.5;   // <=0.5° considered the same
         private string _analyzeFeatureM1 = "auto";
         private string _analyzeFeatureM2 = "auto";
@@ -2339,7 +2339,7 @@ namespace BrakeDiscInspector_GUI_ROI
             public string Reason { get; set; } = string.Empty;
         }
 
-        private bool AcceptNewDetectionIfDifferent(SWPoint newM1, SWPoint newM2, bool scaleLock,
+        private bool AcceptNewDetectionIfDifferent(SWPoint newM1, SWPoint newM2, double score1, double score2, bool scaleLock,
                                                    RoiModel? master1Baseline,
                                                    RoiModel? master2Baseline,
                                                    out AnalyzeMasterDecisionInfo decisionInfo)
@@ -2370,6 +2370,11 @@ namespace BrakeDiscInspector_GUI_ROI
             decisionInfo.AngTol = angTol;
             decisionInfo.HasLast = hasLast;
 
+            var analyzeOptions = _layout?.Analyze;
+            double minScore1 = analyzeOptions?.ThrM1 ?? _workflowViewModel?.AnchorScoreMin ?? 85;
+            double minScore2 = analyzeOptions?.ThrM2 ?? _workflowViewModel?.AnchorScoreMin ?? 85;
+            bool scoreOk = score1 >= minScore1 && score2 >= minScore2;
+
             bool accept = !hasLast;
             double dM1 = double.NaN, dM2 = double.NaN, dAng = double.NaN;
 
@@ -2383,18 +2388,31 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (dAng > 180.0)
                     dAng = 360.0 - dAng;
 
-                bool acceptByPos = posTol <= 0 || dM1 > posTol || dM2 > posTol;
-                bool acceptByAng = angTol <= 0 || dAng > angTol;
+                bool withinPosTol = posTol > 0 && dM1 <= posTol && dM2 <= posTol;
+                bool withinAngTol = angTol > 0 && dAng <= angTol;
 
-                accept = acceptByPos || acceptByAng;
+                if (scoreOk)
+                {
+                    accept = true;
+                }
+                else if (withinPosTol && withinAngTol)
+                {
+                    accept = true;
+                }
+                else
+                {
+                    accept = false;
+                }
             }
 
             decisionInfo.Accepted = accept;
             decisionInfo.Reason = hasLast
-                ? (accept ? "delta_over_tol" : "within_tol_reuse_last")
+                ? (accept
+                    ? (scoreOk ? "score_ok" : "within_tol_low_score")
+                    : "rejected_low_score_or_large_delta")
                 : "first_detection";
 
-            InspLog($"[Accept] ΔM1={dM1:F3}px ΔM2={dM2:F3}px ΔAng={dAng:F3}° posTol={posTol:F3} angTol={angTol:F3} hasLast={hasLast} accepted={accept} baseline_source={baselineSource}");
+            InspLog($"[Accept] ΔM1={dM1:F3}px ΔM2={dM2:F3}px ΔAng={dAng:F3}° posTol={posTol:F3} angTol={angTol:F3} score=({score1:0.###},{score2:0.###}) minScore=({minScore1:0.###},{minScore2:0.###}) hasLast={hasLast} accepted={accept} baseline_source={baselineSource}");
 
             var m1ToApply = (!hasLast || accept) ? newM1 : new SWPoint(_lastAccM1X, _lastAccM1Y);
             var m2ToApply = (!hasLast || accept) ? newM2 : new SWPoint(_lastAccM2X, _lastAccM2Y);
@@ -2417,10 +2435,13 @@ namespace BrakeDiscInspector_GUI_ROI
 
             RepositionInspectionUsingSt(m1ToApply, m2ToApply, scaleLock, baselineM1, baselineM2);
 
-            RedrawAllRois();
-            UpdateRoiHud();
-            try { RedrawAnalysisCrosses(); }
-            catch { }
+            UI(() =>
+            {
+                RedrawAllRois();
+                UpdateRoiHud();
+                try { RedrawAnalysisCrosses(); }
+                catch { }
+            });
 
             if (accept || !hasLast)
             {
@@ -2436,6 +2457,40 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             VisConfLog.AnalyzeMaster(FormattableString.Invariant(
                 $"[VISCONF][ANALYZE_MASTER][START] key='{imageKey}' file='{fileName}' posTol={posTol:0.###} angTol={angTol:0.###} layout='{GetCurrentLayoutName()}'"));
+        }
+
+        private void LogAnalyzeMasterRawVisConf(
+            string imageKey,
+            string fileName,
+            SWPoint baseM1,
+            SWPoint baseM2,
+            SWPoint rawM1,
+            SWPoint rawM2,
+            double score1,
+            double score2,
+            double posTol)
+        {
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER][RAW] key='{imageKey}' file='{fileName}' " +
+                $"M1_base=({baseM1.X:0.###},{baseM1.Y:0.###}) M2_base=({baseM2.X:0.###},{baseM2.Y:0.###}) " +
+                $"M1_raw=({rawM1.X:0.###},{rawM1.Y:0.###}) score1={score1:0.###} " +
+                $"M2_raw=({rawM2.X:0.###},{rawM2.Y:0.###}) score2={score2:0.###} " +
+                $"posTolPx={posTol:0.###}"));
+        }
+
+        private void LogAnalyzeMasterDeltaVisConf(string imageKey, string fileName, SWPoint baseM1, SWPoint baseM2, SWPoint rawM1, SWPoint rawM2)
+        {
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER][DELTA] key='{imageKey}' file='{fileName}' " +
+                $"dM1=({rawM1.X - baseM1.X:0.###},{rawM1.Y - baseM1.Y:0.###}) " +
+                $"dM2=({rawM2.X - baseM2.X:0.###},{rawM2.Y - baseM2.Y:0.###})"));
+        }
+
+        private void LogAnalyzeMasterFinalVisConf(string imageKey, string fileName, bool accepted, string reason, SWPoint finalM1, SWPoint finalM2)
+        {
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER][FINAL] key='{imageKey}' file='{fileName}' accepted={accepted} reason='{reason}' " +
+                $"M1_final=({finalM1.X:0.###},{finalM1.Y:0.###}) M2_final=({finalM2.X:0.###},{finalM2.Y:0.###})"));
         }
 
         private void LogAnalyzeMasterVisConf(
@@ -2477,6 +2532,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 angTol,
                 reason);
             VisConfLog.AnalyzeMaster(FormattableString.Invariant(failureMessage));
+        }
+
+        private void LogAnalyzeMasterFailureDetailVisConf(string imageKey, string fileName, string reason, string fallback)
+        {
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER][FAIL] key='{imageKey}' file='{fileName}' reason='{reason}' fallback='{fallback}'"));
         }
 
         private static bool IsRoiSaved(RoiModel? r)
@@ -11278,6 +11339,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (c1 is null)
             {
                 LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M1 not found", posTolForLog, angTolForLog);
+                LogAnalyzeMasterFailureDetailVisConf(analyzeImageKey, analyzeFileName, "M1 not found", "baseline_center");
                 UI(() => Snack($"No se ha encontrado Master 1 en su zona de búsqueda")); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c1 null");
@@ -11287,6 +11349,7 @@ namespace BrakeDiscInspector_GUI_ROI
             if (c2 is null)
             {
                 LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M2 not found", posTolForLog, angTolForLog);
+                LogAnalyzeMasterFailureDetailVisConf(analyzeImageKey, analyzeFileName, "M2 not found", "baseline_center");
                 UI(() => Snack($"No se ha encontrado Master 2 en su zona de búsqueda")); // CODEX: string interpolation compatibility.
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] c2 null");
@@ -11317,18 +11380,29 @@ namespace BrakeDiscInspector_GUI_ROI
                 var crossM2 = c2.Value;
                 var master1Baseline = _layout?.Master1Pattern?.Clone();
                 var master2Baseline = _layout?.Master2Pattern?.Clone();
+                var baseM1 = master1Baseline != null ? master1Baseline.GetCenter() : (double.NaN, double.NaN);
+                var baseM2 = master2Baseline != null ? master2Baseline.GetCenter() : (double.NaN, double.NaN);
+                var baseM1Point = new SWPoint(baseM1.Item1, baseM1.Item2);
+                var baseM2Point = new SWPoint(baseM2.Item1, baseM2.Item2);
+                double posTolPx = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
                 bool scaleLock = false;
                 UI(() => scaleLock = GetScaleLockUi());
+
+                LogAnalyzeMasterRawVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2, s1, s2, posTolPx);
+                LogAnalyzeMasterDeltaVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2);
 
                 _ = AcceptNewDetectionIfDifferent(
                     crossM1,
                     crossM2,
+                    s1,
+                    s2,
                     scaleLock,
                     master1Baseline,
                     master2Baseline,
                     out var decisionInfo);
 
                 LogAnalyzeMasterVisConf(analyzeImageKey, analyzeFileName, c1.Value, c2.Value, s1, s2, decisionInfo);
+                LogAnalyzeMasterFinalVisConf(analyzeImageKey, analyzeFileName, decisionInfo.Accepted, decisionInfo.Reason, decisionInfo.AppliedM1, decisionInfo.AppliedM2);
             }
             catch (Exception ex)
             {

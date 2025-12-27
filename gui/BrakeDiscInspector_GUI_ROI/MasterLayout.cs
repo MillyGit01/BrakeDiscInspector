@@ -108,7 +108,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
     public sealed class AnalyzeOptions
     {
-        public double PosTolPx { get; set; } = 1.0;
+        public double PosTolPx { get; set; } = 50.0;
         public double AngTolDeg { get; set; } = 0.5;
         public bool ScaleLock { get; set; } = true;
         public bool DisableRot { get; set; } = false;

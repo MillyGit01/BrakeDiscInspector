@@ -2514,12 +2514,26 @@ namespace BrakeDiscInspector_GUI_ROI
             double posTol,
             double angTol)
         {
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER][START] key='{imageKey}' file='{fileName}' path='{imagePath}' " +
-                $"imgSize={imageWidth}x{imageHeight} templateKey='{templateKey}' " +
-                $"templateM1Path='{templateM1Path ?? string.Empty}' templateM2Path='{templateM2Path ?? string.Empty}' " +
-                $"templateM1Size={templateM1Size} templateM2Size={templateM2Size} " +
-                $"posTol={posTol:0.###} angTol={angTol:0.###} layout='{GetCurrentLayoutName()}'"));
+            var message = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER][START] key='{0}' file='{1}' path='{2}' " +
+                "imgSize={3}x{4} templateKey='{5}' " +
+                "templateM1Path='{6}' templateM2Path='{7}' " +
+                "templateM1Size={8} templateM2Size={9} " +
+                "posTol={10:0.###} angTol={11:0.###} layout='{12}'",
+                imageKey,
+                fileName,
+                imagePath,
+                imageWidth,
+                imageHeight,
+                templateKey,
+                templateM1Path ?? string.Empty,
+                templateM2Path ?? string.Empty,
+                templateM1Size,
+                templateM2Size,
+                posTol,
+                angTol,
+                GetCurrentLayoutName());
+            VisConfLog.AnalyzeMaster(message);
         }
 
         private void LogAnalyzeMasterMatchVisConf(

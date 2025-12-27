@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 
 namespace BrakeDiscInspector_GUI_ROI.Util
@@ -19,15 +20,55 @@ namespace BrakeDiscInspector_GUI_ROI.Util
 
         public static void Gui(string message) => GuiLog.Info(message);
 
+        public static void Gui(FormattableString message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            Gui(message.ToString(CultureInfo.InvariantCulture));
+        }
+
         public static void GuiAndRoi(string message)
         {
             Gui(message);
             Roi(message);
         }
 
+        public static void GuiAndRoi(FormattableString message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            GuiAndRoi(message.ToString(CultureInfo.InvariantCulture));
+        }
+
         public static void Roi(string message) => WriteLine(RoiCoordsPath, message);
 
+        public static void Roi(FormattableString message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            Roi(message.ToString(CultureInfo.InvariantCulture));
+        }
+
         public static void AnalyzeMaster(string message) => WriteLine(AnalyzeMasterPath, message);
+
+        public static void AnalyzeMaster(FormattableString message)
+        {
+            if (message == null)
+            {
+                return;
+            }
+
+            AnalyzeMaster(message.ToString(CultureInfo.InvariantCulture));
+        }
 
         private static void WriteLine(string path, string message)
         {

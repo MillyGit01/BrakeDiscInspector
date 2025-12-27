@@ -10,6 +10,18 @@ namespace BrakeDiscInspector_GUI_ROI;
 
 internal static class InspectionAlignmentHelper
 {
+    private static void LogAlign(Action<string>? trace, string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        var payload = "[ALIGN]" + message;
+        GuiLog.Info(payload);
+        trace?.Invoke(payload);
+    }
+
     private static void LogAlign(Action<string>? trace, FormattableString message)
     {
         if (message == null)
@@ -17,9 +29,7 @@ internal static class InspectionAlignmentHelper
             return;
         }
 
-        var payload = "[ALIGN]" + message.ToString(CultureInfo.InvariantCulture);
-        GuiLog.Info(payload);
-        trace?.Invoke(payload);
+        LogAlign(trace, message.ToString(CultureInfo.InvariantCulture));
     }
 
     internal static (double Tx, double Ty) ComputeTranslation(

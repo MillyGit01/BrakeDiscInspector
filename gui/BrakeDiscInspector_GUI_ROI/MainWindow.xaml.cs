@@ -2470,27 +2470,57 @@ namespace BrakeDiscInspector_GUI_ROI
             double score2,
             double posTol)
         {
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER][RAW] key='{imageKey}' file='{fileName}' " +
-                $"M1_base=({baseM1.X:0.###},{baseM1.Y:0.###}) M2_base=({baseM2.X:0.###},{baseM2.Y:0.###}) " +
-                $"M1_raw=({rawM1.X:0.###},{rawM1.Y:0.###}) score1={score1:0.###} " +
-                $"M2_raw=({rawM2.X:0.###},{rawM2.Y:0.###}) score2={score2:0.###} " +
-                $"posTolPx={posTol:0.###}"));
+            var message = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER][RAW] key='{0}' file='{1}' " +
+                "M1_base=({2:0.###},{3:0.###}) M2_base=({4:0.###},{5:0.###}) " +
+                "M1_raw=({6:0.###},{7:0.###}) score1={8:0.###} " +
+                "M2_raw=({9:0.###},{10:0.###}) score2={11:0.###} " +
+                "posTolPx={12:0.###}",
+                imageKey,
+                fileName,
+                baseM1.X,
+                baseM1.Y,
+                baseM2.X,
+                baseM2.Y,
+                rawM1.X,
+                rawM1.Y,
+                score1,
+                rawM2.X,
+                rawM2.Y,
+                score2,
+                posTol);
+            VisConfLog.AnalyzeMaster(message);
         }
 
         private void LogAnalyzeMasterDeltaVisConf(string imageKey, string fileName, SWPoint baseM1, SWPoint baseM2, SWPoint rawM1, SWPoint rawM2)
         {
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER][DELTA] key='{imageKey}' file='{fileName}' " +
-                $"dM1=({rawM1.X - baseM1.X:0.###},{rawM1.Y - baseM1.Y:0.###}) " +
-                $"dM2=({rawM2.X - baseM2.X:0.###},{rawM2.Y - baseM2.Y:0.###})"));
+            var message = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER][DELTA] key='{0}' file='{1}' " +
+                "dM1=({2:0.###},{3:0.###}) " +
+                "dM2=({4:0.###},{5:0.###})",
+                imageKey,
+                fileName,
+                rawM1.X - baseM1.X,
+                rawM1.Y - baseM1.Y,
+                rawM2.X - baseM2.X,
+                rawM2.Y - baseM2.Y);
+            VisConfLog.AnalyzeMaster(message);
         }
 
         private void LogAnalyzeMasterFinalVisConf(string imageKey, string fileName, bool accepted, string reason, SWPoint finalM1, SWPoint finalM2)
         {
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER][FINAL] key='{imageKey}' file='{fileName}' accepted={accepted} reason='{reason}' " +
-                $"M1_final=({finalM1.X:0.###},{finalM1.Y:0.###}) M2_final=({finalM2.X:0.###},{finalM2.Y:0.###})"));
+            var message = FormattableStringFactory.Create(
+                "[VISCONF][ANALYZE_MASTER][FINAL] key='{0}' file='{1}' accepted={2} reason='{3}' " +
+                "M1_final=({4:0.###},{5:0.###}) M2_final=({6:0.###},{7:0.###})",
+                imageKey,
+                fileName,
+                accepted,
+                reason,
+                finalM1.X,
+                finalM1.Y,
+                finalM2.X,
+                finalM2.Y);
+            VisConfLog.AnalyzeMaster(message);
         }
 
         private void LogAnalyzeMasterVisConf(

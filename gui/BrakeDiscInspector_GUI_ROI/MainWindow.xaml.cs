@@ -2236,6 +2236,12 @@ namespace BrakeDiscInspector_GUI_ROI
                     continue;
 
                 var (beforeCx, beforeCy) = GetCenterShapeAware(baseline);
+                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
+                    "[VISCONF][INSP_BASE] key='{0}' file='{1}' roi='{2}' baseline={3}",
+                    visImageKey,
+                    visFileName,
+                    target.Label ?? target.Id ?? "<null>",
+                    DescribeRoi(baseline)));
                 ApplyRoiTransform(target, baseline, pivotOld.X, pivotOld.Y, pivotNew.X, pivotNew.Y, scaleFactor, angleDelta);
                 if (_imgW > 0 && _imgH > 0)
                 {
@@ -2243,6 +2249,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 var (afterCx, afterCy) = GetCenterShapeAware(target);
+                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
+                    "[VISCONF][INSP_APPLIED] key='{0}' file='{1}' roi='{2}' applied={3}",
+                    visImageKey,
+                    visFileName,
+                    target.Label ?? target.Id ?? "<null>",
+                    DescribeRoi(target)));
 
                 moved++;
                 firstBefore ??= new SWPoint(beforeCx, beforeCy);

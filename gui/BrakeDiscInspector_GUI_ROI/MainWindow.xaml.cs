@@ -1778,6 +1778,9 @@ namespace BrakeDiscInspector_GUI_ROI
         private double _lastAccM1X = double.NaN, _lastAccM1Y = double.NaN;
         private double _lastAccM2X = double.NaN, _lastAccM2Y = double.NaN;
         private bool _lastDetectionAccepted = false;
+        private sealed record AlignmentSignature(double M1X, double M1Y, double M2X, double M2Y, double AngleDeg, double Scale);
+        private readonly Dictionary<string, AlignmentSignature> _lastAlignmentByImage =
+            new(StringComparer.OrdinalIgnoreCase);
 
         // Tolerances (pixels / degrees). Tune if needed.
         private double _analyzePosTolPx = 50.0;    // default tolerance in px for acceptance checks
@@ -2163,6 +2166,7 @@ namespace BrakeDiscInspector_GUI_ROI
             double angleDelta = _disableRot ? 0.0 : similarity.RotationRad;
             var visImageKey = GetCurrentImageKey();
             var visFileName = GetCurrentImageFileName();
+            var baselineSnapshotBefore = SnapshotLayoutBaselinesForImage(visImageKey);
 
             if (_useFixedInspectionBaseline)
             {
@@ -2235,14 +2239,21 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (target == null || baseline == null)
                     continue;
 
-                var (beforeCx, beforeCy) = GetCenterShapeAware(baseline);
+                var baselineToUse = baseline;
+                if (ReferenceEquals(target, baselineToUse))
+                {
+                    InspLog($"[RepositionInsp][WARN] baseline reference equals target roiId='{target.Id ?? "<null>"}'; cloning baseline.");
+                    baselineToUse = baselineToUse.Clone();
+                }
+
+                var (beforeCx, beforeCy) = GetCenterShapeAware(baselineToUse);
                 VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
                     "[VISCONF][INSP_BASE] key='{0}' file='{1}' roi='{2}' baseline={3}",
                     visImageKey,
                     visFileName,
                     target.Label ?? target.Id ?? "<null>",
-                    DescribeRoi(baseline)));
-                ApplyRoiTransform(target, baseline, pivotOld.X, pivotOld.Y, pivotNew.X, pivotNew.Y, scaleFactor, angleDelta);
+                    DescribeRoi(baselineToUse)));
+                ApplyRoiTransform(target, baselineToUse, pivotOld.X, pivotOld.Y, pivotNew.X, pivotNew.Y, scaleFactor, angleDelta);
                 if (_imgW > 0 && _imgH > 0)
                 {
                     ClipInspectionROI(target, _imgW, _imgH);
@@ -2300,7 +2311,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     scaleFactor,
                     beforeCx,
                     beforeCy,
-                    baseline.AngleDeg,
+                    baselineToUse.AngleDeg,
                     afterCx,
                     afterCy,
                     target.AngleDeg,
@@ -2311,6 +2322,25 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             _lastInspectionRepositioned = moved > 0;
+            if (roisToMove.Count > 0)
+            {
+                var slotSummary = string.Join(" | ", roisToMove.Select(r => $"{r.target.Id ?? "<null>"}:{FInsp(r.target)}"));
+                InspLog($"[RepositionInsp] applied slots={roisToMove.Count} coords={slotSummary}");
+            }
+
+            if (baselineSnapshotBefore.Count > 0)
+            {
+                var baselineSnapshotAfter = SnapshotLayoutBaselinesForImage(visImageKey);
+                bool unchanged = BaselineListsEquivalent(baselineSnapshotBefore, baselineSnapshotAfter);
+                if (!unchanged)
+                {
+                    InspLog($"[RepositionInsp][WARN] layout baselines changed after apply imageKey='{visImageKey}' before={baselineSnapshotBefore.Count} after={baselineSnapshotAfter.Count}");
+                }
+                else
+                {
+                    InspLog($"[RepositionInsp] layout baselines unchanged imageKey='{visImageKey}'");
+                }
+            }
 
             if (moved > 0 && firstBefore.HasValue && firstAfter.HasValue && lastBefore.HasValue && lastAfter.HasValue)
             {
@@ -2480,6 +2510,19 @@ namespace BrakeDiscInspector_GUI_ROI
             var applyDy = m1ToApply.Y - baselineM1Point.Y;
             InspLog($"[APPLY] baselineM1=({baselineM1Point.X:0.###},{baselineM1Point.Y:0.###}) acceptedM1=({m1ToApply.X:0.###},{m1ToApply.Y:0.###}) deltaPx=({applyDx:0.###},{applyDy:0.###}) angle={applyAngle:0.###}");
 
+            var imageKey = GetCurrentImageKey();
+            var alignmentSignature = BuildAlignmentSignature(baselineM1Point, baselineM2Point, m1ToApply, m2ToApply, scaleLock);
+            if (alignmentSignature != null
+                && _lastAlignmentByImage.TryGetValue(imageKey, out var lastSignature)
+                && AlignmentWithinEpsilon(alignmentSignature, lastSignature))
+            {
+                decisionInfo.Reason = $"{decisionInfo.Reason}|anchors_unchanged_skip";
+                InspLog($"[Accept] SKIP: alignment unchanged imageKey='{imageKey}' scaleLock={scaleLock}");
+                AppendLog($"[ANALYZE] Alignment unchanged; skipping ROI reposition for imageKey='{imageKey}'.");
+                _lastDetectionAccepted = accept;
+                return accept;
+            }
+
             if (accept)
             {
                 InspLog($"[Accept] calling RepositionMastersToCrosses baseline_source={baselineSource}");
@@ -2506,6 +2549,11 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _lastAccM1X = newM1.X; _lastAccM1Y = newM1.Y;
                 _lastAccM2X = newM2.X; _lastAccM2Y = newM2.Y;
+            }
+
+            if (alignmentSignature != null && !string.IsNullOrWhiteSpace(imageKey))
+            {
+                _lastAlignmentByImage[imageKey] = alignmentSignature;
             }
 
             _lastDetectionAccepted = accept;
@@ -4659,6 +4707,7 @@ namespace BrakeDiscInspector_GUI_ROI
             gamma = Math.Clamp(gamma, 0.25, 4.0);
 
             _inspectionBaselinesByImage.Clear();
+            _lastAlignmentByImage.Clear();
             if (_layout?.InspectionBaselinesByImage != null)
             {
                 foreach (var kv in _layout.InspectionBaselinesByImage)
@@ -11631,6 +11680,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 LogAnalyzeMasterDeltaVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2);
                 LogAnalyzeMasterPreAcceptVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2, s1, s2);
 
+                var preMoveSnapshot = SnapshotInspectionRois();
+                TrySeedInspectionBaselineForImage(analyzeImageKey, preMoveSnapshot, "analyze:pre-move");
+
                 _ = AcceptNewDetectionIfDifferent(
                     crossM1,
                     crossM2,
@@ -11693,7 +11745,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[UI] Persist layout with detected ROI failed: {ex.Message}");
             }
 
-            SaveInspectionBaselineForCurrentImage();
             if (TryAutosaveLayout("analyze masters"))
             {
                 // CODEX: string interpolation compatibility.
@@ -11944,6 +11995,100 @@ namespace BrakeDiscInspector_GUI_ROI
             return _currentImageHash;
         }
 
+        private AlignmentSignature? BuildAlignmentSignature(SWPoint baseM1, SWPoint baseM2, SWPoint newM1, SWPoint newM2, bool scaleLock)
+        {
+            if (!IsFinitePoint(baseM1) || !IsFinitePoint(baseM2) || !IsFinitePoint(newM1) || !IsFinitePoint(newM2))
+            {
+                return null;
+            }
+
+            var baseVec = baseM2 - baseM1;
+            var newVec = newM2 - newM1;
+            double lenBase = Math.Sqrt(baseVec.X * baseVec.X + baseVec.Y * baseVec.Y);
+            double lenNew = Math.Sqrt(newVec.X * newVec.X + newVec.Y * newVec.Y);
+            if (lenBase < 1e-9 || lenNew < 1e-9)
+            {
+                return null;
+            }
+
+            double scale = scaleLock ? 1.0 : (lenNew / lenBase);
+            double angleDeg = _disableRot ? 0.0 : DeltaAngleFromFrames(baseM1, baseM2, newM1, newM2) * 180.0 / Math.PI;
+
+            return new AlignmentSignature(newM1.X, newM1.Y, newM2.X, newM2.Y, angleDeg, scale);
+        }
+
+        private static bool AlignmentWithinEpsilon(AlignmentSignature current, AlignmentSignature last)
+        {
+            const double posEps = 0.2;
+            const double angleEps = 0.05;
+            const double scaleEps = 0.0005;
+
+            return Math.Abs(current.M1X - last.M1X) <= posEps
+                && Math.Abs(current.M1Y - last.M1Y) <= posEps
+                && Math.Abs(current.M2X - last.M2X) <= posEps
+                && Math.Abs(current.M2Y - last.M2Y) <= posEps
+                && Math.Abs(current.AngleDeg - last.AngleDeg) <= angleEps
+                && Math.Abs(current.Scale - last.Scale) <= scaleEps;
+        }
+
+        private List<RoiModel> SnapshotLayoutBaselinesForImage(string imageKey)
+        {
+            if (string.IsNullOrWhiteSpace(imageKey) || _layout?.InspectionBaselinesByImage == null)
+            {
+                return new List<RoiModel>();
+            }
+
+            if (!_layout.InspectionBaselinesByImage.TryGetValue(imageKey, out var list) || list == null)
+            {
+                return new List<RoiModel>();
+            }
+
+            return list.Where(r => r != null).Select(r => r!.Clone()).ToList();
+        }
+
+        private static bool BaselineListsEquivalent(IReadOnlyList<RoiModel> before, IReadOnlyList<RoiModel> after)
+        {
+            if (before.Count != after.Count)
+            {
+                return false;
+            }
+
+            var beforeById = before
+                .Where(r => r != null && !string.IsNullOrWhiteSpace(r.Id))
+                .ToDictionary(r => r.Id!, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var roi in after)
+            {
+                if (roi == null || string.IsNullOrWhiteSpace(roi.Id))
+                {
+                    return false;
+                }
+
+                if (!beforeById.TryGetValue(roi.Id, out var prev))
+                {
+                    return false;
+                }
+
+                const double tol = 0.001;
+                bool same = Math.Abs(prev.Left - roi.Left) <= tol
+                    && Math.Abs(prev.Top - roi.Top) <= tol
+                    && Math.Abs(prev.Width - roi.Width) <= tol
+                    && Math.Abs(prev.Height - roi.Height) <= tol
+                    && Math.Abs(prev.CX - roi.CX) <= tol
+                    && Math.Abs(prev.CY - roi.CY) <= tol
+                    && Math.Abs(prev.R - roi.R) <= tol
+                    && Math.Abs(prev.RInner - roi.RInner) <= tol
+                    && Math.Abs(prev.AngleDeg - roi.AngleDeg) <= tol;
+
+                if (!same)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         private string ComputeImageSeedKey()
         {
             try
@@ -12122,6 +12267,55 @@ namespace BrakeDiscInspector_GUI_ROI
                 .ToList();
         }
 
+        private bool TrySeedInspectionBaselineForImage(string imageKey, IReadOnlyList<RoiModel> snapshot, string reason)
+        {
+            if (string.IsNullOrWhiteSpace(imageKey))
+            {
+                return false;
+            }
+
+            if (snapshot == null || snapshot.Count == 0)
+            {
+                InspLog($"[Seed][Baselines] skip: empty snapshot imageKey='{imageKey}' reason={reason}");
+                return false;
+            }
+
+            if (_inspectionBaselinesByImage.ContainsKey(imageKey)
+                || (_layout?.InspectionBaselinesByImage?.ContainsKey(imageKey) ?? false))
+            {
+                InspLog($"[Seed][Baselines] skip: already seeded imageKey='{imageKey}' reason={reason}");
+                return false;
+            }
+
+            var clones = snapshot
+                .Where(r => r != null)
+                .Select(r => r.Clone())
+                .ToList();
+
+            if (clones.Count == 0)
+            {
+                InspLog($"[Seed][Baselines] skip: empty clones imageKey='{imageKey}' reason={reason}");
+                return false;
+            }
+
+            _inspectionBaselinesByImage[imageKey] = clones;
+
+            if (_layout != null)
+            {
+                _layout.InspectionBaselinesByImage ??= new Dictionary<string, List<RoiModel>>(StringComparer.OrdinalIgnoreCase);
+                if (!_layout.InspectionBaselinesByImage.ContainsKey(imageKey))
+                {
+                    _layout.InspectionBaselinesByImage[imageKey] = clones.Select(r => r.Clone()).ToList();
+                    TryPersistLayout();
+                }
+            }
+
+            var rects = string.Join(" | ", clones.Select(r => $"{r.Id ?? "<null>"}:{FInsp(r)}"));
+            InspLog($"[Seed][Baselines] imageKey='{imageKey}' reason={reason} baselines={rects}");
+            AppendLog($"[ANALYZE] Seeded inspection baselines imageKey='{imageKey}' count={clones.Count}");
+            return true;
+        }
+
         private void SaveInspectionBaselineForCurrentImage()
         {
             if (string.IsNullOrWhiteSpace(_currentImageHash))
@@ -12130,20 +12324,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var snapshot = SnapshotInspectionRois();
-            if (snapshot.Count == 0)
-            {
-                _inspectionBaselinesByImage.Remove(_currentImageHash);
-            }
-            else
-            {
-                _inspectionBaselinesByImage[_currentImageHash] = snapshot;
-            }
-
-            if (_layout != null)
-            {
-                _layout.InspectionBaselinesByImage = new Dictionary<string, List<RoiModel>>(_inspectionBaselinesByImage, StringComparer.OrdinalIgnoreCase);
-                TryPersistLayout();
-            }
+            TrySeedInspectionBaselineForImage(_currentImageHash, snapshot, "save-current");
         }
 
         private void RestoreInspectionBaselineForCurrentImage()
@@ -16120,6 +16301,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 _inspectionBaselinesByImage.Clear();
+                _lastAlignmentByImage.Clear();
 
                 if (_layout != null)
                 {

@@ -1877,6 +1877,11 @@ namespace BrakeDiscInspector_GUI_ROI
             return ang - Math.PI;
         }
 
+        private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+        private static bool IsFinitePoint(SWPoint point)
+            => IsFinite(point.X) && IsFinite(point.Y);
+
         private static double AngleOf(SWVector v) => Math.Atan2(v.Y, v.X);
 
         private static SWVector Normalize(SWVector v)
@@ -1910,6 +1915,50 @@ namespace BrakeDiscInspector_GUI_ROI
             r.CX = cx; r.CY = cy;
             r.Left = cx - r.Width * 0.5;
             r.Top = cy - r.Height * 0.5;
+        }
+
+        private sealed class SimilarityTransform2D
+        {
+            public double Scale { get; }
+            public double RotationRad { get; }
+            public SWVector Translation { get; }
+
+            public SimilarityTransform2D(double scale, double rotationRad, SWVector translation)
+            {
+                Scale = scale;
+                RotationRad = rotationRad;
+                Translation = translation;
+            }
+        }
+
+        private static SimilarityTransform2D ComputeSimilarityTransform(
+            SWPoint m1Base, SWPoint m2Base,
+            SWPoint m1New, SWPoint m2New,
+            bool scaleLock,
+            out SWPoint pivotOld,
+            out SWPoint pivotNew)
+        {
+            pivotOld = scaleLock
+                ? new SWPoint((m1Base.X + m2Base.X) * 0.5, (m1Base.Y + m2Base.Y) * 0.5)
+                : m1Base;
+            pivotNew = scaleLock
+                ? new SWPoint((m1New.X + m2New.X) * 0.5, (m1New.Y + m2New.Y) * 0.5)
+                : m1New;
+
+            var baseVec = m2Base - m1Base;
+            var newVec = m2New - m1New;
+            double len0 = Math.Sqrt(baseVec.X * baseVec.X + baseVec.Y * baseVec.Y);
+            double len1 = Math.Sqrt(newVec.X * newVec.X + newVec.Y * newVec.Y);
+            double scale = (len0 < 1e-9 || scaleLock) ? 1.0 : (len1 / len0);
+
+            double rotation = DeltaAngleFromFrames(m1Base, m2Base, m1New, m2New);
+            double cos = Math.Cos(rotation);
+            double sin = Math.Sin(rotation);
+
+            double tx = pivotNew.X - (scale * (cos * pivotOld.X - sin * pivotOld.Y));
+            double ty = pivotNew.Y - (scale * (sin * pivotOld.X + cos * pivotOld.Y));
+
+            return new SimilarityTransform2D(scale, rotation, new SWVector(tx, ty));
         }
 
         private static SWPoint MapBySt(SWPoint m1Base, SWPoint m2Base, SWPoint m1New, SWPoint m2New,
@@ -2019,6 +2068,8 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_layout == null)
                 return;
 
+            _lastInspectionRepositioned = false;
+
             var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
             var baselineM1 = master1Baseline ?? snapshotM1;
             var baselineM2 = master2Baseline ?? snapshotM2;
@@ -2034,6 +2085,13 @@ namespace BrakeDiscInspector_GUI_ROI
             var m1Base = new SWPoint(m1bX, m1bY);
             var m2Base = new SWPoint(m2bX, m2bY);
 
+            if (!IsFinitePoint(m1Base) || !IsFinitePoint(m2Base) || !IsFinitePoint(m1Cross) || !IsFinitePoint(m2Cross))
+            {
+                InspLog($"[RepositionInsp] skip: non-finite anchors base=({m1Base.X:0.###},{m1Base.Y:0.###}) ({m2Base.X:0.###},{m2Base.Y:0.###}) " +
+                        $"found=({m1Cross.X:0.###},{m1Cross.Y:0.###}) ({m2Cross.X:0.###},{m2Cross.Y:0.###})");
+                return;
+            }
+
             var baseVec = m2Base - m1Base;
             var newVec = m2Cross - m1Cross;
             double len0 = Math.Sqrt(baseVec.X * baseVec.X + baseVec.Y * baseVec.Y);
@@ -2041,12 +2099,34 @@ namespace BrakeDiscInspector_GUI_ROI
             if (len0 < 1e-9 || len1 < 1e-9)
                 return;
 
-            double scaleRatio = len1 / len0;
             bool effectiveScaleLock = scaleLock && !_allowInspectionScaleOverride;
-            double scaleFactor = effectiveScaleLock ? 1.0 : scaleRatio;
-            double angleDelta = DeltaAngleFromFrames(m1Base, m2Base, m1Cross, m2Cross);
+            var similarity = ComputeSimilarityTransform(m1Base, m2Base, m1Cross, m2Cross, effectiveScaleLock,
+                out var pivotOld, out var pivotNew);
+            double scaleFactor = effectiveScaleLock ? 1.0 : similarity.Scale;
+            double angleDelta = _disableRot ? 0.0 : similarity.RotationRad;
             var visImageKey = GetCurrentImageKey();
             var visFileName = GetCurrentImageFileName();
+
+            if (_useFixedInspectionBaseline)
+            {
+                var seedKey = GetCurrentImageKey();
+                foreach (var roi in CollectSavedInspectionRois())
+                {
+                    SeedInspectionBaselineOnce(roi, seedKey);
+                }
+            }
+
+            RoiModel? SelectBaselineForInspection(RoiModel roi)
+            {
+                if (_useFixedInspectionBaseline
+                    && !string.IsNullOrWhiteSpace(roi.Id)
+                    && _inspectionBaselineFixedById.TryGetValue(roi.Id, out var fixedBaseline))
+                {
+                    return fixedBaseline.Clone();
+                }
+
+                return GetInspectionBaselineClone(roi.Id) ?? roi.Clone();
+            }
 
             var roisToMove = new List<(RoiModel target, RoiModel baseline)>();
             var seen = new HashSet<RoiModel>();
@@ -2054,6 +2134,10 @@ namespace BrakeDiscInspector_GUI_ROI
             int moved = 0;
             int skippedFrozen = 0;
             var movedLabels = new List<string>();
+            SWPoint? firstBefore = null;
+            SWPoint? firstAfter = null;
+            SWPoint? lastBefore = null;
+            SWPoint? lastAfter = null;
 
             void EnqueueInspection(RoiModel? roi, bool always = false)
             {
@@ -2066,7 +2150,21 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                roisToMove.Add((roi, roi.Clone()));
+                var baseline = SelectBaselineForInspection(roi);
+                if (baseline == null)
+                {
+                    InspLog($"[RepositionInsp] skip: missing baseline for roiId='{roi.Id ?? "<null>"}'");
+                    return;
+                }
+
+                var (bCx, bCy) = GetCenterShapeAware(baseline);
+                if (!IsFinite(bCx) || !IsFinite(bCy))
+                {
+                    InspLog($"[RepositionInsp] skip: baseline non-finite roiId='{roi.Id ?? "<null>"}' center=({bCx:0.###},{bCy:0.###})");
+                    return;
+                }
+
+                roisToMove.Add((roi, baseline));
             }
 
             EnqueueInspection(_layout.Inspection1, always: true);
@@ -2080,20 +2178,20 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (target == null || baseline == null)
                     continue;
 
-                // Keep inspection ROI size constant always (no scaling and no baseline size reset).
-                // Do NOT touch Width/Height/R/RInner here; only reposition center and update angle.
-
-                var (cx, cy) = GetCenterShapeAware(baseline);
-                var mapped = MapBySt(m1Base, m2Base, m1Cross, m2Cross, new SWPoint(cx, cy), effectiveScaleLock);
-                SetRoiCenterImg(target, mapped.X, mapped.Y);
+                var (beforeCx, beforeCy) = GetCenterShapeAware(baseline);
+                ApplyRoiTransform(target, baseline, pivotOld.X, pivotOld.Y, pivotNew.X, pivotNew.Y, scaleFactor, angleDelta);
                 if (_imgW > 0 && _imgH > 0)
                 {
                     ClipInspectionROI(target, _imgW, _imgH);
                 }
 
-                target.AngleDeg = baseline.AngleDeg + angleDelta * (180.0 / Math.PI);
+                var (afterCx, afterCy) = GetCenterShapeAware(target);
 
                 moved++;
+                firstBefore ??= new SWPoint(beforeCx, beforeCy);
+                firstAfter ??= new SWPoint(afterCx, afterCy);
+                lastBefore = new SWPoint(beforeCx, beforeCy);
+                lastAfter = new SWPoint(afterCx, afterCy);
                 if (!string.IsNullOrEmpty(target?.Label))
                 {
                     movedLabels.Add(target.Label!);
@@ -2110,11 +2208,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 var anchorMaster = ResolveAnchorForRoi(target);
                 var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
                 var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
-                var (roiBeforeCx, roiBeforeCy) = GetCenterShapeAware(baseline);
-                var (roiAfterCx, roiAfterCy) = GetCenterShapeAware(target);
-                double tx = anchorNew.X - anchorBase.X;
-                double ty = anchorNew.Y - anchorBase.Y;
-                double distAfter = Dist(roiAfterCx, roiAfterCy, anchorNew.X, anchorNew.Y);
+                double tx = similarity.Translation.X;
+                double ty = similarity.Translation.Y;
+                double distAfter = Dist(afterCx, afterCy, anchorNew.X, anchorNew.Y);
                 var repositionMessage = FormattableStringFactory.Create(
                     "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(tx={12:0.###},ty={13:0.###},angΔ={14:0.###},scale={15:0.###}) roiBefore=(CX={16:0.###},CY={17:0.###},Ang={18:0.###}) roiAfter=(CX={19:0.###},CY={20:0.###},Ang={21:0.###}) residualToAnchor=(dx={22:0.###},dy={23:0.###},dist={24:0.###})",
                     visImageKey,
@@ -2133,16 +2229,44 @@ namespace BrakeDiscInspector_GUI_ROI
                     ty,
                     angleDelta * 180.0 / Math.PI,
                     scaleFactor,
-                    roiBeforeCx,
-                    roiBeforeCy,
+                    beforeCx,
+                    beforeCy,
                     baseline.AngleDeg,
-                    roiAfterCx,
-                    roiAfterCy,
+                    afterCx,
+                    afterCy,
                     target.AngleDeg,
-                    roiAfterCx - anchorNew.X,
-                    roiAfterCy - anchorNew.Y,
+                    afterCx - anchorNew.X,
+                    afterCy - anchorNew.Y,
                     distAfter);
                 VisConfLog.Roi(FormattableString.Invariant(repositionMessage));
+            }
+
+            _lastInspectionRepositioned = moved > 0;
+
+            if (moved > 0 && firstBefore.HasValue && firstAfter.HasValue && lastBefore.HasValue && lastAfter.HasValue)
+            {
+                var summaryMessage = FormattableStringFactory.Create(
+                    "[VISCONF][APPLY_REPOSITION][SUMMARY] key='{0}' file='{1}' moved={2} scale={3:0.###} rotDeg={4:0.###} " +
+                    "pivotOld=({5:0.###},{6:0.###}) pivotNew=({7:0.###},{8:0.###}) " +
+                    "first=({9:0.###},{10:0.###})->({11:0.###},{12:0.###}) last=({13:0.###},{14:0.###})->({15:0.###},{16:0.###})",
+                    visImageKey,
+                    visFileName,
+                    moved,
+                    scaleFactor,
+                    angleDelta * 180.0 / Math.PI,
+                    pivotOld.X,
+                    pivotOld.Y,
+                    pivotNew.X,
+                    pivotNew.Y,
+                    firstBefore.Value.X,
+                    firstBefore.Value.Y,
+                    firstAfter.Value.X,
+                    firstAfter.Value.Y,
+                    lastBefore.Value.X,
+                    lastBefore.Value.Y,
+                    lastAfter.Value.X,
+                    lastAfter.Value.Y);
+                VisConfLog.Roi(FormattableString.Invariant(summaryMessage));
             }
 
             System.Diagnostics.Debug.WriteLine(
@@ -3359,6 +3483,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private int _suppressSaves;
         // overlay diferido
         private bool _overlayNeedsRedraw;
+        private bool _overlayRedrawDeferredOnce;
         private bool _adornerHadDelta;
         private bool _analysisViewActive;
         private DispatcherTimer? _snackTimer;
@@ -3369,6 +3494,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private readonly List<string> _availableFontFamilies = new() { "Segoe UI", "Calibri", "Arial", "Consolas" };
         private bool _isGuiSetupSyncingControls;
         private bool _isGuiSetupInitialized;
+        private bool _lastInspectionRepositioned;
         private static readonly string[] FontFamilyResourceKeys =
         {
             "UI.FontFamily.Body",
@@ -5464,6 +5590,25 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog("[batch] skip redraw (batch running)");
                 return;
             }
+
+            if (ImgMain?.Source == null
+                || ImgMain.ActualWidth <= 0
+                || ImgMain.ActualHeight <= 0
+                || CanvasROI?.ActualWidth <= 0
+                || CanvasROI?.ActualHeight <= 0)
+            {
+                _overlayNeedsRedraw = true;
+                if (!_overlayRedrawDeferredOnce)
+                {
+                    _overlayRedrawDeferredOnce = true;
+                    Dispatcher.BeginInvoke(new Action(RedrawOverlaySafe), DispatcherPriority.Loaded);
+                }
+                AppendLog($"[guard] Redraw deferred (layout not measured) img=({ImgMain?.ActualWidth:0.##}x{ImgMain?.ActualHeight:0.##}) " +
+                          $"canvas=({CanvasROI?.ActualWidth:0.##}x{CanvasROI?.ActualHeight:0.##})");
+                return;
+            }
+
+            _overlayRedrawDeferredOnce = false;
 
             bool aligned = IsOverlayAligned();
             AppendLog($"[guard] RedrawOverlaySafe aligned={aligned} " +
@@ -10908,58 +11053,106 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[ANALYZE] Using local matcher first...");
-                try
+
+                var localImagePath = _currentImagePathWin;
+                var localAnalyze = _layout?.Analyze ?? new AnalyzeOptions();
+                var localM1Pattern = _layout?.Master1Pattern?.Clone();
+                var localM2Pattern = _layout?.Master2Pattern?.Clone();
+                var localM1Search = _layout?.Master1Search?.Clone();
+                var localM2Search = _layout?.Master2Search?.Clone();
+                var localM1PatternPath = _layout?.Master1PatternImagePath;
+                var localM2PatternPath = _layout?.Master2PatternImagePath;
+
+                var localResult = await Task.Run(() =>
                 {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[FLOW] Usando matcher local");
-                    using var img = Cv.Cv2.ImRead(_currentImagePathWin);
-                    Mat? m1Override = null;
-                    Mat? m2Override = null;
-                    var analyze = _layout.Analyze ?? new AnalyzeOptions();
+                    var logs = new List<string>();
+                    SWPoint? m1 = null;
+                    SWPoint? m2 = null;
+                    double score1 = 0;
+                    double score2 = 0;
+                    bool disableLocal = false;
+
                     try
                     {
-                        if (_layout.Master1Pattern != null)
-                            m1Override = TryLoadMasterPatternOverride(_layout.Master1PatternImagePath, "M1");
-                        if (_layout.Master2Pattern != null)
-                            m2Override = TryLoadMasterPatternOverride(_layout.Master2PatternImagePath, "M2");
-
-                        var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master1Pattern, _layout.Master1Search,
-                            analyze.FeatureM1, analyze.ThrM1, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m1Override,
-                            LogToFileAndUI);
-                        if (res1.Center.HasValue) { c1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y); s1 = res1.Score; AppendLog($"[LOCAL] M1 hit score={res1.Score:0.###}"); }
-                        else
+                        logs.Add("[FLOW] Usando matcher local");
+                        using var img = Cv.Cv2.ImRead(localImagePath);
+                        Mat? m1Override = null;
+                        Mat? m2Override = null;
+                        try
                         {
-                            // CODEX: string interpolation compatibility.
-                            AppendLog($"[LOCAL] M1 no encontrado");
+                            if (localM1Pattern != null)
+                                m1Override = TryLoadMasterPatternOverride(localM1PatternPath, "M1");
+                            if (localM2Pattern != null)
+                                m2Override = TryLoadMasterPatternOverride(localM2PatternPath, "M2");
+
+                            var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, localM1Pattern, localM1Search,
+                                localAnalyze.FeatureM1, localAnalyze.ThrM1, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m1Override,
+                                LogToFileAndUI);
+                            if (res1.Center.HasValue)
+                            {
+                                m1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
+                                score1 = res1.Score;
+                                logs.Add($"[LOCAL] M1 hit score={res1.Score:0.###}");
+                            }
+                            else
+                            {
+                                logs.Add("[LOCAL] M1 no encontrado");
+                            }
+
+                            var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, localM2Pattern, localM2Search,
+                                localAnalyze.FeatureM2, localAnalyze.ThrM2, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m2Override,
+                                LogToFileAndUI);
+                            if (res2.Center.HasValue)
+                            {
+                                m2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
+                                score2 = res2.Score;
+                                logs.Add($"[LOCAL] M2 hit score={res2.Score:0.###}");
+                            }
+                            else
+                            {
+                                logs.Add("[LOCAL] M2 no encontrado");
+                            }
                         }
-
-                        var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, _layout.Master2Pattern, _layout.Master2Search,
-                            analyze.FeatureM2, analyze.ThrM2, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, m2Override,
-                            LogToFileAndUI);
-                        if (res2.Center.HasValue) { c2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y); s2 = res2.Score; AppendLog($"[LOCAL] M2 hit score={res2.Score:0.###}"); }
-                        else
+                        finally
                         {
-                            // CODEX: string interpolation compatibility.
-                            AppendLog($"[LOCAL] M2 no encontrado");
+                            m1Override?.Dispose();
+                            m2Override?.Dispose();
                         }
                     }
-                    finally
+                    catch (DllNotFoundException ex)
                     {
-                        m1Override?.Dispose();
-                        m2Override?.Dispose();
+                        logs.Add($"[OpenCV] DllNotFound: {ex.Message}");
+                        disableLocal = true;
                     }
-                }
-                catch (DllNotFoundException ex)
+                    catch (Exception ex)
+                    {
+                        logs.Add($"[local matcher] ERROR: {ex.Message}");
+                    }
+
+                    return (m1: m1, m2: m2, score1: score1, score2: score2, logs: logs, disableLocal: disableLocal);
+                }).ConfigureAwait(false);
+
+                foreach (var log in localResult.logs)
                 {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[OpenCV] DllNotFound: {ex.Message}");
+                    AppendLog(log);
+                }
+
+                if (localResult.disableLocal)
+                {
                     Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
                     ChkUseLocalMatcher.IsChecked = false;
                 }
-                catch (Exception ex)
+
+                if (localResult.m1.HasValue)
                 {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[local matcher] ERROR: {ex.Message}");
+                    c1 = localResult.m1;
+                    s1 = localResult.score1;
+                }
+
+                if (localResult.m2.HasValue)
+                {
+                    c2 = localResult.m2;
+                    s2 = localResult.score2;
                 }
             }
 
@@ -11161,7 +11354,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             });
 
-            Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección reubicado.");
+            if (_lastInspectionRepositioned)
+            {
+                Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección reubicado.");
+            }
+            else
+            {
+                Snack($"Masters OK. Scores: M1={s1:0.000}, M2={s2:0.000}. ROI inspección NO reubicado (baseline/layout pendiente).");
+            }
             _state = MasterState.Ready;
             UpdateWizardState();
             // CODEX: string interpolation compatibility.

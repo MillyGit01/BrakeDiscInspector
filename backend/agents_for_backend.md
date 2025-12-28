@@ -5,7 +5,7 @@ Este playbook orienta a asistentes que modifican el backend FastAPI. Mantiene la
 ## 1. Layout
 ```
 backend/
-  app.py              # FastAPI: /health, /fit_ok, /calibrate_ng, /infer
+  app.py              # FastAPI: /health, /fit_ok, /calibrate_ng, /infer, /manifest, /datasets/*
   infer.py            # Orquestación de inferencia PatchCore
   calib.py            # Lógica de calibración
   patchcore.py        # Memoria PatchCore + coreset
@@ -18,50 +18,49 @@ backend/
 ```
 
 ## 2. Contrato API (estable)
-- `GET /health` → `{ status, device, model, version, uptime_s, roles_loaded, rois }`
-- `POST /fit_ok` (multipart) → campos `role_id`, `roi_id`, `mm_per_px`, `images[]`, `operator_id?`
-- `POST /calibrate_ng` (JSON) → `{ role_id, roi_id, mm_per_px, ok_scores[], ng_scores?[], score_percentile, area_mm2_thr }`
-- `POST /infer` (multipart) → `role_id`, `roi_id`, `mm_per_px`, `image`, `shape`, `operator_id?`
-- Respuestas incluyen `token_shape`, `model_version`, `request_id` (header).
+- `GET /health` → `{ status, device, model, version, request_id, recipe_id, reason? }`
+- `POST /fit_ok` (multipart) → campos `role_id`, `roi_id`, `mm_per_px`, `images[]`, opcional `memory_fit`, `recipe_id`, `model_key`
+- `POST /calibrate_ng` (JSON) → `{ role_id, roi_id, mm_per_px, ok_scores[], ng_scores?[], score_percentile?, area_mm2_thr?, recipe_id? }`
+- `POST /infer` (multipart) → `role_id`, `roi_id`, `mm_per_px`, `image`, `shape`, opcional `recipe_id`, `model_key`
+- Respuestas incluyen `request_id` y `recipe_id` **en el JSON** (no headers). Campos detallados en `docs/API_CONTRACTS.md`.
+- `/manifest` y `/datasets/*` existen para inspeccionar el estado y gestionar datasets.
 
 ## 3. Persistencia
-- Directorio raíz configurable vía `BACKEND_DATA_ROOT`.
+- Directorio raíz configurable vía `BDI_MODELS_DIR` (legacy `BRAKEDISC_MODELS_DIR`).
 - Estructura:
 ```
-models/<role>/<roi>/
-  embeddings.npy
-  coreset.faiss
-  manifest.json
-  calibration.json
+<BDI_MODELS_DIR>/
+  <role>__<roi>.npz            # embeddings + token grid (+metadata)
+  <role>__<roi>_index.faiss    # índice FAISS opcional
+  <role>__<roi>_calib.json     # salida de /calibrate_ng
+  datasets/<role>/<roi>/ok|ng  # imágenes de dataset (si se usan los helpers /datasets/*)
 ```
-- `datasets/<role>/<roi>/ok|ng` se sincroniza con la GUI.
-- `manifest.json` guarda `mm_per_px`, `n_embeddings`, `coreset_size`, `threshold`, `model_version`.
+- `ModelStore.manifest` devuelve memoria, calibración y resumen de datasets.
 
 ## 4. Pipeline de inferencia
-1. Validar existencia de coreset/calibración.
+1. Validar existencia de memoria y la grilla de tokens.
 2. Procesar imagen (normalización + DINOv2).
 3. Calcular distancias kNN con coreset.
-4. Upsample mapa a tamaño ROI.
+4. Upsample del mapa a tamaño ROI.
 5. Aplicar máscara `shape`.
-6. Calcular `score` (`percentil 99` por defecto) y detectar `regions`.
-7. Serializar heatmap (PNG base64) y responder JSON.
+6. Calcular `score` y detectar `regions`.
+7. Serializar heatmap (PNG base64) y responder JSON con `request_id`/`recipe_id`.
 
 ## 5. Calibración
 - Si `ng_scores` presente: umbral = punto medio entre `p99_ok` y `p5_ng`.
-- Si solo hay OK: usar `score_percentile` (0.995 por defecto) multiplicado por factor de seguridad.
-- Guardar `calibration.json` y actualizar manifest.
+- Si solo hay OK: usar percentil (`score_percentile`, por defecto 99).
+- Guardar calibración en `<role>__<roi>_calib.json`.
 
 ## 6. Configuración
-- Variables: `BACKEND_DEVICE`, `PATCHCORE_CORESET_RATIO`, `PATCHCORE_DISTANCE`, `PATCHCORE_BATCH_SIZE`, `BACKEND_API_KEY`.
-- Config YAML opcional para overrides.
-- Logs: usar `structlog` con campos `role_id`, `roi_id`, `request_id`.
+- Variables: `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT`, `BDI_MODELS_DIR`, `BDI_CORESET_RATE`, `BDI_SCORE_PERCENTILE`, `BDI_AREA_MM2_THR`, `BDI_CORS_ORIGINS`.
+- Config YAML opcional (`configs/app.yaml`) para overrides.
+- Logs: `slog` imprime JSON con `request_id`, `recipe_id`, `role_id`, `roi_id`.
 
 ## 7. Validaciones
-- Rechazar `mm_per_px` inconsistentes (`409`).
-- Validar `shape` dentro de límites (`400`).
-- Responder `428` si falta calibración, `404` si no existe modelo.
+- `400` si falta memoria (`/infer`) o hay token grid mismatch.
+- `500` ante excepciones inesperadas con `{error, trace, request_id, recipe_id}`.
 
 ## 8. QA
 - Ejecutar `pytest` antes de PR.
-- Usar scripts `docs/curl_examples.md` para validar manualmente.
+- Usar `docs/API_CONTRACTS.md` para validar manualmente.
 - Revisar `docs/BACKEND.md` para detalles extendidos.

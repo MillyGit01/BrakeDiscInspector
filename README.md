@@ -6,7 +6,7 @@ BrakeDiscInspector is a two-part inspection cell: a WPF front-end (`gui/BrakeDis
 - **Manual inspection:** `WorkflowViewModel` exports a *canonical ROI* from the currently loaded image via `RoiCropUtils` and sends it to the backend using `BackendClient.InferAsync`. Heatmaps and regions are re-projected on top of the canvas (`MainWindow.xaml.cs`). Analyze options (rotation range, scale min/max, matcher thresholds) stay in sync between the active layout and the preset UI so manual runs reuse the same search parameters that were stored with the layout.
 - **Batch inspection:** the view-model iterates over every image under the selected folder, repositions each inspection ROI according to its chosen anchor (`InspectionRoiConfig.AnchorMaster`) with `InspectionAlignmentHelper.MoveInspectionTo` and the detected Master 1/2 centers, exports each ROI and evaluates it asynchronously while tracking per-row status (`BatchRow`, `BatchCellStatus`).
 - **Dataset management:** every layout name acts as a *recipe* rooted at `<exe>/Recipes/<LayoutName>/`. `EnsureInspectionDatasetStructure` creates `Dataset/Inspection_<n>/{ok,ng}` plus a `Model/Inspection_<n>` folder per slot, while `DatasetManager` saves each ROI crop and metadata JSON under `Dataset/datasets/<roi_id>/<ok|ng>/`. Obsolete masters/models are moved to `obsolete/` alongside the current files. The **Clear canvas** action now wipes masters, inspection slots, cached baselines and disables all inspection ROIs so the next edits start from a clean recipe without lingering inspection geometry.
-- **Backend inference:** `backend/app.py` exposes `GET /health`, `POST /fit_ok`, `POST /calibrate_ng` and `POST /infer`. Images are decoded with OpenCV, features are extracted with `DinoV2Features`, PatchCore coreset is persisted through `ModelStore`, and responses always contain `{score, threshold?, token_shape, heatmap_png_base64?, regions[]}`. `BackendClient` always sends `role_id`, `roi_id`, `mm_per_px` and the ROI mask (`shape` JSON) so the backend evaluates the same canonical crop that the GUI rendered.
+- **Backend inference:** `backend/app.py` exposes `GET /health`, `POST /fit_ok`, `POST /calibrate_ng`, `POST /infer` plus `/manifest` and dataset helper routes. Images are decoded with OpenCV, features are extracted with `DinoV2Features`, PatchCore coreset is persisted through `ModelStore`, and responses include `request_id`/`recipe_id` for correlation along with `{score, threshold?, token_shape, heatmap_png_base64?, regions[]}`. `BackendClient` always sends `role_id`, `roi_id`, `mm_per_px` and the ROI mask (`shape` JSON) so the backend evaluates the same canonical crop that the GUI rendered.
 
 ## Quick start
 ### Prerequisites
@@ -21,7 +21,7 @@ source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn backend.app:app --host 0.0.0.0 --port 8000
 ```
-Environment variables such as `BDI_MODELS_DIR`, `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT` and `BDI_CORESET_RATE` can override defaults (see `backend/config.py`).
+Environment variables such as `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT`, `BDI_MODELS_DIR`, `BDI_CORESET_RATE`, `BDI_SCORE_PERCENTILE` and `BDI_AREA_MM2_THR` can override defaults (see `backend/config.py`).
 
 ### Launch the GUI
 1. Open `gui/BrakeDiscInspector_GUI_ROI/BrakeDiscInspector_GUI_ROI.sln` in Visual Studio.

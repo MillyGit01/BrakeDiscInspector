@@ -9,6 +9,7 @@ The repository already contains concrete logging utilities. This page summarises
   - `gui_heatmap.log`: heatmap placement diagnostics from `MainWindow` (transform parameters, cutoff, opacity).
   - `roi_load_coords.log`: emitted when the UI loads/saves ROI coordinates.
   - `roi_analyze_master.log`: master-anchor analysis traces.
+  - `gui_setup.log`: GUI setup persistence events (`GuiSetupSettingsService` load/save).
 - Format: `yyyy-MM-dd HH:mm:ss.fff [LEVEL] message`. Messages are plain text composed inside the GUI code (`WorkflowViewModel`, `MainWindow`, `DatasetManager`, etc.). There is no request-id, so correlate entries by timestamp and ROI name.
 - Usage tips:
   - Search for `[eval]`, `[batch]`, `[dataset]` prefixes when investigating inference/batch/dataset flows.
@@ -20,6 +21,7 @@ The repository already contains concrete logging utilities. This page summarises
 - Implemented through the helper `slog(event, **kw)` which simply prints `json.dumps` to stdout/stderr.
 - Typical events: `fit_ok.request`, `fit_ok.response`, `calibrate_ng.request`, `infer.response`, `infer.error`.
 - Fields always include `ts` (epoch seconds) and whatever keyword arguments were passed (e.g. `role_id`, `roi_id`, `elapsed_ms`, `score`).
+- `slog` fields include `request_id` and `recipe_id`, which also appear in every JSON response. Use these IDs to correlate GUI requests with backend logs when troubleshooting.
 - There is no log rotation; use your process supervisor (systemd, Docker) to capture stdout if you need persistence.
 
 ## Troubleshooting workflow

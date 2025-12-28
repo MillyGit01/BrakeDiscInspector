@@ -1751,6 +1751,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private readonly Dictionary<string, List<RoiModel>> _inspectionBaselinesByImage
             = new(StringComparer.OrdinalIgnoreCase);
         private string _currentImageHash = string.Empty;
+        private string _lastImageKeyDetail = string.Empty;
         private string _lastImageSeedKey = "";                  // “signature” of the currently loaded image
 
         private sealed class FixedMastersBaseline
@@ -2159,14 +2160,17 @@ namespace BrakeDiscInspector_GUI_ROI
             if (len0 < 1e-9 || len1 < 1e-9)
                 return;
 
-            bool effectiveScaleLock = scaleLock && !_allowInspectionScaleOverride;
+            bool effectiveScaleLock = scaleLock;
             var similarity = ComputeSimilarityTransform(m1Base, m2Base, m1Cross, m2Cross, effectiveScaleLock,
                 out var pivotOld, out var pivotNew);
             double scaleFactor = effectiveScaleLock ? 1.0 : similarity.Scale;
-            double angleDelta = _disableRot ? 0.0 : similarity.RotationRad;
+            bool lockRotation = _disableRot;
+            double angleDelta = lockRotation ? 0.0 : similarity.RotationRad;
             var visImageKey = GetCurrentImageKey();
             var visFileName = GetCurrentImageFileName();
             var baselineSnapshotBefore = SnapshotLayoutBaselinesForImage(visImageKey);
+
+            InspLog($"[RepositionInsp][START] key='{visImageKey}' scaleLock={scaleLock} lockRotation={lockRotation} effectiveScaleLock={effectiveScaleLock}");
 
             if (_useFixedInspectionBaseline)
             {
@@ -2175,6 +2179,23 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     SeedInspectionBaselineOnce(roi, seedKey);
                 }
+            }
+
+            const double noMoveEps = 0.001;
+            if (effectiveScaleLock && lockRotation
+                && Math.Abs(similarity.Translation.X) < noMoveEps
+                && Math.Abs(similarity.Translation.Y) < noMoveEps)
+            {
+                InspLog($"[RepositionInsp] early-return: locks active and translation < {noMoveEps} (tx={similarity.Translation.X:0.###}, ty={similarity.Translation.Y:0.###}).");
+                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
+                    "[VISCONF][INSP_APPLY_SKIP] key='{0}' file='{1}' reason='locks_active_zero_translation' scaleLock={2} lockRotation={3} tx={4:0.###} ty={5:0.###}",
+                    visImageKey,
+                    visFileName,
+                    scaleLock,
+                    lockRotation,
+                    similarity.Translation.X,
+                    similarity.Translation.Y));
+                return;
             }
 
             RoiModel? SelectBaselineForInspection(RoiModel roi)
@@ -2292,7 +2313,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 double ty = similarity.Translation.Y;
                 double distAfter = Dist(afterCx, afterCy, anchorNew.X, anchorNew.Y);
                 var repositionMessage = FormattableStringFactory.Create(
-                    "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(tx={12:0.###},ty={13:0.###},angΔ={14:0.###},scale={15:0.###}) roiBefore=(CX={16:0.###},CY={17:0.###},Ang={18:0.###}) roiAfter=(CX={19:0.###},CY={20:0.###},Ang={21:0.###}) residualToAnchor=(dx={22:0.###},dy={23:0.###},dist={24:0.###})",
+                    "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(tx={12:0.###},ty={13:0.###},angΔ={14:0.###},scale={15:0.###}) locks=(scaleLock={25},lockRotation={26}) roiBefore=(CX={16:0.###},CY={17:0.###},Ang={18:0.###}) roiAfter=(CX={19:0.###},CY={20:0.###},Ang={21:0.###}) residualToAnchor=(dx={22:0.###},dy={23:0.###},dist={24:0.###})",
                     visImageKey,
                     visFileName,
                     target.Label ?? target.Id ?? "<null>",
@@ -2317,7 +2338,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     target.AngleDeg,
                     afterCx - anchorNew.X,
                     afterCy - anchorNew.Y,
-                    distAfter);
+                    distAfter,
+                    scaleLock,
+                    lockRotation);
                 VisConfLog.Roi(FormattableString.Invariant(repositionMessage));
             }
 
@@ -2415,16 +2438,20 @@ namespace BrakeDiscInspector_GUI_ROI
             var baselineM1Point = new SWPoint(baselineM1Center.Item1, baselineM1Center.Item2);
             var baselineM2Point = new SWPoint(baselineM2Center.Item1, baselineM2Center.Item2);
 
+            var effectiveAnalyze = GetEffectiveAnalyzeOptions();
             bool hasLast = !double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X);
-            double posTol = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
-            double angTol = _layout?.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
+            double posTol = effectiveAnalyze.PosTolPx;
+            double angTol = effectiveAnalyze.AngTolDeg;
             decisionInfo.PosTol = posTol;
             decisionInfo.AngTol = angTol;
             decisionInfo.HasLast = hasLast;
 
-            var analyzeOptions = _layout?.Analyze;
-            double minScore1 = analyzeOptions?.ThrM1 ?? _workflowViewModel?.AnchorScoreMin ?? 85;
-            double minScore2 = analyzeOptions?.ThrM2 ?? _workflowViewModel?.AnchorScoreMin ?? 85;
+            double minScore1 = effectiveAnalyze.ThrM1 > 0
+                ? effectiveAnalyze.ThrM1
+                : (_workflowViewModel?.AnchorScoreMin ?? 85);
+            double minScore2 = effectiveAnalyze.ThrM2 > 0
+                ? effectiveAnalyze.ThrM2
+                : (_workflowViewModel?.AnchorScoreMin ?? 85);
             bool scoreOk = score1 >= minScore1 && score2 >= minScore2;
             bool candidateFinite = !double.IsNaN(newM1.X) && !double.IsNaN(newM1.Y) && !double.IsNaN(newM2.X) && !double.IsNaN(newM2.Y);
             bool candidateValid = scoreOk && candidateFinite;
@@ -2564,6 +2591,7 @@ namespace BrakeDiscInspector_GUI_ROI
             string imageKey,
             string fileName,
             string imagePath,
+            string imageKeyDetail,
             string templateKey,
             string? templateM1Path,
             string? templateM2Path,
@@ -2572,14 +2600,23 @@ namespace BrakeDiscInspector_GUI_ROI
             int imageWidth,
             int imageHeight,
             double posTol,
-            double angTol)
+            double angTol,
+            int minScore1,
+            int minScore2,
+            bool scaleLock,
+            bool disableRot,
+            int rotRange,
+            double scaleMin,
+            double scaleMax)
         {
             var message = FormattableStringFactory.Create(
                 "[VISCONF][ANALYZE_MASTER][START] key='{0}' file='{1}' path='{2}' " +
                 "imgSize={3}x{4} templateKey='{5}' " +
                 "templateM1Path='{6}' templateM2Path='{7}' " +
                 "templateM1Size={8} templateM2Size={9} " +
-                "posTol={10:0.###} angTol={11:0.###} layout='{12}'",
+                "posTol={10:0.###} angTol={11:0.###} minScore=({12},{13}) " +
+                "scaleLock={14} lockRotation={15} rotRange={16} scaleRange=({17:0.###},{18:0.###}) " +
+                "layout='{19}' keyDetail='{20}'",
                 imageKey,
                 fileName,
                 imagePath,
@@ -2592,7 +2629,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 templateM2Size,
                 posTol,
                 angTol,
-                GetCurrentLayoutName());
+                minScore1,
+                minScore2,
+                scaleLock,
+                disableRot,
+                rotRange,
+                scaleMin,
+                scaleMax,
+                GetCurrentLayoutName(),
+                imageKeyDetail);
             VisConfLog.AnalyzeMaster(message);
         }
 
@@ -4672,6 +4717,68 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private AnalyzeOptions GetEffectiveAnalyzeOptions()
+        {
+            var defaults = new AnalyzeOptions();
+            var layoutAnalyze = _layout?.Analyze;
+
+            double posTol = layoutAnalyze?.PosTolPx > 0
+                ? layoutAnalyze.PosTolPx
+                : (_analyzePosTolPx > 0 ? _analyzePosTolPx : defaults.PosTolPx);
+            double angTol = layoutAnalyze?.AngTolDeg > 0
+                ? layoutAnalyze.AngTolDeg
+                : (_analyzeAngTolDeg > 0 ? _analyzeAngTolDeg : defaults.AngTolDeg);
+
+            int thrM1 = layoutAnalyze?.ThrM1 > 0
+                ? layoutAnalyze.ThrM1
+                : (_analyzeThrM1 > 0 ? _analyzeThrM1 : defaults.ThrM1);
+            int thrM2 = layoutAnalyze?.ThrM2 > 0
+                ? layoutAnalyze.ThrM2
+                : (_analyzeThrM2 > 0 ? _analyzeThrM2 : defaults.ThrM2);
+
+            string featureM1 = NormalizeFeature(layoutAnalyze?.FeatureM1 ?? _analyzeFeatureM1);
+            if (string.IsNullOrWhiteSpace(featureM1))
+            {
+                featureM1 = defaults.FeatureM1;
+            }
+
+            string featureM2 = NormalizeFeature(layoutAnalyze?.FeatureM2 ?? _analyzeFeatureM2);
+            if (string.IsNullOrWhiteSpace(featureM2))
+            {
+                featureM2 = defaults.FeatureM2;
+            }
+
+            int rotRange = layoutAnalyze?.RotRange > 0
+                ? layoutAnalyze.RotRange
+                : (_preset?.RotRange > 0 ? _preset.RotRange : defaults.RotRange);
+            double scaleMin = layoutAnalyze?.ScaleMin > 0
+                ? layoutAnalyze.ScaleMin
+                : (_preset?.ScaleMin > 0 ? _preset.ScaleMin : defaults.ScaleMin);
+            double scaleMax = layoutAnalyze?.ScaleMax > 0
+                ? layoutAnalyze.ScaleMax
+                : (_preset?.ScaleMax > 0 ? _preset.ScaleMax : defaults.ScaleMax);
+
+            bool scaleLock = layoutAnalyze?.ScaleLock ?? _scaleLock;
+            bool disableRot = layoutAnalyze?.DisableRot ?? _disableRot;
+            bool useLocalMatcher = layoutAnalyze?.UseLocalMatcher ?? (ChkUseLocalMatcher?.IsChecked == true);
+
+            return new AnalyzeOptions
+            {
+                PosTolPx = posTol,
+                AngTolDeg = angTol,
+                ScaleLock = scaleLock,
+                DisableRot = disableRot,
+                UseLocalMatcher = useLocalMatcher,
+                FeatureM1 = featureM1,
+                FeatureM2 = featureM2,
+                ThrM1 = thrM1,
+                ThrM2 = thrM2,
+                RotRange = rotRange,
+                ScaleMin = scaleMin,
+                ScaleMax = scaleMax
+            };
+        }
+
         private void InitializeOptionsFromConfig()
         {
             double defaultPosTol = _appConfig.Analyze?.PosTolPx > 0 ? _appConfig.Analyze.PosTolPx : 1.0;
@@ -4692,8 +4799,8 @@ namespace BrakeDiscInspector_GUI_ROI
             bool disableRot = layoutAnalyze?.DisableRot ?? defaultDisableRot;
             string featureM1 = NormalizeFeature(layoutAnalyze?.FeatureM1);
             string featureM2 = NormalizeFeature(layoutAnalyze?.FeatureM2);
-            int thrM1 = layoutAnalyze?.ThrM1 ?? 85;
-            int thrM2 = layoutAnalyze?.ThrM2 ?? 85;
+            int thrM1 = layoutAnalyze?.ThrM1 > 0 ? layoutAnalyze.ThrM1 : 85;
+            int thrM2 = layoutAnalyze?.ThrM2 > 0 ? layoutAnalyze.ThrM2 : 85;
             double opacity = layoutUi != null && layoutUi.HeatmapOverlayOpacity >= 0
                 ? Math.Max(0.0, Math.Min(1.0, layoutUi.HeatmapOverlayOpacity))
                 : defaultOpacity;
@@ -11307,7 +11414,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (!_mastersSeededForImage)
             {
-                var seeded = TrySeedMastersBaselineForCurrentImage("analyze:precheck", force: true);
+                var seeded = TrySeedMastersBaselineForCurrentImage("analyze:precheck", force: false);
                 if (!seeded)
                 {
                     UI(() => Snack("No se ha podido inicializar la baseline de Masters (faltan ROIs Master en el layout actual o no hay imagen cargada).")); // CODEX: string interpolation compatibility.
@@ -11394,11 +11501,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var analyzeImageKey = GetCurrentImageKey();
             var analyzeFileName = GetCurrentImageFileName();
-            double posTolForLog = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
-            double angTolForLog = _layout?.Analyze?.AngTolDeg ?? _analyzeAngTolDeg;
+            var effectiveAnalyze = GetEffectiveAnalyzeOptions();
+            double posTolForLog = effectiveAnalyze.PosTolPx;
+            double angTolForLog = effectiveAnalyze.AngTolDeg;
             var analyzeImagePath = _currentImagePathWin ?? string.Empty;
-            bool useLocalMatcher = false;
-            UI(() => useLocalMatcher = ChkUseLocalMatcher.IsChecked == true);
+            bool useLocalMatcher = effectiveAnalyze.UseLocalMatcher;
 
             var templatesReady = TryEnsureMasterTemplates("analyze-start", out var templateKey);
             var templateM1Size = _masterTemplateM1 != null ? $"{_masterTemplateM1.Width}x{_masterTemplateM1.Height}" : "0x0";
@@ -11407,6 +11514,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 analyzeImageKey,
                 analyzeFileName,
                 analyzeImagePath,
+                _lastImageKeyDetail,
                 templateKey,
                 _layout?.Master1PatternImagePath,
                 _layout?.Master2PatternImagePath,
@@ -11415,7 +11523,18 @@ namespace BrakeDiscInspector_GUI_ROI
                 _imgW,
                 _imgH,
                 posTolForLog,
-                angTolForLog);
+                angTolForLog,
+                effectiveAnalyze.ThrM1,
+                effectiveAnalyze.ThrM2,
+                effectiveAnalyze.ScaleLock,
+                effectiveAnalyze.DisableRot,
+                effectiveAnalyze.RotRange,
+                effectiveAnalyze.ScaleMin,
+                effectiveAnalyze.ScaleMax);
+
+            AppendLog(FormattableString.Invariant(
+                $"[ANALYZE_MASTER][START] key='{analyzeImageKey}' keyDetail='{_lastImageKeyDetail}' posTol={posTolForLog:0.###} angTol={angTolForLog:0.###} " +
+                $"minScore=({effectiveAnalyze.ThrM1},{effectiveAnalyze.ThrM2}) scaleLock={effectiveAnalyze.ScaleLock} lockRotation={effectiveAnalyze.DisableRot} useLocalMatcher={useLocalMatcher}"));
 
             ViewModel?.TraceManual($"[manual-master] analyze file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}'");
 
@@ -11439,7 +11558,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[ANALYZE] Using local matcher first...");
 
                 var localImagePath = _currentImagePathWin;
-                var localAnalyze = _layout?.Analyze ?? new AnalyzeOptions();
+                var localAnalyze = effectiveAnalyze;
                 var localM1Pattern = _layout?.Master1Pattern?.Clone();
                 var localM2Pattern = _layout?.Master2Pattern?.Clone();
                 var localM1Search = _layout?.Master1Search?.Clone();
@@ -11672,7 +11791,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var baseM2 = master2Baseline != null ? master2Baseline.GetCenter() : (double.NaN, double.NaN);
                 var baseM1Point = new SWPoint(baseM1.Item1, baseM1.Item2);
                 var baseM2Point = new SWPoint(baseM2.Item1, baseM2.Item2);
-                double posTolPx = _layout?.Analyze?.PosTolPx ?? _analyzePosTolPx;
+                double posTolPx = effectiveAnalyze.PosTolPx;
                 bool scaleLock = false;
                 UI(() => scaleLock = GetScaleLockUi());
 
@@ -12095,14 +12214,20 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (!string.IsNullOrWhiteSpace(_currentImagePathWin) && File.Exists(_currentImagePathWin))
                 {
+                    var info = new FileInfo(_currentImagePathWin);
                     var bytes = File.ReadAllBytes(_currentImagePathWin);
-                    return HashSHA256(bytes);
+                    var key = HashSHA256(bytes);
+                    _lastImageKeyDetail = $"file='{_currentImagePathWin}' size={info.Length} mtimeUtc={info.LastWriteTimeUtc:O} hash=sha256(bytes)";
+                    return key;
                 }
 
                 var bs = ImgMain?.Source as BitmapSource ?? _currentImageSource;
                 if (bs != null)
                 {
-                    return HashSHA256(GetPixels(bs));
+                    var pixels = GetPixels(bs);
+                    var key = HashSHA256(pixels);
+                    _lastImageKeyDetail = $"bitmap w={bs.PixelWidth} h={bs.PixelHeight} fmt={bs.Format} hash=sha256(pixels)";
+                    return key;
                 }
             }
             catch
@@ -12110,6 +12235,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 // ignored — fallback below
             }
 
+            _lastImageKeyDetail = "fallback=0x0|0|0|";
             return "0x0|0|0|";
         }
 
@@ -12201,14 +12327,32 @@ namespace BrakeDiscInspector_GUI_ROI
                     || Math.Abs(a.RInner - b.RInner) > tol;
             }
 
+            RoiModel AdjustBaselineSize(RoiModel persistedBaseline, RoiModel currentRoi)
+            {
+                var adjusted = persistedBaseline.Clone();
+                adjusted.Width = currentRoi.Width;
+                adjusted.Height = currentRoi.Height;
+                adjusted.R = currentRoi.R;
+                adjusted.RInner = currentRoi.RInner;
+                adjusted.BaseImgW ??= currentRoi.BaseImgW;
+                adjusted.BaseImgH ??= currentRoi.BaseImgH;
+                return adjusted;
+            }
+
             var persisted = GetInspectionBaselineClone(roiId);
             var current = FindCurrentInspectionRoiById(roiId) ?? insp;
             RoiModel? baseline = persisted ?? insp;
 
             if (persisted != null && current != null && HasSizeMismatch(persisted, current))
             {
-                InspLog($"[Seed][WARN] Persisted baseline size mismatch; using current ROI. id='{roiId}' persisted={FInsp(persisted)} current={FInsp(current)}");
-                baseline = current;
+                var adjusted = AdjustBaselineSize(persisted, current);
+                InspLog($"[Seed][WARN] Persisted baseline size mismatch; preserving persisted position and adjusting size. " +
+                        $"id='{roiId}' persisted={FInsp(persisted)} current={FInsp(current)} adjusted={FInsp(adjusted)}");
+                baseline = adjusted;
+            }
+            else if (persisted != null && current == null)
+            {
+                InspLog($"[Seed][WARN] Persisted baseline size check skipped (current null); using persisted baseline. id='{roiId}' persisted={FInsp(persisted)}");
             }
 
             if (baseline == null)
@@ -12221,7 +12365,8 @@ namespace BrakeDiscInspector_GUI_ROI
             _inspectionBaselineSeededIds.Add(roiId);
             _inspectionBaselineSeededForImage = true;
             _lastImageSeedKey = seedKey;
-            InspLog($"[Seed] Fixed baseline SEEDED (key='{seedKey}' id='{roiId}') from: {FInsp(baseline)}");
+            var sourceLabel = persisted != null ? "persisted" : "current";
+            InspLog($"[Seed] Fixed baseline SEEDED (key='{seedKey}' id='{roiId}' source={sourceLabel}) from: {FInsp(baseline)}");
         }
 
         private void ReseedInspectionBaselineFromLayout(string context)

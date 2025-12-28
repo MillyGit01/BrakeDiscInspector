@@ -33,8 +33,8 @@ This document summarises how the current codebase is wired: which processes exis
 
 ## Configuration and contracts
 - GUI: `AppConfig` merges `config/appsettings.json`, `appsettings.json` and environment variables (`BDI_BACKEND_BASEURL`, `BDI_ANALYZE_*`, `BDI_HEATMAP_OPACITY`). Dataset roots are derived from the active layout name, not from `BDI_DATASET_ROOT`. Every backend call carries `role_id`, `roi_id`, `mm_per_px` and the ROI mask (`shape` JSON) so backend regions/heatmaps line up with the GUI overlay without extra transforms.
-- Backend: `_env_var` in `app.py` plus `backend/config.py` read the `BDI_*` environment variables. No API keys, manifests or `/metrics` routes are implemented in the checked-in code.
+- Backend: `_env_var` in `app.py` plus `backend/config.py` read the `BDI_*` environment variables. No API keys or `/metrics` routes are implemented in the checked-in code; `/manifest` is available for inspecting stored memory/calibration/dataset counts.
 
 ## Logging overview
 - GUI logs go to `%LocalAppData%/BrakeDiscInspector/logs/`: `gui.log` (general), `gui_heatmap.log`, `roi_load_coords.log`, `roi_analyze_master.log`. They are plain text with `yyyy-MM-dd HH:mm:ss.fff [LEVEL] message` format (see `Util/GuiLog.cs`).
-- Backend logs are emitted through `slog` in `app.py` and printed to stdout as JSON lines containing `ts`, `event`, `role_id`, `roi_id`, etc.
+- Backend logs are emitted through `slog` in `app.py` and printed to stdout as JSON lines containing `ts`, `event`, `role_id`, `roi_id`, `request_id`, `recipe_id`, etc.

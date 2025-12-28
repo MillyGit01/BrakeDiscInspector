@@ -103,16 +103,17 @@ If any folder names differ, agents must **detect** and **adapt** paths without c
 
 **FastAPI service** (Python) in `/backend/`:
 
-- `GET /health` → `{ status, device, model, version }`
+- `GET /health` → `{ status, device, model, version, request_id, recipe_id, reason? }`
 - `POST /fit_ok` (multipart):
-  - fields: `role_id`, `roi_id`, `mm_per_px`, `images[]` (one or many PNG/JPG of canonical ROI)
-  - returns: `{ n_embeddings, coreset_size, token_shape }`
+  - fields: `role_id`, `roi_id`, `mm_per_px`, `images[]` (one or many PNG/JPG of canonical ROI), optional `recipe_id`, `model_key`
+  - returns: `{ n_embeddings, coreset_size, token_shape, coreset_rate_requested, coreset_rate_applied, request_id, recipe_id }`
 - `POST /calibrate_ng` (JSON):
   - body: `{ role_id, roi_id, mm_per_px, ok_scores[], ng_scores?[], area_mm2_thr?, score_percentile? }`
-  - returns: `{ threshold, p99_ok?, p5_ng?, ... }`
+  - returns: `{ threshold, ok_mean, ng_mean?, p99_ok?, p5_ng?, mm_per_px, area_mm2_thr, score_percentile, request_id, recipe_id }`
 - `POST /infer` (multipart):
-  - fields: `role_id`, `roi_id`, `mm_per_px`, `image`, `shape?` (JSON string)
-  - returns: `{ score, threshold, heatmap_png_base64, regions[], token_shape }`
+  - fields: `role_id`, `roi_id`, `mm_per_px`, `image`, `shape?` (JSON string), optional `recipe_id`, `model_key`
+  - returns: `{ score, threshold, heatmap_png_base64, regions[], token_shape, request_id, recipe_id }`
+- `GET /manifest` and dataset helpers (`/datasets/ok/upload`, `/datasets/ng/upload`, `/datasets/list`, `/datasets/file`, `/datasets/clear`) are implemented for inspecting/syncing datasets.
 
 > **Note**: `shape` masks the heatmap and supports `rect`, `circle`, `annulus` (see §5).
 
@@ -152,7 +153,7 @@ If any folder names differ, agents must **detect** and **adapt** paths without c
 ### 4.3 Calibrate (optional, with or without NG)
 - If NG exist, compute `scores` for OK/NG by temporarily calling `/infer` (without threshold) and collect returned `score`.
 - POST `/calibrate_ng` with arrays and show returned `threshold`.
-- Persist calibration info (e.g., per ROI manifest).
+- Persist calibration info through `ModelStore` and surface it via `GET /manifest`.
 
 ### 4.4 Inference
 - Canonicalize current ROI → PNG
@@ -237,7 +238,7 @@ All numbers are in **pixels** of the **canonical ROI image** (post crop+rotation
 - Which exact methods return the **canonical ROI** in the current branch? (e.g., `TryBuildRoiCropInfo(...)`, `TryGetRotatedCrop(...)` names may vary).
 - Where is `mm_per_px` sourced in the GUI (camera config, layout, or per-ROI)?
 - Desired **canonical ROI size** (e.g., 384×384 or 448×448). Consistency is beneficial.
-- Should the GUI persist a per-ROI **manifest** (counts, model_version, threshold) for quick status?
+- Should the GUI persist a per-ROI summary (counts, threshold) in addition to backend `/manifest`?
 
 ---
 
@@ -276,12 +277,12 @@ uvicorn backend.app:app --reload
 ## 14) Actualización Octubre 2025 — Contrato consolidado
 
 - **Frontend ↔ Backend**:
-  - `GET /health` → `{ status, device, model, version, uptime_s }`.
-  - `POST /fit_ok` → multipart con `role_id`, `roi_id`, `mm_per_px`, `images[]`.
-  - `POST /calibrate_ng` → JSON con `ok_scores`, `ng_scores?`, `score_percentile`, `area_mm2_thr`.
-  - `POST /infer` → multipart con `image`, `shape` (`rect|circle|annulus`), `mm_per_px`.
-  - Todas las respuestas incluyen `token_shape`, `model_version`, `request_id` (header).
-- **Persistencia**: `datasets/{role}/{roi}/ok|ng`, `models/{role}/{roi}/` con `manifest.json` y `calibration.json`.
+  - `GET /health` → `{ status, device, model, version, request_id, recipe_id, reason? }`.
+  - `POST /fit_ok` → multipart con `role_id`, `roi_id`, `mm_per_px`, `images[]`, opcional `recipe_id`, `model_key`.
+  - `POST /calibrate_ng` → JSON con `ok_scores`, `ng_scores?`, `score_percentile`, `area_mm2_thr`, opcional `recipe_id`.
+  - `POST /infer` → multipart con `image`, `shape` (`rect|circle|annulus`), `mm_per_px`, opcional `recipe_id`, `model_key`.
+  - Todas las respuestas incluyen `request_id` y `recipe_id` en el JSON (no headers).
+- **Persistencia**: `datasets/<role>/<roi>/ok|ng` (ModelStore datasets) y `<role>__<roi>.npz` + `<role>__<roi>_calib.json` bajo `BDI_MODELS_DIR`.
 - **Escala física**: `mm_per_px` obligatorio en todas las operaciones.
 - **Shape JSON**: siempre en coordenadas de ROI canónica (post-rotación).
 - **Logging**: correlacionar `request_id` entre GUI y backend.

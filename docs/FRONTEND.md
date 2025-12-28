@@ -12,6 +12,13 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
   - Health: `RefreshHealthCommand`.
 - **Backend client:** `Workflow/BackendClient` wraps `HttpClient` with strongly typed methods for `/health`, `/fit_ok`, `/calibrate_ng`, `/infer` and provides helper APIs such as `EnsureFittedAsync`.
 
+## Setup GUI (appearance + persistence)
+- **What is configurable:** the setup UI captures theme preference, font families (body/header), font sizes (window title, section title, group header, control label/text, button text, checkbox) and core brushes/colors (foreground, accent, button foreground/background/hover, group header foreground).
+- **Persistence location:** `%LOCALAPPDATA%\BrakeDiscInspector\gui_setup.json`.
+- **Resetting to defaults:** close the app and delete `gui_setup.json`; the next launch will recreate it with defaults.
+- **Startup behavior:** `App.xaml.cs` loads the settings via `GuiSetupSettingsService.LoadOrDefault`, applies them to the resource dictionary, and re-applies the selected theme preference automatically.
+- **Logs:** setup persistence writes to `%LOCALAPPDATA%\BrakeDiscInspector\logs\gui_setup.log` (look for `[LOAD]`/`[SAVE]` entries).
+
 ## ROI editing and persistence
 - **Shapes:** `RoiModel` supports `Rectangle`, `Circle` and `Annulus`. Each ROI tracks both geometric data (center, radii, angle) and frozen state.
 - **Overlay/adorner:** `RoiOverlay` renders active shapes; `RoiAdorner`/`ResizeAdorner`/`RoiRotateAdorner` manipulate them. The adorner code is shared between manual and batch canvases and must stay untouched per `agents.md`.

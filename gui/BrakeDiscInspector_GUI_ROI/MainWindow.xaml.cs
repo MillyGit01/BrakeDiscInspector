@@ -11532,9 +11532,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 effectiveAnalyze.ScaleMin,
                 effectiveAnalyze.ScaleMax);
 
-            AppendLog(FormattableString.Invariant(
+            AppendLog(
                 $"[ANALYZE_MASTER][START] key='{analyzeImageKey}' keyDetail='{_lastImageKeyDetail}' posTol={posTolForLog:0.###} angTol={angTolForLog:0.###} " +
-                $"minScore=({effectiveAnalyze.ThrM1},{effectiveAnalyze.ThrM2}) scaleLock={effectiveAnalyze.ScaleLock} lockRotation={effectiveAnalyze.DisableRot} useLocalMatcher={useLocalMatcher}"));
+                $"minScore=({effectiveAnalyze.ThrM1},{effectiveAnalyze.ThrM2}) scaleLock={effectiveAnalyze.ScaleLock} lockRotation={effectiveAnalyze.DisableRot} useLocalMatcher={useLocalMatcher}");
 
             ViewModel?.TraceManual($"[manual-master] analyze file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}'");
 

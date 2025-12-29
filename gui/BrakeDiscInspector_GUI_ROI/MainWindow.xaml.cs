@@ -2614,14 +2614,35 @@ namespace BrakeDiscInspector_GUI_ROI
                     return accept;
                 }
 
-                InspLog(FormattableString.Invariant(
-                    $"[VISCONF][ANALYZE_MASTER][NOSKIP] key='{imageKey}' reason='anchors_unchanged_but_masters_not_placed' " +
-                    $"currentM1=({currentM1.X:F3},{currentM1.Y:F3}) targetM1=({m1ToApply.X:F3},{m1ToApply.Y:F3}) " +
-                    $"currentM2=({currentM2.X:F3},{currentM2.Y:F3}) targetM2=({m2ToApply.X:F3},{m2ToApply.Y:F3})"));
-                VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                    $"[VISCONF][ANALYZE_MASTER][NOSKIP] key='{imageKey}' file='{GetCurrentImageFileName()}' reason='anchors_unchanged_but_masters_not_placed' " +
-                    $"currentM1=({currentM1.X:F3},{currentM1.Y:F3}) targetM1=({m1ToApply.X:F3},{m1ToApply.Y:F3}) " +
-                    $"currentM2=({currentM2.X:F3},{currentM2.Y:F3}) targetM2=({m2ToApply.X:F3},{m2ToApply.Y:F3})"));
+                var noSkipMessage = FormattableStringFactory.Create(
+                    "[VISCONF][ANALYZE_MASTER][NOSKIP] key='{0}' reason='anchors_unchanged_but_masters_not_placed' " +
+                    "currentM1=({1:F3},{2:F3}) targetM1=({3:F3},{4:F3}) " +
+                    "currentM2=({5:F3},{6:F3}) targetM2=({7:F3},{8:F3})",
+                    imageKey,
+                    currentM1.X,
+                    currentM1.Y,
+                    m1ToApply.X,
+                    m1ToApply.Y,
+                    currentM2.X,
+                    currentM2.Y,
+                    m2ToApply.X,
+                    m2ToApply.Y);
+                InspLog(noSkipMessage.ToString(CultureInfo.InvariantCulture));
+                var noSkipVisConfMessage = FormattableStringFactory.Create(
+                    "[VISCONF][ANALYZE_MASTER][NOSKIP] key='{0}' file='{1}' reason='anchors_unchanged_but_masters_not_placed' " +
+                    "currentM1=({2:F3},{3:F3}) targetM1=({4:F3},{5:F3}) " +
+                    "currentM2=({6:F3},{7:F3}) targetM2=({8:F3},{9:F3})",
+                    imageKey,
+                    GetCurrentImageFileName(),
+                    currentM1.X,
+                    currentM1.Y,
+                    m1ToApply.X,
+                    m1ToApply.Y,
+                    currentM2.X,
+                    currentM2.Y,
+                    m2ToApply.X,
+                    m2ToApply.Y);
+                VisConfLog.AnalyzeMaster(noSkipVisConfMessage);
             }
 
             if (accept)
@@ -12272,9 +12293,19 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            InspLog(FormattableString.Invariant(
-                $"[Seed-M][APPLY_RESTORED] key='{imageKey}' before M1=({currentM1.X:F3},{currentM1.Y:F3}) " +
-                $"M2=({currentM2.X:F3},{currentM2.Y:F3}) -> target M1=({lastM1.X:F3},{lastM1.Y:F3}) M2=({lastM2.X:F3},{lastM2.Y:F3})"));
+            var applyRestoredMessage = FormattableStringFactory.Create(
+                "[Seed-M][APPLY_RESTORED] key='{0}' before M1=({1:F3},{2:F3}) " +
+                "M2=({3:F3},{4:F3}) -> target M1=({5:F3},{6:F3}) M2=({7:F3},{8:F3})",
+                imageKey,
+                currentM1.X,
+                currentM1.Y,
+                currentM2.X,
+                currentM2.Y,
+                lastM1.X,
+                lastM1.Y,
+                lastM2.X,
+                lastM2.Y);
+            InspLog(applyRestoredMessage.ToString(CultureInfo.InvariantCulture));
 
             SetRoiCenterImg(_layout.Master1Pattern, lastM1.X, lastM1.Y);
             SetRoiCenterImg(_layout.Master2Pattern, lastM2.X, lastM2.Y);
@@ -12292,9 +12323,15 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var afterM1 = GetMasterCenterPoint(_layout.Master1Pattern);
             var afterM2 = GetMasterCenterPoint(_layout.Master2Pattern);
-            InspLog(FormattableString.Invariant(
-                $"[Seed-M][APPLY_RESTORED][DONE] key='{imageKey}' after M1=({afterM1.X:F3},{afterM1.Y:F3}) " +
-                $"M2=({afterM2.X:F3},{afterM2.Y:F3})"));
+            var applyRestoredDoneMessage = FormattableStringFactory.Create(
+                "[Seed-M][APPLY_RESTORED][DONE] key='{0}' after M1=({1:F3},{2:F3}) " +
+                "M2=({3:F3},{4:F3})",
+                imageKey,
+                afterM1.X,
+                afterM1.Y,
+                afterM2.X,
+                afterM2.Y);
+            InspLog(applyRestoredDoneMessage.ToString(CultureInfo.InvariantCulture));
         }
 
         private void RestoreLastAcceptedAnchorsForImage(string imageKey, string reason)

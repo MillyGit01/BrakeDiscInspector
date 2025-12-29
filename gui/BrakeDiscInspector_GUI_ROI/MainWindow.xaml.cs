@@ -1398,6 +1398,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 $"[ANCHOR][LAYOUT] count={_layout?.InspectionRois?.Count ?? 0} items={FormatInspectionAnchorList(_layout?.InspectionRois)}"));
 
             InitializeFixedMastersBaseline($"layout:{sourceContext}");
+            CacheFixedInspectionBaselineFromLayout($"layout:{sourceContext}");
 
             var layoutName = GetCurrentLayoutName();
             AppendLog($"[layout] apply '{layoutName}' source={sourceContext} path='{_currentLayoutFilePath}'");
@@ -1744,6 +1745,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private HeatmapRoiModel _lastHeatmapRoi;              // ROI (image-space) that defines the heatmap clipping area
         // --- Fixed baseline per image (no drift) ---
         private bool _useFixedInspectionBaseline = true;        // keep using fixed baseline (must be true)
+        private readonly Dictionary<string, RoiModel> _inspectionBaselineLayoutFixedById =
+            new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, RoiModel> _inspectionBaselineFixedById =
             new(StringComparer.OrdinalIgnoreCase);              // fixed baselines per inspection id for the current image
         private readonly HashSet<string> _inspectionBaselineSeededIds =
@@ -1949,6 +1952,13 @@ namespace BrakeDiscInspector_GUI_ROI
         private static bool IsFinitePoint(SWPoint point)
             => IsFinite(point.X) && IsFinite(point.Y);
 
+        private static bool PtNear(SWPoint a, SWPoint b, double epsPx)
+        {
+            var dx = a.X - b.X;
+            var dy = a.Y - b.Y;
+            return (dx * dx + dy * dy) <= (epsPx * epsPx);
+        }
+
         private static double AngleOf(SWVector v) => Math.Atan2(v.Y, v.X);
 
         private static SWVector Normalize(SWVector v)
@@ -1974,6 +1984,17 @@ namespace BrakeDiscInspector_GUI_ROI
                     if (!double.IsNaN(r.CX) && !double.IsNaN(r.CY)) return (r.CX, r.CY);
                     return (r.X, r.Y);
             }
+        }
+
+        private static SWPoint GetMasterCenterPoint(RoiModel? roi)
+        {
+            if (roi == null)
+            {
+                return new SWPoint(double.NaN, double.NaN);
+            }
+
+            var (cx, cy) = GetCenterShapeAware(roi);
+            return new SWPoint(cx, cy);
         }
 
         // Set center in IMAGE space; updates CX/CY and Left/Top
@@ -2130,7 +2151,8 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private void RepositionInspectionUsingSt(SWPoint m1Cross, SWPoint m2Cross, bool scaleLock,
-                                                         RoiModel? master1Baseline = null, RoiModel? master2Baseline = null)
+                                                         RoiModel? master1Baseline = null, RoiModel? master2Baseline = null,
+                                                         bool? forceScaleLock = null, bool? forceDisableRot = null)
         {
             if (_layout == null)
                 return;
@@ -2159,8 +2181,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            bool disableRot = DisableRot || (ChkDisableRot?.IsChecked == true);
-            bool effectiveScaleLock = GetScaleLockUi();
+            bool disableRot = forceDisableRot ?? (DisableRot || (ChkDisableRot?.IsChecked == true));
+            bool effectiveScaleLock = forceScaleLock ?? GetScaleLockUi();
 
             double baseDist = Dist(m1Base.X, m1Base.Y, m2Base.X, m2Base.Y);
             double detDist = Dist(m1Cross.X, m1Cross.Y, m2Cross.X, m2Cross.Y);
@@ -2569,17 +2591,37 @@ namespace BrakeDiscInspector_GUI_ROI
             InspLog($"[APPLY] baselineM1=({baselineM1Point.X:0.###},{baselineM1Point.Y:0.###}) acceptedM1=({m1ToApply.X:0.###},{m1ToApply.Y:0.###}) deltaPx=({applyDx:0.###},{applyDy:0.###}) angle={applyAngle:0.###}");
 
             var alignmentSignature = BuildAlignmentSignature(baselineM1Point, baselineM2Point, m1ToApply, m2ToApply, scaleLock);
-            if (alignmentSignature != null
+            var currentM1 = GetMasterCenterPoint(_layout.Master1Pattern);
+            var currentM2 = GetMasterCenterPoint(_layout.Master2Pattern);
+            const double posEps = 0.2;
+            bool mastersAlreadyPlaced = IsFinitePoint(currentM1)
+                && IsFinitePoint(currentM2)
+                && PtNear(currentM1, m1ToApply, posEps)
+                && PtNear(currentM2, m2ToApply, posEps);
+
+            if (scaleLock && alignmentSignature != null
                 && _lastAlignmentByImage.TryGetValue(imageKey, out var lastSignature)
                 && AlignmentWithinEpsilon(alignmentSignature, lastSignature))
             {
-                decisionInfo.Reason = $"{decisionInfo.Reason}|anchors_unchanged_skip";
-                InspLog($"[Accept] SKIP: alignment unchanged imageKey='{imageKey}' scaleLock={scaleLock}");
-                AppendLog($"[ANALYZE] Alignment unchanged; skipping ROI reposition for imageKey='{imageKey}'.");
+                if (mastersAlreadyPlaced)
+                {
+                    decisionInfo.Reason = $"{decisionInfo.Reason}|anchors_unchanged_skip";
+                    InspLog($"[Accept] SKIP: alignment unchanged imageKey='{imageKey}' scaleLock={scaleLock}");
+                    AppendLog($"[ANALYZE] Alignment unchanged; skipping ROI reposition for imageKey='{imageKey}'.");
+                    VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                        $"[VISCONF][ANALYZE_MASTER][SKIP] key='{imageKey}' file='{GetCurrentImageFileName()}' reason='anchors_unchanged_skip' scaleLock={scaleLock}"));
+                    _lastDetectionAccepted = accept;
+                    return accept;
+                }
+
+                InspLog(FormattableString.Invariant(
+                    $"[VISCONF][ANALYZE_MASTER][NOSKIP] key='{imageKey}' reason='anchors_unchanged_but_masters_not_placed' " +
+                    $"currentM1=({currentM1.X:F3},{currentM1.Y:F3}) targetM1=({m1ToApply.X:F3},{m1ToApply.Y:F3}) " +
+                    $"currentM2=({currentM2.X:F3},{currentM2.Y:F3}) targetM2=({m2ToApply.X:F3},{m2ToApply.Y:F3})"));
                 VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                    $"[VISCONF][ANALYZE_MASTER][SKIP] key='{imageKey}' file='{GetCurrentImageFileName()}' reason='anchors_unchanged_skip' scaleLock={scaleLock}"));
-                _lastDetectionAccepted = accept;
-                return accept;
+                    $"[VISCONF][ANALYZE_MASTER][NOSKIP] key='{imageKey}' file='{GetCurrentImageFileName()}' reason='anchors_unchanged_but_masters_not_placed' " +
+                    $"currentM1=({currentM1.X:F3},{currentM1.Y:F3}) targetM1=({m1ToApply.X:F3},{m1ToApply.Y:F3}) " +
+                    $"currentM2=({currentM2.X:F3},{currentM2.Y:F3}) targetM2=({m2ToApply.X:F3},{m2ToApply.Y:F3})"));
             }
 
             if (accept)
@@ -4881,6 +4923,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 HeatmapGain = gain;
                 HeatmapGamma = gamma;
                 HeatmapOverlayOpacity = opacity;
+                if (ChkScaleLock != null)
+                {
+                    ChkScaleLock.IsChecked = scaleLock;
+                }
+                if (ChkDisableRot != null)
+                {
+                    ChkDisableRot.IsChecked = disableRot;
+                }
                 if (ChkUseLocalMatcher != null)
                 {
                     ChkUseLocalMatcher.IsChecked = useLocalMatcher;
@@ -6022,7 +6072,20 @@ namespace BrakeDiscInspector_GUI_ROI
                         }
                         else
                         {
-                            InspLog($"[Seed][WARN] Missing persisted inspection baseline on image load; skipping baseline seed. imageKey='{seedKey}'");
+                            var seededFromFixed = SeedInspectionBaselineFromFixedSnapshot(seedKey);
+                            if (!seededFromFixed)
+                            {
+                                InspLog($"[Seed][WARN] Missing persisted inspection baseline on image load; skipping baseline seed. imageKey='{seedKey}'");
+                            }
+                        }
+
+                        if (!_inspectionBaselinesByImage.ContainsKey(seedKey))
+                        {
+                            var fixedSnapshot = GetFixedInspectionBaselineSnapshot();
+                            if (fixedSnapshot.Count > 0 && TrySeedInspectionBaselineForImage(seedKey, fixedSnapshot, "fixed-snapshot-missing"))
+                            {
+                                InspLog($"[Seed][FIXUP] seeded missing inspection baseline from fixed snapshot key='{seedKey}'");
+                            }
                         }
                     }
                     catch { /* ignore */ }
@@ -12179,6 +12242,61 @@ namespace BrakeDiscInspector_GUI_ROI
             return false;
         }
 
+        private void ApplyRestoredAnchorsOnImageLoad(string imageKey, string reason, SWPoint lastM1, SWPoint lastM2)
+        {
+            if (!string.Equals(reason, "seed-masters:imgload", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (_layout?.Master1Pattern == null || _layout.Master2Pattern == null)
+            {
+                return;
+            }
+
+            if (!IsFinitePoint(lastM1) || !IsFinitePoint(lastM2))
+            {
+                return;
+            }
+
+            var currentM1 = GetMasterCenterPoint(_layout.Master1Pattern);
+            var currentM2 = GetMasterCenterPoint(_layout.Master2Pattern);
+            const double posEps = 0.2;
+            bool mastersAlreadyPlaced = IsFinitePoint(currentM1)
+                && IsFinitePoint(currentM2)
+                && PtNear(currentM1, lastM1, posEps)
+                && PtNear(currentM2, lastM2, posEps);
+
+            if (mastersAlreadyPlaced)
+            {
+                return;
+            }
+
+            InspLog(FormattableString.Invariant(
+                $"[Seed-M][APPLY_RESTORED] key='{imageKey}' before M1=({currentM1.X:F3},{currentM1.Y:F3}) " +
+                $"M2=({currentM2.X:F3},{currentM2.Y:F3}) -> target M1=({lastM1.X:F3},{lastM1.Y:F3}) M2=({lastM2.X:F3},{lastM2.Y:F3})"));
+
+            SetRoiCenterImg(_layout.Master1Pattern, lastM1.X, lastM1.Y);
+            SetRoiCenterImg(_layout.Master2Pattern, lastM2.X, lastM2.Y);
+
+            InspLog("[Seed-M][APPLY_RESTORED] calling RepositionInspectionUsingSt baseline_source=restored-anchors:imgload");
+            RepositionInspectionUsingSt(lastM1, lastM2, scaleLock: true, forceScaleLock: true);
+
+            UI(() =>
+            {
+                RedrawAllRois();
+                UpdateRoiHud();
+                try { RedrawAnalysisCrosses(); }
+                catch { }
+            });
+
+            var afterM1 = GetMasterCenterPoint(_layout.Master1Pattern);
+            var afterM2 = GetMasterCenterPoint(_layout.Master2Pattern);
+            InspLog(FormattableString.Invariant(
+                $"[Seed-M][APPLY_RESTORED][DONE] key='{imageKey}' after M1=({afterM1.X:F3},{afterM1.Y:F3}) " +
+                $"M2=({afterM2.X:F3},{afterM2.Y:F3})"));
+        }
+
         private void RestoreLastAcceptedAnchorsForImage(string imageKey, string reason)
         {
             if (string.IsNullOrWhiteSpace(imageKey))
@@ -12202,6 +12320,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _lastAccM2Y = lastM2.Y;
                 _lastAcceptedAnchorsKey = imageKey;
                 InspLog($"[Anchors] Restored last anchors for imageKey='{imageKey}' reason='{reason}' M1=({lastM1.X:F3},{lastM1.Y:F3}) M2=({lastM2.X:F3},{lastM2.Y:F3})");
+                ApplyRestoredAnchorsOnImageLoad(imageKey, reason, lastM1, lastM2);
             }
             else
             {
@@ -12394,6 +12513,85 @@ namespace BrakeDiscInspector_GUI_ROI
             var index = parsedIndex ?? ResolveActiveInspectionIndex();
             var cfg = GetInspectionConfigByIndex(index);
             return cfg?.AnchorMaster ?? MasterAnchorChoice.Master1;
+        }
+
+        private void CacheFixedInspectionBaselineFromLayout(string reason)
+        {
+            _inspectionBaselineLayoutFixedById.Clear();
+
+            if (_layout == null)
+            {
+                return;
+            }
+
+            void Add(RoiModel? roi)
+            {
+                if (roi == null || string.IsNullOrWhiteSpace(roi.Id))
+                {
+                    return;
+                }
+
+                _inspectionBaselineLayoutFixedById[roi.Id] = roi.Clone();
+            }
+
+            Add(_layout.InspectionBaseline);
+            Add(_layout.Inspection1);
+            Add(_layout.Inspection2);
+            Add(_layout.Inspection3);
+            Add(_layout.Inspection4);
+            Add(_layout.Inspection);
+
+            if (_inspectionBaselineLayoutFixedById.Count > 0)
+            {
+                var ids = string.Join(",", _inspectionBaselineLayoutFixedById.Keys);
+                InspLog($"[Seed][FIXED_BASELINE] cached layout snapshot reason='{reason}' count={_inspectionBaselineLayoutFixedById.Count} ids='{ids}'");
+            }
+        }
+
+        private List<RoiModel> GetFixedInspectionBaselineSnapshot()
+        {
+            if (_inspectionBaselineLayoutFixedById.Count > 0)
+            {
+                return _inspectionBaselineLayoutFixedById.Values.Select(r => r.Clone()).ToList();
+            }
+
+            if (_layout?.InspectionBaseline != null)
+            {
+                return new List<RoiModel> { _layout.InspectionBaseline.Clone() };
+            }
+
+            return new List<RoiModel>();
+        }
+
+        private bool SeedInspectionBaselineFromFixedSnapshot(string seedKey)
+        {
+            if (!_useFixedInspectionBaseline)
+            {
+                return false;
+            }
+
+            var fixedSnapshot = GetFixedInspectionBaselineSnapshot();
+            if (fixedSnapshot.Count == 0)
+            {
+                return false;
+            }
+
+            foreach (var baseline in fixedSnapshot)
+            {
+                var roiId = baseline.Id;
+                if (string.IsNullOrWhiteSpace(roiId))
+                {
+                    continue;
+                }
+
+                _inspectionBaselineFixedById[roiId] = baseline.Clone();
+                _inspectionBaselineSeededIds.Add(roiId);
+            }
+
+            _inspectionBaselineSeededForImage = true;
+            _lastImageSeedKey = seedKey;
+            InspLog($"[Seed][FIXUP] seeded fixed inspection baseline from layout snapshot key='{seedKey}'");
+            return true;
         }
 
         private void SeedInspectionBaselineOnce(RoiModel? insp, string seedKey)

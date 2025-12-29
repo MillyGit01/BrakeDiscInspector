@@ -130,26 +130,41 @@ namespace BrakeDiscInspector_GUI_ROI
                     $"[RoiOverlay][OnRender] legend='{roi.Legend}' shape={roi.Shape} W={roi.Width:0.###} H={roi.Height:0.###} R={roi.R:0.###} Rin={roi.RInner:0.###}");
             }
 
-            roi.EnforceMinSize(10, 10);
+            var roiDraw = new ROI
+            {
+                X = roi.X,
+                Y = roi.Y,
+                Width = roi.Width,
+                Height = roi.Height,
+                AngleDeg = roi.AngleDeg,
+                Legend = roi.Legend,
+                Shape = roi.Shape,
+                CX = roi.CX,
+                CY = roi.CY,
+                R = roi.R,
+                RInner = roi.RInner
+            };
+
+            roiDraw.EnforceMinSize(10, 10);
 
             var dpi = VisualTreeHelper.GetDpi(this);
 
-            System.Windows.Point centerImage = roi.Shape == RoiShape.Rectangle
-                ? new System.Windows.Point(roi.X, roi.Y)
-                : new System.Windows.Point(roi.CX, roi.CY);
+            System.Windows.Point centerImage = roiDraw.Shape == RoiShape.Rectangle
+                ? new System.Windows.Point(roiDraw.X, roiDraw.Y)
+                : new System.Windows.Point(roiDraw.CX, roiDraw.CY);
 
             var centerScreen = ToScreen(centerImage.X, centerImage.Y);
 
-            switch (roi.Shape)
+            switch (roiDraw.Shape)
             {
                 case RoiShape.Rectangle:
-                    DrawRectangle(dc, roi, centerScreen, dpi.PixelsPerDip);
+                    DrawRectangle(dc, roiDraw, centerScreen, dpi.PixelsPerDip);
                     break;
                 case RoiShape.Circle:
-                    DrawCircle(dc, roi, centerScreen, dpi.PixelsPerDip);
+                    DrawCircle(dc, roiDraw, centerScreen, dpi.PixelsPerDip);
                     break;
                 case RoiShape.Annulus:
-                    DrawAnnulus(dc, roi, centerScreen, dpi.PixelsPerDip);
+                    DrawAnnulus(dc, roiDraw, centerScreen, dpi.PixelsPerDip);
                     break;
             }
         }

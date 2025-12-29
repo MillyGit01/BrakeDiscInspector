@@ -12,7 +12,8 @@ namespace BrakeDiscInspector_GUI_ROI.Models
     public enum MasterAnchorChoice
     {
         Master1 = 1,
-        Master2 = 2
+        Master2 = 2,
+        Mid = 3
     }
 
     public class InspectionRoiConfig : INotifyPropertyChanged

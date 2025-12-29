@@ -1787,9 +1787,6 @@ namespace BrakeDiscInspector_GUI_ROI
         private double _lastAccM1X = double.NaN, _lastAccM1Y = double.NaN;
         private double _lastAccM2X = double.NaN, _lastAccM2Y = double.NaN;
         private bool _lastDetectionAccepted = false;
-        private sealed record AlignmentSignature(double M1X, double M1Y, double M2X, double M2Y, double AngleDeg, double Scale);
-        private readonly Dictionary<string, AlignmentSignature> _lastAlignmentByImage =
-            new(StringComparer.OrdinalIgnoreCase);
 
         // Tolerances (pixels / degrees). Tune if needed.
         private double _analyzePosTolPx = 50.0;    // default tolerance in px for acceptance checks
@@ -1997,139 +1994,27 @@ namespace BrakeDiscInspector_GUI_ROI
             return new SWPoint(cx, cy);
         }
 
-        // Set center in IMAGE space; updates CX/CY and Left/Top
-        private static void SetRoiCenterImg(RoiModel r, double cx, double cy)
-        {
-            r.CX = cx; r.CY = cy;
-            r.Left = cx - r.Width * 0.5;
-            r.Top = cy - r.Height * 0.5;
-        }
-
-        private sealed class SimilarityTransform2D
-        {
-            public double Scale { get; }
-            public double RotationRad { get; }
-            public SWVector Translation { get; }
-
-            public SimilarityTransform2D(double scale, double rotationRad, SWVector translation)
-            {
-                Scale = scale;
-                RotationRad = rotationRad;
-                Translation = translation;
-            }
-        }
-
-        private static SimilarityTransform2D ComputeSimilarityTransform(
-            SWPoint m1Base, SWPoint m2Base,
-            SWPoint m1New, SWPoint m2New,
-            bool scaleLock,
-            out SWPoint pivotOld,
-            out SWPoint pivotNew)
-        {
-            pivotOld = scaleLock
-                ? new SWPoint((m1Base.X + m2Base.X) * 0.5, (m1Base.Y + m2Base.Y) * 0.5)
-                : m1Base;
-            pivotNew = scaleLock
-                ? new SWPoint((m1New.X + m2New.X) * 0.5, (m1New.Y + m2New.Y) * 0.5)
-                : m1New;
-
-            var baseVec = m2Base - m1Base;
-            var newVec = m2New - m1New;
-            double len0 = Math.Sqrt(baseVec.X * baseVec.X + baseVec.Y * baseVec.Y);
-            double len1 = Math.Sqrt(newVec.X * newVec.X + newVec.Y * newVec.Y);
-            double scale = (len0 < 1e-9 || scaleLock) ? 1.0 : (len1 / len0);
-
-            double rotation = DeltaAngleFromFrames(m1Base, m2Base, m1New, m2New);
-            double cos = Math.Cos(rotation);
-            double sin = Math.Sin(rotation);
-
-            double tx = pivotNew.X - (scale * (cos * pivotOld.X - sin * pivotOld.Y));
-            double ty = pivotNew.Y - (scale * (sin * pivotOld.X + cos * pivotOld.Y));
-
-            return new SimilarityTransform2D(scale, rotation, new SWVector(tx, ty));
-        }
-
-        private static SWPoint MapBySt(SWPoint m1Base, SWPoint m2Base, SWPoint m1New, SWPoint m2New,
-                                       SWPoint roiBase, bool scaleLock)
-        {
-            // When scaleLock is ON we cannot satisfy both masters if their distance changed.
-            // The previous implementation anchored at Master1, concentrating the whole error on Master2.
-            // Fix: anchor the rigid transform at the MIDPOINT between masters so the residual is split (~ΔL/2 each).
-            var originBase = m1Base;
-            var originNew = m1New;
-
-            if (scaleLock)
-            {
-                originBase = new SWPoint((m1Base.X + m2Base.X) * 0.5, (m1Base.Y + m2Base.Y) * 0.5);
-                originNew = new SWPoint((m1New.X + m2New.X) * 0.5, (m1New.Y + m2New.Y) * 0.5);
-            }
-
-            var u0 = m2Base - m1Base;
-            var v0 = new SWVector(-u0.Y, u0.X);
-            var L0 = Math.Sqrt(u0.X * u0.X + u0.Y * u0.Y);
-            if (L0 < 1e-9) return roiBase;
-
-            u0 = new SWVector(u0.X / L0, u0.Y / L0);
-            var v0n = Normalize(v0);
-
-            var d0 = roiBase - originBase;
-            double s = d0.X * u0.X + d0.Y * u0.Y;
-            double t = d0.X * v0n.X + d0.Y * v0n.Y;
-
-            var u1 = m2New - m1New;
-            var L1 = Math.Sqrt(u1.X * u1.X + u1.Y * u1.Y);
-            if (L1 < 1e-9) return roiBase;
-
-            var u1n = new SWVector(u1.X / L1, u1.Y / L1);
-            var v1n = new SWVector(-u1n.Y, u1n.X);
-
-            if (!scaleLock)
-            {
-                double k = L1 / L0;
-                s *= k;
-                t *= k;
-            }
-
-            return new SWPoint(
-                originNew.X + s * u1n.X + t * v1n.X,
-                originNew.Y + s * u1n.Y + t * v1n.Y);
-        }
-
-
-        private static double DeltaAngleFromFrames(SWPoint m1Base, SWPoint m2Base, SWPoint m1New, SWPoint m2New)
-        {
-            var a0 = AngleOf(m2Base - m1Base);
-            var a1 = AngleOf(m2New - m1New);
-            return NormalizeAngleRad(a1 - a0);
-        }
-
-        private void RepositionMastersToCrosses(SWPoint m1Cross, SWPoint m2Cross, bool scaleLock,
-                                                RoiModel? master1Baseline = null, RoiModel? master2Baseline = null)
+        private void ApplyPlacementForAnchors(
+            string imageKey,
+            SWPoint m1Detected,
+            SWPoint m2Detected,
+            string reason,
+            RoiModel? master1Baseline = null,
+            RoiModel? master2Baseline = null,
+            bool? forceScaleLock = null,
+            bool? forceDisableRot = null)
         {
             if (_layout == null)
+            {
                 return;
+            }
 
             var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
             var baselineM1 = master1Baseline ?? snapshotM1;
             var baselineM2 = master2Baseline ?? snapshotM2;
-            bool baselineSnapshotUsed = master1Baseline != null || master2Baseline != null || fromFixed;
-
-            var beforeM1 = _layout.Master1Pattern?.Clone();
-            var beforeM2 = _layout.Master2Pattern?.Clone();
-            bool mutatingLayoutMasters = _layout.Master1Pattern != null || _layout.Master2Pattern != null;
-
-            InspLog($"[RepositionM] before mutating_layout_masters={mutatingLayoutMasters} baseline_snapshot_used={baselineSnapshotUsed} " +
-                    $"{DescribeMasterForLog("M1_layout_before", beforeM1)} {DescribeMasterForLog("M2_layout_before", beforeM2)} " +
-                    $"det:M1=({m1Cross.X:F3},{m1Cross.Y:F3}) M2=({m2Cross.X:F3},{m2Cross.Y:F3}) baseline_source={(fromFixed ? "fixed" : "layout-fallback")}");
-
-            if (_layout.Master1Pattern != null)
-                SetRoiCenterImg(_layout.Master1Pattern, m1Cross.X, m1Cross.Y);
-            if (_layout.Master2Pattern != null)
-                SetRoiCenterImg(_layout.Master2Pattern, m2Cross.X, m2Cross.Y);
-
             if (baselineM1 == null || baselineM2 == null)
             {
-                InspLog("[RepositionM] baseline missing; angles not updated.");
+                InspLog($"[PLACE] baseline missing; reason={reason}");
                 return;
             }
 
@@ -2138,314 +2023,204 @@ namespace BrakeDiscInspector_GUI_ROI
             var m1Base = new SWPoint(m1bX, m1bY);
             var m2Base = new SWPoint(m2bX, m2bY);
 
-            double dAng = DeltaAngleFromFrames(m1Base, m2Base, m1Cross, m2Cross);
-
-            if (_layout.Master1Pattern != null && _layout.Master1Pattern.Shape == RoiShape.Rectangle)
-                _layout.Master1Pattern.AngleDeg = baselineM1.AngleDeg + dAng * (180.0 / Math.PI);
-
-            if (_layout.Master2Pattern != null && _layout.Master2Pattern.Shape == RoiShape.Rectangle)
-                _layout.Master2Pattern.AngleDeg = baselineM2.AngleDeg + dAng * (180.0 / Math.PI);
-
-            InspLog($"[RepositionM] after mutating_layout_masters={mutatingLayoutMasters} baseline_snapshot_used={baselineSnapshotUsed} " +
-                    $"{DescribeMasterForLog("M1_layout_after", _layout.Master1Pattern)} {DescribeMasterForLog("M2_layout_after", _layout.Master2Pattern)}");
-        }
-
-        private void RepositionInspectionUsingSt(SWPoint m1Cross, SWPoint m2Cross, bool scaleLock,
-                                                         RoiModel? master1Baseline = null, RoiModel? master2Baseline = null,
-                                                         bool? forceScaleLock = null, bool? forceDisableRot = null)
-        {
-            if (_layout == null)
-                return;
-
-            _lastInspectionRepositioned = false;
-
-            var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
-            var baselineM1 = master1Baseline ?? snapshotM1;
-            var baselineM2 = master2Baseline ?? snapshotM2;
-            bool baselineSnapshotUsed = master1Baseline != null || master2Baseline != null || fromFixed;
-            if (baselineM1 == null || baselineM2 == null)
+            if (!IsFinitePoint(m1Base) || !IsFinitePoint(m2Base) || !IsFinitePoint(m1Detected) || !IsFinitePoint(m2Detected))
             {
-                InspLog($"[RepositionInsp] baseline missing; baseline_snapshot_used={baselineSnapshotUsed} baseline_source={(fromFixed ? "fixed" : "layout-fallback")}");
-                return;
-            }
-
-            var (m1bX, m1bY) = GetCenterShapeAware(baselineM1);
-            var (m2bX, m2bY) = GetCenterShapeAware(baselineM2);
-            var m1Base = new SWPoint(m1bX, m1bY);
-            var m2Base = new SWPoint(m2bX, m2bY);
-
-            if (!IsFinitePoint(m1Base) || !IsFinitePoint(m2Base) || !IsFinitePoint(m1Cross) || !IsFinitePoint(m2Cross))
-            {
-                InspLog($"[RepositionInsp] skip: non-finite anchors base=({m1Base.X:0.###},{m1Base.Y:0.###}) ({m2Base.X:0.###},{m2Base.Y:0.###}) " +
-                        $"found=({m1Cross.X:0.###},{m1Cross.Y:0.###}) ({m2Cross.X:0.###},{m2Cross.Y:0.###})");
+                InspLog($"[PLACE] skip non-finite anchors base=({m1Base.X:0.###},{m1Base.Y:0.###}) ({m2Base.X:0.###},{m2Base.Y:0.###}) " +
+                        $"det=({m1Detected.X:0.###},{m1Detected.Y:0.###}) ({m2Detected.X:0.###},{m2Detected.Y:0.###})");
                 return;
             }
 
             bool disableRot = forceDisableRot ?? (DisableRot || (ChkDisableRot?.IsChecked == true));
-            bool effectiveScaleLock = forceScaleLock ?? GetScaleLockUi();
-
-            double baseDist = Dist(m1Base.X, m1Base.Y, m2Base.X, m2Base.Y);
-            double detDist = Dist(m1Cross.X, m1Cross.Y, m2Cross.X, m2Cross.Y);
-            if (baseDist < 1e-9 || detDist < 1e-9)
-                return;
-
-            double scale = detDist / baseDist;
-            double angleDelta = DeltaAngleFromFrames(m1Base, m2Base, m1Cross, m2Cross);
-            double angleDeltaDeg = angleDelta * 180.0 / Math.PI;
-            var visImageKey = GetCurrentImageKey();
-            var visFileName = GetCurrentImageFileName();
-            var baselineSnapshotBefore = SnapshotLayoutBaselinesForImage(visImageKey);
-
-            InspLog($"[RepositionInsp][START] key='{visImageKey}' scaleLock={scaleLock} scaleLockEffective={effectiveScaleLock} disableRot={disableRot} " +
-                    $"baseM1=({m1Base.X:0.###},{m1Base.Y:0.###}) baseM2=({m2Base.X:0.###},{m2Base.Y:0.###}) " +
-                    $"detM1=({m1Cross.X:0.###},{m1Cross.Y:0.###}) detM2=({m2Cross.X:0.###},{m2Cross.Y:0.###}) " +
-                    $"dist_base={baseDist:0.###} dist_new={detDist:0.###} scale={scale:0.####} angleDeltaDeg={angleDeltaDeg:0.###}");
-            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][INSP_ANCHORS] key='{visImageKey}' file='{visFileName}' base_m1=({m1Base.X:0.###},{m1Base.Y:0.###}) base_m2=({m2Base.X:0.###},{m2Base.Y:0.###}) det_m1=({m1Cross.X:0.###},{m1Cross.Y:0.###}) det_m2=({m2Cross.X:0.###},{m2Cross.Y:0.###}) dist_base={baseDist:0.###} dist_new={detDist:0.###} scale={scale:0.####} angle_delta_deg={angleDeltaDeg:0.###} scaleLock={effectiveScaleLock} disableRot={disableRot}"));
-
-            var anchorsContext = new AnchorTransformContext(
-                new Point2d(m1Base.X, m1Base.Y),
-                new Point2d(m2Base.X, m2Base.Y),
-                new Point2d(m1Cross.X, m1Cross.Y),
-                new Point2d(m2Cross.X, m2Cross.Y),
-                baselineM1.AngleDeg,
-                baselineM2.AngleDeg,
-                baselineM1.AngleDeg + angleDeltaDeg,
-                baselineM2.AngleDeg + angleDeltaDeg,
-                scale,
-                angleDelta,
-                effectiveScaleLock,
-                disableRot);
+            bool scaleLock = forceScaleLock ?? GetScaleLockUi();
 
             if (_useFixedInspectionBaseline)
             {
-                var seedKey = GetCurrentImageKey();
                 foreach (var roi in CollectSavedInspectionRois())
                 {
-                    SeedInspectionBaselineOnce(roi, seedKey);
+                    SeedInspectionBaselineOnce(roi, imageKey);
                 }
             }
 
-            RoiModel? SelectBaselineForInspection(RoiModel roi)
+            var anchorMap = BuildAnchorMapFromLayout();
+            var input = new RoiPlacementInput(
+                new ImgPoint(m1Base.X, m1Base.Y),
+                new ImgPoint(m2Base.X, m2Base.Y),
+                new ImgPoint(m1Detected.X, m1Detected.Y),
+                new ImgPoint(m2Detected.X, m2Detected.Y),
+                disableRot,
+                scaleLock,
+                ScaleMode.None,
+                true,
+                anchorMap);
+
+            var baselineMasters = new List<RoiModel> { baselineM1.Clone(), baselineM2.Clone() };
+            var inspectionTargets = CollectInspectionPlacementTargets();
+            var baselineInspections = inspectionTargets.Select(t => t.Baseline).ToList();
+
+            var output = RoiPlacementEngine.Place(input, baselineMasters, baselineInspections);
+
+            ApplyPlacementResults(output, inspectionTargets);
+            LogPlacement(output, imageKey, input);
+
+            _lastInspectionRepositioned = inspectionTargets.Count > 0;
+            UI(() =>
             {
-                if (_useFixedInspectionBaseline
-                    && !string.IsNullOrWhiteSpace(roi.Id)
-                    && _inspectionBaselineFixedById.TryGetValue(roi.Id, out var fixedBaseline))
-                {
-                    return fixedBaseline.Clone();
-                }
+                RedrawAllRois();
+                UpdateRoiHud();
+                try { RedrawAnalysisCrosses(); }
+                catch { }
+            });
+        }
 
-                var persistedBaseline = GetInspectionBaselineClone(roi.Id);
-                if (persistedBaseline == null)
-                {
-                    InspLog($"[RepositionInsp][WARN] Missing persisted baseline for roiId='{roi.Id ?? "<null>"}'; skipping current ROI baseline.");
-                    return null;
-                }
+        private sealed record InspectionPlacementTarget(int SlotIndex, RoiModel Baseline);
 
-                return persistedBaseline.Clone();
-            }
+        private List<InspectionPlacementTarget> CollectInspectionPlacementTargets()
+        {
+            var targets = new List<InspectionPlacementTarget>();
 
-            var roisToMove = new List<(RoiModel target, RoiModel baseline)>();
-            var seen = new HashSet<RoiModel>();
-
-            int moved = 0;
-            int skippedFrozen = 0;
-            var movedLabels = new List<string>();
-            SWPoint? firstBefore = null;
-            SWPoint? firstAfter = null;
-            SWPoint? lastBefore = null;
-            SWPoint? lastAfter = null;
-
-            void EnqueueInspection(RoiModel? roi, bool always = false)
+            void AddTarget(int slotIndex, RoiModel? roi)
             {
-                if (roi == null || !seen.Add(roi))
-                    return;
-
-                if (!always && roi.IsFrozen)
+                if (roi == null)
                 {
-                    skippedFrozen++;
                     return;
                 }
 
-                var baseline = SelectBaselineForInspection(roi);
+                var baseline = ResolveBaselineForInspection(roi);
                 if (baseline == null)
                 {
-                    InspLog($"[RepositionInsp] skip: missing baseline for roiId='{roi.Id ?? "<null>"}'");
+                    InspLog($"[PLACE][WARN] Missing baseline for roiId='{roi.Id ?? "<null>"}'; skipping placement.");
                     return;
                 }
 
-                var (bCx, bCy) = GetCenterShapeAware(baseline);
-                if (!IsFinite(bCx) || !IsFinite(bCy))
-                {
-                    InspLog($"[RepositionInsp] skip: baseline non-finite roiId='{roi.Id ?? "<null>"}' center=({bCx:0.###},{bCy:0.###})");
-                    return;
-                }
-
-                roisToMove.Add((roi, baseline));
+                targets.Add(new InspectionPlacementTarget(slotIndex, baseline));
             }
 
-            EnqueueInspection(_layout.Inspection1, always: true);
-            EnqueueInspection(_layout.Inspection2, always: true);
-            EnqueueInspection(_layout.Inspection3, always: true);
-            EnqueueInspection(_layout.Inspection4, always: true);
-            EnqueueInspection(_layout.Inspection, always: true);
+            AddTarget(1, _layout?.Inspection1);
+            AddTarget(2, _layout?.Inspection2);
+            AddTarget(3, _layout?.Inspection3);
+            AddTarget(4, _layout?.Inspection4);
+            AddTarget(0, _layout?.Inspection);
 
-            foreach (var (target, baseline) in roisToMove)
+            return targets;
+        }
+
+        private RoiModel? ResolveBaselineForInspection(RoiModel roi)
+        {
+            if (_useFixedInspectionBaseline
+                && !string.IsNullOrWhiteSpace(roi.Id)
+                && _inspectionBaselineFixedById.TryGetValue(roi.Id, out var fixedBaseline))
             {
-                if (target == null || baseline == null)
-                    continue;
+                return fixedBaseline.Clone();
+            }
 
-                var baselineToUse = baseline;
-                if (ReferenceEquals(target, baselineToUse))
-                {
-                    InspLog($"[RepositionInsp][WARN] baseline reference equals target roiId='{target.Id ?? "<null>"}'; cloning baseline.");
-                    baselineToUse = baselineToUse.Clone();
-                }
+            var persistedBaseline = GetInspectionBaselineClone(roi.Id);
+            if (persistedBaseline == null)
+            {
+                return null;
+            }
 
-                var (beforeCx, beforeCy) = GetCenterShapeAware(baselineToUse);
-                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
-                    "[VISCONF][INSP_BASE] key='{0}' file='{1}' roi='{2}' baseline={3}",
-                    visImageKey,
-                    visFileName,
-                    target.Label ?? target.Id ?? "<null>",
-                    DescribeRoi(baselineToUse)));
-                var anchorMaster = ResolveAnchorForRoi(target);
-                var parsedIndex = TryParseInspectionIndex(target);
-                InspectionRoiConfig? cfg = null;
-                if (parsedIndex.HasValue)
-                {
-                    cfg = GetInspectionConfigByIndex(parsedIndex.Value);
-                }
+            return persistedBaseline.Clone();
+        }
 
-                if (cfg == null && _layout?.InspectionRois != null && !string.IsNullOrWhiteSpace(target.Id))
-                {
-                    cfg = _layout.InspectionRois.FirstOrDefault(r =>
-                        string.Equals(r.Id, target.Id, StringComparison.OrdinalIgnoreCase));
-                }
+        private IReadOnlyDictionary<string, MasterAnchorChoice> BuildAnchorMapFromLayout()
+        {
+            var map = new Dictionary<string, MasterAnchorChoice>(StringComparer.OrdinalIgnoreCase);
+            if (_layout?.InspectionRois == null)
+            {
+                return map;
+            }
 
+            foreach (var cfg in _layout.InspectionRois)
+            {
                 if (cfg == null)
                 {
-                    InspLog($"[RepositionInsp][WARN] Missing anchor config for roiId='{target.Id ?? "<null>"}'; defaulting to {anchorMaster}.");
+                    continue;
                 }
 
-                var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
-                var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
-                if (disableRot)
+                if (!string.IsNullOrWhiteSpace(cfg.Id))
                 {
-                    var expectedDx = anchorNew.X - anchorBase.X;
-                    var expectedDy = anchorNew.Y - anchorBase.Y;
-                    InspLog($"[RepositionInsp][ROI] roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} translation_only dx={expectedDx:0.###} dy={expectedDy:0.###}");
+                    map[cfg.Id] = cfg.AnchorMaster;
                 }
 
-                InspLog($"[RepositionInsp][ROI] before roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} baseline={DescribeRoi(baselineToUse)}");
-                InspectionAlignmentHelper.MoveInspectionTo(target, baselineToUse, anchorMaster, anchorsContext);
-                if (_imgW > 0 && _imgH > 0)
+                if (!string.IsNullOrWhiteSpace(cfg.ModelKey))
                 {
-                    ClipInspectionROI(target, _imgW, _imgH);
+                    map[cfg.ModelKey] = cfg.AnchorMaster;
                 }
-
-                var (afterCx, afterCy) = GetCenterShapeAware(target);
-                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
-                    "[VISCONF][INSP_APPLIED] key='{0}' file='{1}' roi='{2}' applied={3}",
-                    visImageKey,
-                    visFileName,
-                    target.Label ?? target.Id ?? "<null>",
-                    DescribeRoi(target)));
-                InspLog($"[RepositionInsp][ROI] after roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} applied={DescribeRoi(target)}");
-
-                moved++;
-                firstBefore ??= new SWPoint(beforeCx, beforeCy);
-                firstAfter ??= new SWPoint(afterCx, afterCy);
-                lastBefore = new SWPoint(beforeCx, beforeCy);
-                lastAfter = new SWPoint(afterCx, afterCy);
-                if (!string.IsNullOrEmpty(target?.Label))
-                {
-                    movedLabels.Add(target.Label!);
-                }
-                else if (target != null)
-                {
-                    movedLabels.Add(target.Role.ToString());
-                }
-                else
-                {
-                    movedLabels.Add("Inspection");
-                }
-                double distAfter = Dist(afterCx, afterCy, anchorNew.X, anchorNew.Y);
-                var repositionMessage = FormattableStringFactory.Create(
-                    "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(angΔ={12:0.###},scale={13:0.###}) locks=(scaleLock={23},disableRot={24}) roiBefore=(CX={14:0.###},CY={15:0.###},Ang={16:0.###}) roiAfter=(CX={17:0.###},CY={18:0.###},Ang={19:0.###}) residualToAnchor=(dx={20:0.###},dy={21:0.###},dist={22:0.###})",
-                    visImageKey,
-                    visFileName,
-                    target.Label ?? target.Id ?? "<null>",
-                    anchorMaster,
-                    m1Base.X,
-                    m1Base.Y,
-                    m2Base.X,
-                    m2Base.Y,
-                    m1Cross.X,
-                    m1Cross.Y,
-                    m2Cross.X,
-                    m2Cross.Y,
-                    angleDeltaDeg,
-                    scale,
-                    beforeCx,
-                    beforeCy,
-                    baselineToUse.AngleDeg,
-                    afterCx,
-                    afterCy,
-                    target.AngleDeg,
-                    afterCx - anchorNew.X,
-                    afterCy - anchorNew.Y,
-                    distAfter,
-                    effectiveScaleLock,
-                    disableRot);
-                VisConfLog.Roi(FormattableString.Invariant(repositionMessage));
             }
 
-            _lastInspectionRepositioned = moved > 0;
-            if (roisToMove.Count > 0)
+            return map;
+        }
+
+        private void ApplyPlacementResults(RoiPlacementOutput output, IReadOnlyList<InspectionPlacementTarget> inspectionTargets)
+        {
+            if (_layout == null)
             {
-                var slotSummary = string.Join(" | ", roisToMove.Select(r => $"{r.target.Id ?? "<null>"}:{FInsp(r.target)}"));
-                InspLog($"[RepositionInsp] applied slots={roisToMove.Count} coords={slotSummary}");
+                return;
             }
 
-            if (baselineSnapshotBefore.Count > 0)
+            foreach (var master in output.MastersPlaced)
             {
-                var baselineSnapshotAfter = SnapshotLayoutBaselinesForImage(visImageKey);
-                bool unchanged = BaselineListsEquivalent(baselineSnapshotBefore, baselineSnapshotAfter);
-                if (!unchanged)
+                switch (master.Role)
                 {
-                    InspLog($"[RepositionInsp][WARN] layout baselines changed after apply imageKey='{visImageKey}' before={baselineSnapshotBefore.Count} after={baselineSnapshotAfter.Count}");
-                }
-                else
-                {
-                    InspLog($"[RepositionInsp] layout baselines unchanged imageKey='{visImageKey}'");
+                    case RoiRole.Master1Pattern:
+                        _layout.Master1Pattern = master;
+                        break;
+                    case RoiRole.Master2Pattern:
+                        _layout.Master2Pattern = master;
+                        break;
                 }
             }
 
-            if (moved > 0 && firstBefore.HasValue && firstAfter.HasValue && lastBefore.HasValue && lastAfter.HasValue)
+            for (int i = 0; i < inspectionTargets.Count; i++)
             {
-                var summaryMessage = FormattableStringFactory.Create(
-                    "[VISCONF][APPLY_REPOSITION][SUMMARY] key='{0}' file='{1}' moved={2} scale={3:0.###} rotDeg={4:0.###} " +
-                    "first=({5:0.###},{6:0.###})->({7:0.###},{8:0.###}) last=({9:0.###},{10:0.###})->({11:0.###},{12:0.###})",
-                    visImageKey,
-                    visFileName,
-                    moved,
-                    scale,
-                    angleDeltaDeg,
-                    firstBefore.Value.X,
-                    firstBefore.Value.Y,
-                    firstAfter.Value.X,
-                    firstAfter.Value.Y,
-                    lastBefore.Value.X,
-                    lastBefore.Value.Y,
-                    lastAfter.Value.X,
-                    lastAfter.Value.Y);
-                VisConfLog.Roi(FormattableString.Invariant(summaryMessage));
+                if (i >= output.InspectionsPlaced.Count)
+                {
+                    break;
+                }
+
+                var placed = output.InspectionsPlaced[i];
+                switch (inspectionTargets[i].SlotIndex)
+                {
+                    case 1:
+                        _layout.Inspection1 = placed;
+                        break;
+                    case 2:
+                        _layout.Inspection2 = placed;
+                        break;
+                    case 3:
+                        _layout.Inspection3 = placed;
+                        break;
+                    case 4:
+                        _layout.Inspection4 = placed;
+                        break;
+                    case 0:
+                        _layout.Inspection = placed;
+                        break;
+                }
             }
 
-            System.Diagnostics.Debug.WriteLine(
-                $"[AnalyzeMaster] moved={moved} skipped_frozen={skippedFrozen} moved_labels={string.Join(", ", movedLabels)}");
-            AppendLog($"[AnalyzeMaster] moved={moved} skipped_frozen={skippedFrozen} moved_labels={string.Join(", ", movedLabels)}");
+            RefreshInspectionRoiSlots(new[]
+            {
+                _layout.Inspection1,
+                _layout.Inspection2,
+                _layout.Inspection3,
+                _layout.Inspection4
+            });
+        }
+
+        private void LogPlacement(RoiPlacementOutput output, string imageKey, RoiPlacementInput input)
+        {
+            AppendLog(FormattableString.Invariant(
+                $"[PLACE][SUMMARY] key={imageKey} disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
+                $"scale={output.Debug.Scale:0.####} angDelta={output.Debug.AngleDeltaDeg:0.###} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
+
+            foreach (var detail in output.Debug.RoiDetails)
+            {
+                AppendLog(FormattableString.Invariant(
+                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) " +
+                    $"sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
+                    $"sizeNew=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
+            }
         }
 
         private sealed class AnalyzeMasterDecisionInfo
@@ -2589,92 +2364,11 @@ namespace BrakeDiscInspector_GUI_ROI
             var applyDx = m1ToApply.X - baselineM1Point.X;
             var applyDy = m1ToApply.Y - baselineM1Point.Y;
             InspLog($"[APPLY] baselineM1=({baselineM1Point.X:0.###},{baselineM1Point.Y:0.###}) acceptedM1=({m1ToApply.X:0.###},{m1ToApply.Y:0.###}) deltaPx=({applyDx:0.###},{applyDy:0.###}) angle={applyAngle:0.###}");
-
-            var alignmentSignature = BuildAlignmentSignature(baselineM1Point, baselineM2Point, m1ToApply, m2ToApply, scaleLock);
-            var currentM1 = GetMasterCenterPoint(_layout.Master1Pattern);
-            var currentM2 = GetMasterCenterPoint(_layout.Master2Pattern);
-            const double posEps = 0.2;
-            bool mastersAlreadyPlaced = IsFinitePoint(currentM1)
-                && IsFinitePoint(currentM2)
-                && PtNear(currentM1, m1ToApply, posEps)
-                && PtNear(currentM2, m2ToApply, posEps);
-
-            if (scaleLock && alignmentSignature != null
-                && _lastAlignmentByImage.TryGetValue(imageKey, out var lastSignature)
-                && AlignmentWithinEpsilon(alignmentSignature, lastSignature))
-            {
-                if (mastersAlreadyPlaced)
-                {
-                    decisionInfo.Reason = $"{decisionInfo.Reason}|anchors_unchanged_skip";
-                    InspLog($"[Accept] SKIP: alignment unchanged imageKey='{imageKey}' scaleLock={scaleLock}");
-                    AppendLog($"[ANALYZE] Alignment unchanged; skipping ROI reposition for imageKey='{imageKey}'.");
-                    VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                        $"[VISCONF][ANALYZE_MASTER][SKIP] key='{imageKey}' file='{GetCurrentImageFileName()}' reason='anchors_unchanged_skip' scaleLock={scaleLock}"));
-                    _lastDetectionAccepted = accept;
-                    return accept;
-                }
-
-                var noSkipMessage = FormattableStringFactory.Create(
-                    "[VISCONF][ANALYZE_MASTER][NOSKIP] key='{0}' reason='anchors_unchanged_but_masters_not_placed' " +
-                    "currentM1=({1:F3},{2:F3}) targetM1=({3:F3},{4:F3}) " +
-                    "currentM2=({5:F3},{6:F3}) targetM2=({7:F3},{8:F3})",
-                    imageKey,
-                    currentM1.X,
-                    currentM1.Y,
-                    m1ToApply.X,
-                    m1ToApply.Y,
-                    currentM2.X,
-                    currentM2.Y,
-                    m2ToApply.X,
-                    m2ToApply.Y);
-                InspLog(noSkipMessage.ToString(CultureInfo.InvariantCulture));
-                var noSkipVisConfMessage = FormattableStringFactory.Create(
-                    "[VISCONF][ANALYZE_MASTER][NOSKIP] key='{0}' file='{1}' reason='anchors_unchanged_but_masters_not_placed' " +
-                    "currentM1=({2:F3},{3:F3}) targetM1=({4:F3},{5:F3}) " +
-                    "currentM2=({6:F3},{7:F3}) targetM2=({8:F3},{9:F3})",
-                    imageKey,
-                    GetCurrentImageFileName(),
-                    currentM1.X,
-                    currentM1.Y,
-                    m1ToApply.X,
-                    m1ToApply.Y,
-                    currentM2.X,
-                    currentM2.Y,
-                    m2ToApply.X,
-                    m2ToApply.Y);
-                VisConfLog.AnalyzeMaster(noSkipVisConfMessage);
-            }
-
-            if (accept)
-            {
-                InspLog($"[Accept] calling RepositionMastersToCrosses baseline_source={baselineSource}");
-            }
-
-            RepositionMastersToCrosses(m1ToApply, m2ToApply, scaleLock, baselineM1, baselineM2);
-
-            if (accept)
-            {
-                InspLog($"[Accept] calling RepositionInspectionUsingSt baseline_source={baselineSource}");
-            }
-
-            RepositionInspectionUsingSt(m1ToApply, m2ToApply, scaleLock, baselineM1, baselineM2);
-
-            UI(() =>
-            {
-                RedrawAllRois();
-                UpdateRoiHud();
-                try { RedrawAnalysisCrosses(); }
-                catch { }
-            });
+            ApplyPlacementForAnchors(imageKey, m1ToApply, m2ToApply, "analyze-master", baselineM1, baselineM2);
 
             if (accept)
             {
                 StoreLastAcceptedAnchorsForImage(imageKey, newM1, newM2, "accept");
-            }
-
-            if (alignmentSignature != null && !string.IsNullOrWhiteSpace(imageKey))
-            {
-                _lastAlignmentByImage[imageKey] = alignmentSignature;
             }
 
             _lastDetectionAccepted = accept;
@@ -4913,7 +4607,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     $"scaleMax={layoutAnalyze?.ScaleMax ?? _preset?.ScaleMax ?? 0:0.####}");
 
             _inspectionBaselinesByImage.Clear();
-            _lastAlignmentByImage.Clear();
             if (_layout?.InspectionBaselinesByImage != null)
             {
                 foreach (var kv in _layout.InspectionBaselinesByImage)
@@ -11954,10 +11647,8 @@ namespace BrakeDiscInspector_GUI_ROI
             // === END: reposition Masters & Inspections ===
 
             // 5) Reubicar inspección si existe
-            // NOTE: inspection ROIs are repositioned inside AcceptNewDetectionIfDifferent() -> RepositionInspectionUsingSt().
-            //       We intentionally do NOT call MoveInspectionTo() here to avoid double-moving and mismatched offsets.
             // CODEX: string interpolation compatibility.
-            AppendLog($"[FLOW] AnalyzeMaster: inspections repositioned via RepositionInspectionUsingSt; skipping MoveInspectionTo.");
+            AppendLog($"[FLOW] AnalyzeMaster: inspections repositioned via RoiPlacementEngine.");
 
             try
             {
@@ -12279,59 +11970,8 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 return;
             }
-
-            var currentM1 = GetMasterCenterPoint(_layout.Master1Pattern);
-            var currentM2 = GetMasterCenterPoint(_layout.Master2Pattern);
-            const double posEps = 0.2;
-            bool mastersAlreadyPlaced = IsFinitePoint(currentM1)
-                && IsFinitePoint(currentM2)
-                && PtNear(currentM1, lastM1, posEps)
-                && PtNear(currentM2, lastM2, posEps);
-
-            if (mastersAlreadyPlaced)
-            {
-                return;
-            }
-
-            var applyRestoredMessage = FormattableStringFactory.Create(
-                "[Seed-M][APPLY_RESTORED] key='{0}' before M1=({1:F3},{2:F3}) " +
-                "M2=({3:F3},{4:F3}) -> target M1=({5:F3},{6:F3}) M2=({7:F3},{8:F3})",
-                imageKey,
-                currentM1.X,
-                currentM1.Y,
-                currentM2.X,
-                currentM2.Y,
-                lastM1.X,
-                lastM1.Y,
-                lastM2.X,
-                lastM2.Y);
-            InspLog(applyRestoredMessage.ToString(CultureInfo.InvariantCulture));
-
-            SetRoiCenterImg(_layout.Master1Pattern, lastM1.X, lastM1.Y);
-            SetRoiCenterImg(_layout.Master2Pattern, lastM2.X, lastM2.Y);
-
-            InspLog("[Seed-M][APPLY_RESTORED] calling RepositionInspectionUsingSt baseline_source=restored-anchors:imgload");
-            RepositionInspectionUsingSt(lastM1, lastM2, scaleLock: true, forceScaleLock: true);
-
-            UI(() =>
-            {
-                RedrawAllRois();
-                UpdateRoiHud();
-                try { RedrawAnalysisCrosses(); }
-                catch { }
-            });
-
-            var afterM1 = GetMasterCenterPoint(_layout.Master1Pattern);
-            var afterM2 = GetMasterCenterPoint(_layout.Master2Pattern);
-            var applyRestoredDoneMessage = FormattableStringFactory.Create(
-                "[Seed-M][APPLY_RESTORED][DONE] key='{0}' after M1=({1:F3},{2:F3}) " +
-                "M2=({3:F3},{4:F3})",
-                imageKey,
-                afterM1.X,
-                afterM1.Y,
-                afterM2.X,
-                afterM2.Y);
-            InspLog(applyRestoredDoneMessage.ToString(CultureInfo.InvariantCulture));
+            InspLog($"[Seed-M][APPLY_RESTORED] key='{imageKey}' applying stored anchors for image load.");
+            ApplyPlacementForAnchors(imageKey, lastM1, lastM2, "image-load-restore");
         }
 
         private void RestoreLastAcceptedAnchorsForImage(string imageKey, string reason)
@@ -12340,12 +11980,6 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _lastAccM1X = _lastAccM1Y = _lastAccM2X = _lastAccM2Y = double.NaN;
                 _lastAcceptedAnchorsKey = string.Empty;
-                return;
-            }
-
-            if (string.Equals(_lastAcceptedAnchorsKey, imageKey, StringComparison.Ordinal)
-                && !double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X))
-            {
                 return;
             }
 
@@ -12389,42 +12023,6 @@ namespace BrakeDiscInspector_GUI_ROI
             _lastAccM1X = _lastAccM1Y = _lastAccM2X = _lastAccM2Y = double.NaN;
             _lastAcceptedAnchorsKey = string.Empty;
             InspLog($"[Anchors] Cleared last anchors ({reason}).");
-        }
-
-        private AlignmentSignature? BuildAlignmentSignature(SWPoint baseM1, SWPoint baseM2, SWPoint newM1, SWPoint newM2, bool scaleLock)
-        {
-            if (!IsFinitePoint(baseM1) || !IsFinitePoint(baseM2) || !IsFinitePoint(newM1) || !IsFinitePoint(newM2))
-            {
-                return null;
-            }
-
-            var baseVec = baseM2 - baseM1;
-            var newVec = newM2 - newM1;
-            double lenBase = Math.Sqrt(baseVec.X * baseVec.X + baseVec.Y * baseVec.Y);
-            double lenNew = Math.Sqrt(newVec.X * newVec.X + newVec.Y * newVec.Y);
-            if (lenBase < 1e-9 || lenNew < 1e-9)
-            {
-                return null;
-            }
-
-            double scale = scaleLock ? 1.0 : (lenNew / lenBase);
-            double angleDeg = _disableRot ? 0.0 : DeltaAngleFromFrames(baseM1, baseM2, newM1, newM2) * 180.0 / Math.PI;
-
-            return new AlignmentSignature(newM1.X, newM1.Y, newM2.X, newM2.Y, angleDeg, scale);
-        }
-
-        private static bool AlignmentWithinEpsilon(AlignmentSignature current, AlignmentSignature last)
-        {
-            const double posEps = 0.2;
-            const double angleEps = 0.05;
-            const double scaleEps = 0.0005;
-
-            return Math.Abs(current.M1X - last.M1X) <= posEps
-                && Math.Abs(current.M1Y - last.M1Y) <= posEps
-                && Math.Abs(current.M2X - last.M2X) <= posEps
-                && Math.Abs(current.M2Y - last.M2Y) <= posEps
-                && Math.Abs(current.AngleDeg - last.AngleDeg) <= angleEps
-                && Math.Abs(current.Scale - last.Scale) <= scaleEps;
         }
 
         private List<RoiModel> SnapshotLayoutBaselinesForImage(string imageKey)
@@ -12526,9 +12124,12 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             if (!double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X))
             {
-                return anchor == MasterAnchorChoice.Master2
-                    ? (_lastAccM2X, _lastAccM2Y)
-                    : (_lastAccM1X, _lastAccM1Y);
+                return anchor switch
+                {
+                    MasterAnchorChoice.Master2 => (_lastAccM2X, _lastAccM2Y),
+                    MasterAnchorChoice.Mid => ((_lastAccM1X + _lastAccM2X) * 0.5, (_lastAccM1Y + _lastAccM2Y) * 0.5),
+                    _ => (_lastAccM1X, _lastAccM1Y)
+                };
             }
 
             RoiModel? master = anchor == MasterAnchorChoice.Master2
@@ -12540,6 +12141,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 return null;
             }
 
+            if (anchor == MasterAnchorChoice.Mid && _layout?.Master2Pattern != null)
+            {
+                var (m1x, m1y) = GetCenterShapeAware(_layout.Master1Pattern ?? master);
+                var (m2x, m2y) = GetCenterShapeAware(_layout.Master2Pattern);
+                return ((m1x + m2x) * 0.5, (m1y + m2y) * 0.5);
+            }
+
             var (cx, cy) = GetCenterShapeAware(master);
             return (cx, cy);
         }
@@ -12549,7 +12157,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var parsedIndex = TryParseInspectionIndex(roi);
             var index = parsedIndex ?? ResolveActiveInspectionIndex();
             var cfg = GetInspectionConfigByIndex(index);
-            return cfg?.AnchorMaster ?? MasterAnchorChoice.Master1;
+            return cfg?.AnchorMaster ?? MasterAnchorChoice.Mid;
         }
 
         private void CacheFixedInspectionBaselineFromLayout(string reason)
@@ -12862,416 +12470,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 RedrawAllRois();
             }
         }
-
-        // Apply translation/rotation/scale to a target ROI using a baseline ROI and an old->new pivot
-        // angleDelta in RADIANS; pivotOld/new in IMAGE coordinates
-        private static void ApplyRoiTransform(RoiModel target, RoiModel baseline,
-                                              double pivotOldX, double pivotOldY,
-                                              double pivotNewX, double pivotNewY,
-                                              double scale, double angleDeltaRad)
-        {
-            if (target == null || baseline == null) return;
-
-            var inRef = RuntimeHelpers.GetHashCode(target);
-            var baselineRef = RuntimeHelpers.GetHashCode(baseline);
-            var before = target.Clone();
-
-            // Baseline center (image space)
-            var (baseCx, baseCy) = GetCenterShapeAware(baseline);
-            double relX = baseCx - pivotOldX;
-            double relY = baseCy - pivotOldY;
-
-            double cos = Math.Cos(angleDeltaRad), sin = Math.Sin(angleDeltaRad);
-            double relXr = scale * (cos * relX - sin * relY);
-            double relYr = scale * (sin * relX + cos * relY);
-
-            // New center
-            double newCX = pivotNewX + relXr;
-            double newCY = pivotNewY + relYr;
-
-            // Scale size (generic: Width/Height; for circles/annulus R, RInner)
-            double newW = baseline.Width * scale;
-            double newH = baseline.Height * scale;
-
-            target.Width = newW;
-            target.Height = newH;
-
-            // Update center & box
-            target.CX = newCX;
-            target.CY = newCY;
-            target.Left = newCX - (newW * 0.5);
-            target.Top = newCY - (newH * 0.5);
-
-            // If circular radii exist, scale them (no-ops if zero)
-            target.R = baseline.R * scale;
-            target.RInner = baseline.RInner * scale;
-
-            // Apply angle rotation for rectangular ROIs
-            double dAngDeg = (angleDeltaRad * 180.0 / Math.PI);
-            target.AngleDeg = baseline.AngleDeg + dAngDeg;
-
-            var outRef = RuntimeHelpers.GetHashCode(target);
-            bool mutated = before == null
-                || Math.Abs(target.CX - before.CX) > double.Epsilon
-                || Math.Abs(target.CY - before.CY) > double.Epsilon
-                || Math.Abs(target.AngleDeg - before.AngleDeg) > double.Epsilon
-                || Math.Abs(target.Width - before.Width) > double.Epsilon
-                || Math.Abs(target.Height - before.Height) > double.Epsilon
-                || Math.Abs(target.R - before.R) > double.Epsilon
-                || Math.Abs(target.RInner - before.RInner) > double.Epsilon;
-
-            GuiLog.Info(FormattableString.Invariant(
-                $"[XFORM][FN] inRef={inRef} outRef={outRef} baselineRef={baselineRef} mutated={mutated}"));
-        }
-
-        private void MoveInspectionTo(RoiModel insp, SWPoint master1, SWPoint master2)
-        {
-            bool isBatch = ViewModel?.CurrentRowIndex > 0;
-            bool detectionAccepted = _lastDetectionAccepted || isBatch;
-            _lastDetectionAccepted = false;
-
-            if (insp?.IsFrozen == true)
-            {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[Analyze] Inspection ROI frozen; skipping MoveInspectionTo.");
-                return;
-            }
-
-            bool useFixedBaseline = _useFixedInspectionBaseline && !isBatch;
-
-            double oldLeft = insp?.Left ?? 0;
-            double oldTop = insp?.Top ?? 0;
-            double oldWidth = insp?.Width ?? 0;
-            double oldHeight = insp?.Height ?? 0;
-
-            int activeInspectionIndex = ResolveActiveInspectionIndex();
-            var config = GetInspectionConfigByIndex(activeInspectionIndex);
-            var anchorMaster = config?.AnchorMaster ?? MasterAnchorChoice.Master1;
-            AppendLog(FormattableString.Invariant(
-                $"[ANCHOR][ALIGN] roiId={insp?.Id ?? "<null>"} idx={activeInspectionIndex} cfgAnchor={(config != null ? (int)config.AnchorMaster : -1)} resolved={anchorMaster}"));
-
-            // === Analyze: BEFORE state & current image key ===
-            var __seedKeyNow = ComputeImageSeedKey();
-            _currentImageHash = __seedKeyNow;
-            RestoreLastAcceptedAnchorsForImage(__seedKeyNow, "move-inspection");
-            InspLog($"[Analyze] Key='{__seedKeyNow}' BEFORE insp: {FInsp(insp)}  M1=({master1.X:F3},{master1.Y:F3}) M2=({master2.X:F3},{master2.Y:F3})");
-
-            // DEFENSIVE: do NOT re-seed here if already seeded for this image/id
-            var fallbackBaseline = GetInspectionBaselineClone(insp?.Id);
-            if (useFixedBaseline && fallbackBaseline != null)
-            {
-                var roiId = insp?.Id ?? string.Empty;
-                if (!_inspectionBaselineSeededIds.Contains(roiId))
-                {
-                    // Only seed if the image key is different (should not happen if [3] ran properly)
-                    if (!string.Equals(__seedKeyNow, _lastImageSeedKey, System.StringComparison.Ordinal))
-                    {
-                        SeedInspectionBaselineOnce(fallbackBaseline, __seedKeyNow);
-                        InspLog("[Analyze] Fallback seed performed (unexpected), key differed.");
-                    }
-                    else
-                    {
-                        InspLog("[Analyze] Fallback seed skipped (already seeded for current image key).");
-                        _inspectionBaselineSeededForImage = true;
-                    }
-                }
-            }
-            else if (useFixedBaseline)
-            {
-                InspLog($"[Analyze][WARN] Missing persisted baseline for roiId='{insp?.Id ?? "<null>"}'; skip defensive seed.");
-            }
-
-            // Keep original size to restore after move (size lock)
-            double __inspW0 = insp?.Width ?? 0;
-            double __inspH0 = insp?.Height ?? 0;
-            double __inspR0 = insp?.R ?? 0;
-            double __inspRin0 = insp?.RInner ?? 0;
-
-            if (insp == null)
-                return;
-
-            string baselineSource = "none";
-            RoiModel? baselineInspection = SelectBaselineForInspection();
-
-            RoiModel? SelectBaselineForInspection()
-            {
-                if (insp == null)
-                {
-                    return null;
-                }
-
-                var roiId = insp.Id ?? string.Empty;
-
-                if (useFixedBaseline)
-                {
-                    if (_inspectionBaselineFixedById.TryGetValue(roiId, out var seeded))
-                    {
-                        baselineSource = "fixed-seeded";
-                        return seeded.Clone();
-                    }
-
-                    var persistedBaseline = GetInspectionBaselineClone(roiId);
-                    if (persistedBaseline != null)
-                    {
-                        baselineSource = "fixed-persisted";
-                        _inspectionBaselineFixedById[roiId] = persistedBaseline.Clone();
-                        _inspectionBaselineSeededIds.Add(roiId);
-                        _inspectionBaselineSeededForImage = true;
-                        _lastImageSeedKey = __seedKeyNow;
-                        InspLog($"[Seed] Fixed baseline SET id='{roiId}' source=persisted base={FInsp(persistedBaseline)}");
-                        return persistedBaseline.Clone();
-                    }
-
-                    baselineSource = "fixed-missing";
-                    InspLog($"[Seed][WARN] Missing persisted baseline for roiId='{roiId}'; skipping current ROI baseline.");
-                    return null;
-                }
-
-                var nonFixed = GetInspectionBaselineClone(roiId);
-                baselineSource = nonFixed == null ? "none" : "persisted-only";
-                if (nonFixed == null)
-                {
-                    InspLog($"[Seed][WARN] Missing persisted baseline for roiId='{roiId}' (non-fixed); skipping current ROI baseline.");
-                }
-                return nonFixed;
-            }
-
-            if (baselineInspection != null
-                && !string.IsNullOrWhiteSpace(baselineInspection.Id)
-                && !string.IsNullOrWhiteSpace(insp.Id)
-                && !string.Equals(baselineInspection.Id, insp.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                AppendLog($"[Analyze][WARN] baseline id mismatch: roiId={insp.Id} baselineId={baselineInspection.Id}; skipping current ROI baseline.");
-                baselineSource += "|skip-mismatch";
-                baselineInspection = null;
-            }
-
-            AppendLog(FormattableString.Invariant(
-                $"[InspectBaseline] activeIdx={activeInspectionIndex} roiId={insp.Id ?? "<null>"} fixed={useFixedBaseline} baselineSource={baselineSource} chosenBaselineId={baselineInspection?.Id ?? "<null>"} persistedBaselineId={_layout?.InspectionBaseline?.Id ?? "<null>"}"));
-
-            RoiModel? __baseM1S = _layout?.Master1Search?.Clone();
-            RoiModel? __baseM2S = _layout?.Master2Search?.Clone();
-            var __baseHeat = _lastHeatmapRoi?.Clone();
-
-            double m1NewX = master1.X, m1NewY = master1.Y;
-            double m2NewX = master2.X, m2NewY = master2.Y;
-            var m1_new = new SWPoint(m1NewX, m1NewY);
-            var m2_new = new SWPoint(m2NewX, m2NewY);
-
-            bool haveLast = !double.IsNaN(_lastAccM1X) && !double.IsNaN(_lastAccM2X);
-            if (haveLast)
-            {
-                double dM1 = Dist(m1NewX, m1NewY, _lastAccM1X, _lastAccM1Y);
-                double dM2 = Dist(m2NewX, m2NewY, _lastAccM2X, _lastAccM2Y);
-                double angOld = AngleDeg(_lastAccM2Y - _lastAccM1Y, _lastAccM2X - _lastAccM1X);
-                double angNew = AngleDeg(m2NewY - m1NewY, m2NewX - m1NewX);
-                double dAng = System.Math.Abs(angNew - angOld);
-                if (dAng > 180.0) dAng = 360.0 - dAng;
-
-                if (!detectionAccepted && dM1 <= _analyzePosTolPx && dM2 <= _analyzePosTolPx && dAng <= _analyzeAngTolDeg)
-                {
-                    InspLog($"[Analyze] NO-OP: detection within tolerance (dM1={dM1:F3}px, dM2={dM2:F3}px, dAng={dAng:F3}°).");
-                    return;
-                }
-            }
-
-            double m1OldX = _m1BaseX, m1OldY = _m1BaseY;
-            double m2OldX = _m2BaseX, m2OldY = _m2BaseY;
-            var m1_base = new SWPoint(_m1BaseX, _m1BaseY);
-            var m2_base = new SWPoint(_m2BaseX, _m2BaseY);
-            double scale = 1.0;
-            double effectiveScale = 1.0;
-            double angDelta = 0.0;
-            double angDeltaEffective = 0.0;
-            bool __canTransform = baselineInspection != null && _mastersSeededForImage;
-            SWVector eB = new SWVector(0, 0);
-            SWVector eN = new SWVector(0, 0);
-            var inspBefore = insp.Clone();
-            var (baseM1Snap, baseM2Snap, baseFromFixed) = GetMastersBaselineSnapshot();
-            var baseM1ForLog = baseM1Snap ?? _layout?.Master1Pattern;
-            var baseM2ForLog = baseM2Snap ?? _layout?.Master2Pattern;
-            string baselineSourceLabel = baseFromFixed ? "fixed" : "layout-fallback";
-            var pivotBaseline = new SWPoint((m1_base.X + m2_base.X) * 0.5, (m1_base.Y + m2_base.Y) * 0.5);
-            var pivotDetected = new SWPoint((m1_new.X + m2_new.X) * 0.5, (m1_new.Y + m2_new.Y) * 0.5);
-            const string pivotLabel = "Midpoint";
-
-
-            double pivotOldX = 0, pivotOldY = 0, pivotNewX = 0, pivotNewY = 0;
-            AppendLog(FormattableString.Invariant(
-                $"[XFORM][CFG] roiId={insp?.Id ?? "<null>"} idx={activeInspectionIndex} anchor={(int)anchorMaster} pivot={pivotLabel}"));
-            AppendLog(FormattableString.Invariant(
-                $"[XFORM][BASE] m1=({m1OldX:0.###},{m1OldY:0.###}) m2=({m2OldX:0.###},{m2OldY:0.###})"));
-            AppendLog(FormattableString.Invariant(
-                $"[XFORM][NEW ] m1=({m1NewX:0.###},{m1NewY:0.###}) m2=({m2NewX:0.###},{m2NewY:0.###})"));
-
-            void ApplyTransformWithLog(string tag, RoiModel? target, RoiModel? baseline, double pOldX, double pOldY, double pNewX, double pNewY, int indexForLog)
-            {
-                if (target == null || baseline == null)
-                {
-                    AppendLog($"[XFORM][APPLY] tag={tag} roiId=<null> targetRef=<null> idx={indexForLog} before=<null>");
-                    return;
-                }
-
-                var before = target.Clone();
-                var refId = RuntimeHelpers.GetHashCode(target);
-                AppendLog($"[XFORM][APPLY] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} idx={indexForLog} before={DescribeRoi(before)}");
-                ApplyRoiTransform(target, baseline, pOldX, pOldY, pNewX, pNewY, effectiveScale, angDeltaEffective);
-                double dCx = target.CX - (before?.CX ?? target.CX);
-                double dCy = target.CY - (before?.CY ?? target.CY);
-                double dAng = target.AngleDeg - (before?.AngleDeg ?? target.AngleDeg);
-                AppendLog($"[XFORM][APPLIED] tag={tag} roiId={target.Id ?? "<null>"} targetRef={refId} after={DescribeRoi(target)} d=({dCx:F3},{dCy:F3},{dAng:F3})");
-            }
-
-            if (__canTransform)
-            {
-                double dxOld = m2OldX - m1OldX;
-                double dyOld = m2OldY - m1OldY;
-                double lenOld = Math.Sqrt(dxOld * dxOld + dyOld * dyOld);
-
-                double dxNew = m2NewX - m1NewX;
-                double dyNew = m2NewY - m1NewY;
-                double lenNew = Math.Sqrt(dxNew * dxNew + dyNew * dyNew);
-
-                scale = (lenOld > 1e-9) ? (lenNew / lenOld) : 1.0;
-                bool scaleLockUiNow = GetScaleLockUi();
-
-                effectiveScale = scaleLockUiNow ? 1.0 : scale;
-                AppendLog($"[UI] AnalyzeMaster scaleLockUiNow={scaleLockUiNow}, scale_req={scale:F6} -> effScale={effectiveScale:F6}");
-
-                double angOldRad = Math.Atan2(dyOld, dxOld);
-                double angNewRad = Math.Atan2(dyNew, dxNew);
-                angDelta = angNewRad - angOldRad;
-
-                eB = Normalize(new SWVector(dxOld, dyOld));
-                eN = Normalize(new SWVector(dxNew, dyNew));
-
-                // Normalize angle delta to [-180°, +180°)
-                double deg = angDelta * 180.0 / Math.PI;
-                deg = (deg + 540.0) % 360.0 - 180.0;
-                angDelta = deg * Math.PI / 180.0;
-                angDeltaEffective = _disableRot ? 0.0 : angDelta;
-
-                pivotOldX = pivotBaseline.X;
-                pivotOldY = pivotBaseline.Y;
-                pivotNewX = pivotDetected.X;
-                pivotNewY = pivotDetected.Y;
-
-                InspLog($"[Transform] imgKey='{__seedKeyNow}' roiId='{insp.Id ?? "<null>"}' anchorMaster={anchorMaster} baseline_source={baselineSourceLabel} " +
-                        $"BASE:{DescribeMasterForLog("M1_base", baseM1ForLog)} {DescribeMasterForLog("M2_base", baseM2ForLog)} " +
-                        $"NEW:M1=({m1NewX:F3},{m1NewY:F3}) M2=({m2NewX:F3},{m2NewY:F3}) effScale={effectiveScale:F6} angΔ={angDeltaEffective * 180 / Math.PI:F3}° pivot={pivotLabel} " +
-                        $"translation=({pivotNewX - pivotOldX:F3},{pivotNewY - pivotOldY:F3})");
-
-                ApplyTransformWithLog("inspection", insp, baselineInspection, pivotOldX, pivotOldY, pivotNewX, pivotNewY, activeInspectionIndex);
-            }
-
-            if (!__canTransform && GetScaleLockUi() && insp != null)
-            {
-                double cx = insp.CX, cy = insp.CY;
-                insp.Width = __inspW0;
-                insp.Height = __inspH0;
-                insp.R = __inspR0;
-                insp.RInner = __inspRin0;
-                insp.Left = cx - (__inspW0 * 0.5);
-                insp.Top = cy - (__inspH0 * 0.5);
-            }
-
-            if (!useFixedBaseline)
-            {
-                try
-                {
-                    SetInspectionBaseline(insp.Clone());
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[UI] Inspection baseline refreshed (rolling mode).");
-                }
-                catch (Exception ex)
-                {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[UI] Failed to refresh inspection baseline: {ex.Message}");
-                }
-            }
-            else
-            {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[UI] Fixed Inspection baseline in use (no refresh after Analyze).");
-            }
-
-            try
-            {
-                if (__canTransform && _layout != null)
-                {
-                    // Congelar los ROIs Master Search durante Analyze (no desplazar ni rotar)
-                    if (!FREEZE_MASTER_SEARCH_ON_ANALYZE)
-                    {
-                        if (_layout.Master1Search != null && __baseM1S != null)
-                            ApplyTransformWithLog("m1-search", _layout.Master1Search, __baseM1S, pivotOldX, pivotOldY, pivotNewX, pivotNewY, 0);
-
-                        if (_layout.Master2Search != null && __baseM2S != null)
-                            ApplyTransformWithLog("m2-search", _layout.Master2Search, __baseM2S, pivotOldX, pivotOldY, pivotNewX, pivotNewY, 0);
-                    }
-                    else
-                    {
-                        Dbg("[Analyze] Master Search ROIs frozen: no transform applied");
-                    }
-
-
-                    if (_lastHeatmapRoi != null && __baseHeat != null)
-                        ApplyTransformWithLog("heatmap", _lastHeatmapRoi, __baseHeat, pivotOldX, pivotOldY, pivotNewX, pivotNewY, -1);
-
-                    try
-                    {
-                        RedrawOverlay();
-                        UpdateHeatmapOverlayLayoutAndClip();
-                        RedrawAnalysisCrosses();
-                    }
-                    catch (Exception ex)
-                    {
-                        // CODEX: string interpolation compatibility.
-                        AppendLog($"[UI] Unified transform redraw failed: {ex.Message}");
-                    }
-
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[UI] Unified transform applied to search/heatmap ROIs.");
-                }
-            }
-            catch (Exception ex)
-            {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[UI] Unified transform failed: {ex.Message}");
-            }
-
-            if (__canTransform && insp != null)
-            {
-                SetInspectionSlotModel(activeInspectionIndex, insp.Clone(), updateActive: true);
-                insp = _layout?.Inspection ?? insp;
-            }
-
-            SyncCurrentRoiFromInspection(insp);
-
-            AppendLog($"[analyze] move inspection from=({oldLeft:0.##},{oldTop:0.##},{oldWidth:0.##},{oldHeight:0.##}) to=({insp.Left:0.##},{insp.Top:0.##},{insp.Width:0.##},{insp.Height:0.##})");
-
-            // === AnalyzeMaster: AFTER state + delta (vs FIXED baseline) ===
-            InspLog($"[Analyze] AFTER  insp: {FInsp(insp)}");
-            if (inspBefore != null)
-            {
-                double dCx = insp.CX - inspBefore.CX;
-                double dCy = insp.CY - inspBefore.CY;
-                double dAng = insp.AngleDeg - inspBefore.AngleDeg;
-                InspLog($"[Transform] ROI before={FInsp(inspBefore)} after={FInsp(insp)} dCX={dCx:F3} dCY={dCy:F3} dAng={dAng:F3}");
-            }
-            RoiModel? baselineForLog = null;
-            if (useFixedBaseline && insp != null && !string.IsNullOrWhiteSpace(insp.Id))
-            {
-                _inspectionBaselineFixedById.TryGetValue(insp.Id, out baselineForLog);
-            }
-
-            if (baselineForLog != null)
-            {
-                InspLog($"[Analyze] DELTA  : dCX={(insp.CX - baselineForLog.CX):F3}, dCY={(insp.CY - baselineForLog.CY):F3}  (fixedBaseline={useFixedBaseline})");
-            }
-
-            StoreLastAcceptedAnchorsForImage(__seedKeyNow, new SWPoint(m1NewX, m1NewY), new SWPoint(m2NewX, m2NewY), "move-inspection");
-        }
-
         private RoiModel? GetInspectionBaselineClone(string? roiId = null)
         {
             var baseline = _layout?.InspectionBaseline;
@@ -15939,31 +15137,6 @@ namespace BrakeDiscInspector_GUI_ROI
             System.Diagnostics.Debug.WriteLine(message);
         }
 
-        private void LogDeltaToCross(string label, double roiCxImg, double roiCyImg, double crossCxImg, double crossCyImg)
-        {
-            var crossCanvas = ImagePxToCanvasPt(crossCxImg, crossCyImg);
-            var roiCanvas = ImagePxToCanvasPt(roiCxImg, roiCyImg);
-            double dx = roiCanvas.X - crossCanvas.X;
-            double dy = roiCanvas.Y - crossCanvas.Y;
-            LogInfo($"[AlignCheck] {label}: Cross(canvas)=({crossCanvas.X:F3},{crossCanvas.Y:F3}) " +
-                    $"ROI(canvas)=({roiCanvas.X:F3},{roiCanvas.Y:F3}) Δ=({dx:F3},{dy:F3})");
-        }
-
-        private void RecenterAnchoredToPivot(
-            RoiModel roi,
-            System.Windows.Point pivotBase,
-            System.Windows.Point pivotNew,
-            double scale,
-            double cosΔ,
-            double sinΔ)
-        {
-            double vx = roi.CX - pivotBase.X;
-            double vy = roi.CY - pivotBase.Y;
-            double vxr = scale * (cosΔ * vx - sinΔ * vy);
-            double vyr = scale * (sinΔ * vx + cosΔ * vy);
-            SetRoiCenterImg(roi, pivotNew.X + vxr, pivotNew.Y + vyr);
-        }
-
         private bool TryGetMasterInspection(int masterId, out RoiModel roi)
         {
             roi = null;
@@ -15993,37 +15166,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
             return false;
-        }
-
-        private void RepositionMastersAndSubRois(System.Windows.Point m1_new, System.Windows.Point m2_new)
-        {
-            var m1_base = new System.Windows.Point(_m1BaseX, _m1BaseY);
-            var m2_base = new System.Windows.Point(_m2BaseX, _m2BaseY);
-
-            double dxB = m2_base.X - m1_base.X, dyB = m2_base.Y - m1_base.Y;
-            double dxN = m2_new.X - m1_new.X, dyN = m2_new.Y - m1_new.Y;
-            double lenB = System.Math.Sqrt(dxB * dxB + dyB * dyB);
-            double lenN = System.Math.Sqrt(dxN * dxN + dyN * dyN);
-            double scale = (lenB > 1e-6) ? (lenN / lenB) : 1.0; // respects analyze scale lock: we don't change ROI sizes
-            double angB = System.Math.Atan2(dyB, dxB);
-            double angN = System.Math.Atan2(dyN, dxN);
-            double angΔ = angN - angB;
-            double cosΔ = System.Math.Cos(angΔ), sinΔ = System.Math.Sin(angΔ);
-
-            // Center master pattern ROIs on detected cross centers
-            if (_layout?.Master1Pattern != null) SetRoiCenterImg(_layout.Master1Pattern, m1_new.X, m1_new.Y);
-            if (_layout?.Master2Pattern != null) SetRoiCenterImg(_layout.Master2Pattern, m2_new.X, m2_new.Y);
-
-            // Anchor master inspections to their master (if present). We do NOT touch Width/Height here.
-            if (TryGetMasterInspection(1, out var m1Insp)) RecenterAnchoredToPivot(m1Insp, m1_base, m1_new, scale, cosΔ, sinΔ);
-            if (TryGetMasterInspection(2, out var m2Insp)) RecenterAnchoredToPivot(m2Insp, m2_base, m2_new, scale, cosΔ, sinΔ);
-
-            // Logs for quick visual verification in canvas pixels
-            if (_layout?.Master1Pattern != null) LogDeltaToCross("M1 Pattern", _layout.Master1Pattern.CX, _layout.Master1Pattern.CY, m1_new.X, m1_new.Y);
-            if (_layout?.Master2Pattern != null) LogDeltaToCross("M2 Pattern", _layout.Master2Pattern.CX, _layout.Master2Pattern.CY, m2_new.X, m2_new.Y);
-
-            if (TryGetMasterInspection(1, out m1Insp)) LogDeltaToCross("M1 Insp", m1Insp.CX, m1Insp.CY, m1_new.X, m1_new.Y);
-            if (TryGetMasterInspection(2, out m2Insp)) LogDeltaToCross("M2 Insp", m2Insp.CX, m2Insp.CY, m2_new.X, m2_new.Y);
         }
 
         private static T? FindVisualChildByName<T>(DependencyObject parent, string name) where T : FrameworkElement
@@ -16811,7 +15953,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 _inspectionBaselinesByImage.Clear();
-                _lastAlignmentByImage.Clear();
 
                 if (_layout != null)
                 {

@@ -2277,7 +2277,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            if (!TryBuildAnchorContext(out var anchorContext, logError: false, logSummary: false))
+            if (!TryBuildPlacementInput(out var placementInput, logError: false))
             {
                 GuiLog.Warn($"[batch-ui] place skipped: anchors unavailable step={_batchStepId} file='{imgName}' reason={reason}");
                 return;
@@ -2292,7 +2292,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (_inspectionRois != null)
             {
-                RepositionInspectionRois(anchorContext);
+                RepositionInspectionRois(placementInput);
 
                 if (_inspectionRois.Count >= 2)
                 {
@@ -2515,24 +2515,27 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var config = FindInspectionConfigForRoi(source);
             var baseline = EnsureBaselineForRoi(config, source, "export");
 
-            if (!TryBuildAnchorContext(out var anchorContext, logError: false, logSummary: false))
+            if (!TryBuildPlacementInput(out var placementInput, logError: false))
             {
                 return clone;
             }
 
             var baselineModel = BuildBaselineModel(clone, baseline);
             var anchor = ResolveAnchorMaster(config, source, "batch-export");
+            var anchorMap = new Dictionary<string, MasterAnchorChoice>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(baselineModel.Id))
+            {
+                anchorMap[baselineModel.Id] = anchor;
+            }
 
-            var (baselineCx, baselineCy) = baselineModel.GetCenter();
-            LogAlign(FormattableString.Invariant(
-                $"[CALL] roi_id={source.Id ?? "<null>"} roi_index={config?.Index ?? TryParseInspectionIndex(source.Id) ?? -1} cfg_anchor={(int?)(config?.AnchorMaster) ?? -1} anchor_passed={(int)anchor} base_center=({baselineCx:0.###},{baselineCy:0.###}) m1_base=({anchorContext.M1BaselineCenter.X:0.###},{anchorContext.M1BaselineCenter.Y:0.###}) m2_base=({anchorContext.M2BaselineCenter.X:0.###},{anchorContext.M2BaselineCenter.Y:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###})"));
+            var input = placementInput with
+            {
+                AnchorByRoiId = anchorMap
+            };
 
-            var (prevCx, prevCy) = clone.GetCenter();
-            InspectionAlignmentHelper.MoveInspectionTo(clone, baselineModel, anchor, anchorContext, _trace);
-            var (newCx, newCy) = clone.GetCenter();
-            LogAlign(FormattableString.Invariant(
-                $"[RESULT] roi_id={source.Id ?? "<null>"} roi_index={config?.Index ?? TryParseInspectionIndex(source.Id) ?? -1} new_center=({newCx:0.###},{newCy:0.###}) new_angle={clone.AngleDeg:0.###} delta=({newCx - prevCx:0.###},{newCy - prevCy:0.###})"));
-            return clone;
+            var output = RoiPlacementEngine.Place(input, Array.Empty<RoiModel>(), new List<RoiModel> { baselineModel });
+            var placed = output.InspectionsPlaced.FirstOrDefault() ?? clone;
+            return placed;
         }
 
         private static Int32Rect? BuildImageRectPx(RoiModel roi)
@@ -5503,9 +5506,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(() => ApplyBatchHeatmapSelection(Math.Max(1, Math.Min(4, roiIndex))));
         }
 
-        private bool TryBuildAnchorContext(out AnchorTransformContext context, bool logError, bool logSummary = true)
+        private bool TryBuildPlacementInput(out RoiPlacementInput input, bool logError)
         {
-            context = default;
+            input = default;
 
             if (_layoutOriginal?.Master1Pattern == null || _layoutOriginal.Master2Pattern == null)
             {
@@ -5525,62 +5528,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var (m1bx, m1by) = _layoutOriginal.Master1Pattern.GetCenter();
             var (m2bx, m2by) = _layoutOriginal.Master2Pattern.GetCenter();
-            var m1BaselineCenter = new Point2d(m1bx, m1by);
-            var m2BaselineCenter = new Point2d(m2bx, m2by);
+            var m1BaselineCenter = new ImgPoint(m1bx, m1by);
+            var m2BaselineCenter = new ImgPoint(m2bx, m2by);
 
             var m1DetectedCenter = _m1Detection.Center!.Value;
             var m2DetectedCenter = _m2Detection.Center!.Value;
-
-            var vBase = new Point2d(m2BaselineCenter.X - m1BaselineCenter.X, m2BaselineCenter.Y - m1BaselineCenter.Y);
-            var vCurr = new Point2d(m2DetectedCenter.X - m1DetectedCenter.X, m2DetectedCenter.Y - m1DetectedCenter.Y);
-
-            static double VectorLength(Point2d p) => Math.Sqrt(p.X * p.X + p.Y * p.Y);
-
-            var scale = VectorLength(vCurr) / Math.Max(VectorLength(vBase), 1e-3);
-
-            var angBase = Math.Atan2(vBase.Y, vBase.X);
-            var angCurr = Math.Atan2(vCurr.Y, vCurr.X);
-            var angleDeltaGlobal = angCurr - angBase;
+            var detM1 = new ImgPoint(m1DetectedCenter.X, m1DetectedCenter.Y);
+            var detM2 = new ImgPoint(m2DetectedCenter.X, m2DetectedCenter.Y);
 
             var analyzeOpts = _layoutOriginal.Analyze ?? new AnalyzeOptions();
             bool scaleLock = analyzeOpts.ScaleLock;
             bool disableRot = analyzeOpts.DisableRot;
 
-            if (logSummary)
-            {
-                var angleDeltaGlobalDeg = angleDeltaGlobal * 180.0 / Math.PI;
-                var rotEffective = disableRot ? 0.0 : angleDeltaGlobal;
-                var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
-                var scaleEffective = scaleLock ? 1.0 : scale;
-
-                var deltaM1 = new Point2d(m1DetectedCenter.X - m1BaselineCenter.X, m1DetectedCenter.Y - m1BaselineCenter.Y);
-                var deltaM2 = new Point2d(m2DetectedCenter.X - m2BaselineCenter.X, m2DetectedCenter.Y - m2BaselineCenter.Y);
-
-                LogAlign(FormattableString.Invariant(
-                    $"[BATCH][MASTERS] baseline_m1=({m1BaselineCenter.X:0.###},{m1BaselineCenter.Y:0.###}) baseline_m2=({m2BaselineCenter.X:0.###},{m2BaselineCenter.Y:0.###}) det_m1=({m1DetectedCenter.X:0.###},{m1DetectedCenter.Y:0.###}) det_m2=({m2DetectedCenter.X:0.###},{m2DetectedCenter.Y:0.###})"));
-                LogAlign(FormattableString.Invariant(
-                    $"[BATCH][MASTERS] delta_m1=({deltaM1.X:0.###},{deltaM1.Y:0.###}) delta_m2=({deltaM2.X:0.###},{deltaM2.Y:0.###}) angle_delta_deg={angleDeltaGlobalDeg:0.###} scale={scale:0.#####} scale_lock={scaleLock} disable_rot={disableRot}"));
-
-                var tM1 = InspectionAlignmentHelper.ComputeTranslation(m1BaselineCenter, m1DetectedCenter, rotEffective, scaleEffective);
-                var tM2 = InspectionAlignmentHelper.ComputeTranslation(m2BaselineCenter, m2DetectedCenter, rotEffective, scaleEffective);
-
-                LogAlign(FormattableString.Invariant(
-                    $"[BATCH][MASTERS] anchor_tx_m1=({tM1.Tx:0.###},{tM1.Ty:0.###}) anchor_tx_m2=({tM2.Tx:0.###},{tM2.Ty:0.###}) rot_deg={rotEffectiveDeg:0.###} scale_eff={scaleEffective:0.####}"));
-            }
-
-            context = new AnchorTransformContext(
+            input = new RoiPlacementInput(
                 m1BaselineCenter,
                 m2BaselineCenter,
-                m1DetectedCenter,
-                m2DetectedCenter,
-                _layoutOriginal.Master1Pattern.AngleDeg,
-                _layoutOriginal.Master2Pattern.AngleDeg,
-                _m1Detection.AngleDeg,
-                _m2Detection.AngleDeg,
-                scale,
-                angleDeltaGlobal,
+                detM1,
+                detM2,
+                disableRot,
                 scaleLock,
-                disableRot);
+                ScaleMode.None,
+                true,
+                BuildAnchorMap());
 
             return true;
         }
@@ -5595,13 +5564,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return RepositionInspectionRoisForImageCoreAsync(imagePath, ct);
         }
 
-        private void RepositionInspectionRois(AnchorTransformContext anchorContext)
+        private void RepositionInspectionRois(RoiPlacementInput input)
         {
             if (_inspectionRois == null)
             {
                 return;
             }
 
+            var placementTargets = new List<(InspectionRoiConfig cfg, RoiModel target, RoiModel baseline)>();
             foreach (var rcfg in _inspectionRois)
             {
                 var roi = GetInspectionModelByIndex(rcfg.Index);
@@ -5612,34 +5582,39 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
                 var baselineModel = BuildBaselineModel(roi, baseline);
-                var anchor = ResolveAnchorMaster(rcfg, roi, "batch-align");
-                var pivotBase = anchor == MasterAnchorChoice.Master1
-                    ? anchorContext.M1BaselineCenter
-                    : anchorContext.M2BaselineCenter;
-                var pivotDet = anchor == MasterAnchorChoice.Master1
-                    ? anchorContext.M1DetectedCenter
-                    : anchorContext.M2DetectedCenter;
-
-                var (baselineCx, baselineCy) = baselineModel.GetCenter();
-                var angleDeltaDeg = anchorContext.AngleDeltaGlobal * 180.0 / Math.PI;
-                var rotEffective = anchorContext.DisableRot ? 0.0 : anchorContext.AngleDeltaGlobal;
-                var rotEffectiveDeg = rotEffective * 180.0 / Math.PI;
-                var scaleEffective = anchorContext.ScaleLock ? 1.0 : anchorContext.Scale;
-
-                LogAlign(FormattableString.Invariant(
-                    $"[CALL] roi_index={rcfg.Index} cfg_anchor={(int)rcfg.AnchorMaster} anchor_passed={(int)anchor} base_center=({baselineCx:0.###},{baselineCy:0.###}) m1_base=({anchorContext.M1BaselineCenter.X:0.###},{anchorContext.M1BaselineCenter.Y:0.###}) m2_base=({anchorContext.M2BaselineCenter.X:0.###},{anchorContext.M2BaselineCenter.Y:0.###}) m1_det=({anchorContext.M1DetectedCenter.X:0.###},{anchorContext.M1DetectedCenter.Y:0.###}) m2_det=({anchorContext.M2DetectedCenter.X:0.###},{anchorContext.M2DetectedCenter.Y:0.###}) angΔ_deg={angleDeltaDeg:0.###} rot_eff_deg={rotEffectiveDeg:0.###} scale={anchorContext.Scale:0.####} scale_eff={scaleEffective:0.####} disableRot={anchorContext.DisableRot} scaleLock={anchorContext.ScaleLock}"));
-
-                var (prevCx, prevCy) = roi.GetCenter();
-                InspectionAlignmentHelper.MoveInspectionTo(roi, baselineModel, anchor, anchorContext, _trace);
-
-                var (newCx, newCy) = roi.GetCenter();
-                var roiRect = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus
-                    ? new Rect(roi.CX - roi.R, roi.CY - roi.R, roi.R * 2.0, roi.R * 2.0)
-                    : new Rect(roi.Left, roi.Top, roi.Width, roi.Height);
-
-                LogAlign(FormattableString.Invariant(
-                    $"[RESULT] roi_index={rcfg.Index} new_center=({newCx:0.###},{newCy:0.###}) new_angle={roi.AngleDeg:0.###} delta=({newCx - prevCx:0.###},{newCy - prevCy:0.###}) rect=({roiRect.Left:0.###},{roiRect.Top:0.###},{roiRect.Right:0.###},{roiRect.Bottom:0.###})"));
+                placementTargets.Add((rcfg, roi, baselineModel));
             }
+
+            if (placementTargets.Count == 0)
+            {
+                return;
+            }
+
+            var baselineList = placementTargets.Select(p => p.baseline).ToList();
+            var output = RoiPlacementEngine.Place(input, Array.Empty<RoiModel>(), baselineList);
+
+            for (var i = 0; i < placementTargets.Count; i++)
+            {
+                var cfg = placementTargets[i].cfg;
+                var placed = output.InspectionsPlaced[i];
+                switch (cfg.Index)
+                {
+                    case 1:
+                        Inspection1 = placed;
+                        break;
+                    case 2:
+                        Inspection2 = placed;
+                        break;
+                    case 3:
+                        Inspection3 = placed;
+                        break;
+                    case 4:
+                        Inspection4 = placed;
+                        break;
+                }
+            }
+
+            LogBatchPlacement(output, input);
         }
 
         private MasterAnchorChoice ResolveAnchorMaster(InspectionRoiConfig? config, RoiModel roi, string caller)
@@ -5662,7 +5637,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(r.ModelKey, roi.Id, StringComparison.OrdinalIgnoreCase))?.AnchorMaster;
 
-            var anchor = resolved ?? MasterAnchorChoice.Master1;
+            var anchor = resolved ?? MasterAnchorChoice.Mid;
 
             if (!resolved.HasValue)
             {
@@ -5671,6 +5646,62 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return anchor;
+        }
+
+        private IReadOnlyDictionary<string, MasterAnchorChoice> BuildAnchorMap()
+        {
+            var map = new Dictionary<string, MasterAnchorChoice>(StringComparer.OrdinalIgnoreCase);
+            var configs = _inspectionRois ?? _layoutOriginal?.InspectionRois;
+            if (configs == null)
+            {
+                return map;
+            }
+
+            foreach (var cfg in configs)
+            {
+                if (cfg == null)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cfg.Id))
+                {
+                    map[cfg.Id] = cfg.AnchorMaster;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cfg.ModelKey))
+                {
+                    map[cfg.ModelKey] = cfg.AnchorMaster;
+                }
+            }
+
+            return map;
+        }
+
+        private void LogBatchPlacement(RoiPlacementOutput output, RoiPlacementInput input)
+        {
+            if (output == null)
+            {
+                return;
+            }
+
+            var key = Path.GetFileName(CurrentImagePath ?? string.Empty);
+            LogAlign(FormattableString.Invariant(
+                $"[PLACE][SUMMARY] key='{key}' disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
+                $"scale={output.Debug.Scale:0.####} angDelta={output.Debug.AngleDeltaDeg:0.###} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
+
+            if (output.Debug.RoiDetails == null)
+            {
+                return;
+            }
+
+            foreach (var detail in output.Debug.RoiDetails)
+            {
+                LogAlign(FormattableString.Invariant(
+                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) " +
+                    $"sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
+                    $"sizeNew=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
+            }
         }
 
         private static int? TryParseInspectionIndex(string? key)
@@ -5952,13 +5983,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (_layoutOriginal != null)
                 {
                     await _repositionInspectionRoisAsync(imagePath, ct, skipIfAnchorsReady: true).ConfigureAwait(false);
-                    if (!TryBuildAnchorContext(out var anchorContext, logError: true))
+                    if (!TryBuildPlacementInput(out var placementInput, logError: true))
                     {
                         TraceBatch("[batch-repos] skip: anchors unavailable for reposition");
                         return;
                     }
 
-                    RepositionInspectionRois(anchorContext);
+                    RepositionInspectionRois(placementInput);
                     TraceBatch(FormattableString.Invariant($"[batch-repos] reposition layout DONE stepId={stepId}"));
                 }
                 else if (_repositionInspectionRoisAsyncExternal != null)
@@ -7071,14 +7102,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             await _repositionInspectionRoisAsync(imagePath, CancellationToken.None, skipIfAnchorsReady: true)
                 .ConfigureAwait(false);
 
-            if (!TryBuildAnchorContext(out var anchorContext, logError: false))
+            if (!TryBuildPlacementInput(out var placementInput, logError: false))
             {
                 return;
             }
 
             InvokeOnUi(() =>
             {
-                RepositionInspectionRois(anchorContext);
+                RepositionInspectionRois(placementInput);
                 RedrawOverlays();
             });
         }

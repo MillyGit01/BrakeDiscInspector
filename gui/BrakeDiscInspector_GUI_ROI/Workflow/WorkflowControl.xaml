@@ -145,6 +145,8 @@
                                                               Tag="{x:Static m:MasterAnchorChoice.Master1}" />
                                                 <ComboBoxItem Content="Master2"
                                                               Tag="{x:Static m:MasterAnchorChoice.Master2}" />
+                                                <ComboBoxItem Content="Mid"
+                                                              Tag="{x:Static m:MasterAnchorChoice.Mid}" />
                                             </ComboBox>
                                         </StackPanel>
                                     </StackPanel>

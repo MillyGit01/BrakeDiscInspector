@@ -2159,24 +2159,41 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            var baseVec = m2Base - m1Base;
-            var newVec = m2Cross - m1Cross;
-            double len0 = Math.Sqrt(baseVec.X * baseVec.X + baseVec.Y * baseVec.Y);
-            double len1 = Math.Sqrt(newVec.X * newVec.X + newVec.Y * newVec.Y);
-            if (len0 < 1e-9 || len1 < 1e-9)
+            bool disableRot = DisableRot || (ChkDisableRot?.IsChecked == true);
+            bool effectiveScaleLock = GetScaleLockUi();
+
+            double baseDist = Dist(m1Base.X, m1Base.Y, m2Base.X, m2Base.Y);
+            double detDist = Dist(m1Cross.X, m1Cross.Y, m2Cross.X, m2Cross.Y);
+            if (baseDist < 1e-9 || detDist < 1e-9)
                 return;
 
-            bool effectiveScaleLock = scaleLock;
-            var similarity = ComputeSimilarityTransform(m1Base, m2Base, m1Cross, m2Cross, effectiveScaleLock,
-                out var pivotOld, out var pivotNew);
-            double scaleFactor = effectiveScaleLock ? 1.0 : similarity.Scale;
-            bool lockRotation = _disableRot;
-            double angleDelta = lockRotation ? 0.0 : similarity.RotationRad;
+            double scale = detDist / baseDist;
+            double angleDelta = DeltaAngleFromFrames(m1Base, m2Base, m1Cross, m2Cross);
+            double angleDeltaDeg = angleDelta * 180.0 / Math.PI;
             var visImageKey = GetCurrentImageKey();
             var visFileName = GetCurrentImageFileName();
             var baselineSnapshotBefore = SnapshotLayoutBaselinesForImage(visImageKey);
 
-            InspLog($"[RepositionInsp][START] key='{visImageKey}' scaleLock={scaleLock} lockRotation={lockRotation} effectiveScaleLock={effectiveScaleLock}");
+            InspLog($"[RepositionInsp][START] key='{visImageKey}' scaleLock={scaleLock} scaleLockEffective={effectiveScaleLock} disableRot={disableRot} " +
+                    $"baseM1=({m1Base.X:0.###},{m1Base.Y:0.###}) baseM2=({m2Base.X:0.###},{m2Base.Y:0.###}) " +
+                    $"detM1=({m1Cross.X:0.###},{m1Cross.Y:0.###}) detM2=({m2Cross.X:0.###},{m2Cross.Y:0.###}) " +
+                    $"dist_base={baseDist:0.###} dist_new={detDist:0.###} scale={scale:0.####} angleDeltaDeg={angleDeltaDeg:0.###}");
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][INSP_ANCHORS] key='{visImageKey}' file='{visFileName}' base_m1=({m1Base.X:0.###},{m1Base.Y:0.###}) base_m2=({m2Base.X:0.###},{m2Base.Y:0.###}) det_m1=({m1Cross.X:0.###},{m1Cross.Y:0.###}) det_m2=({m2Cross.X:0.###},{m2Cross.Y:0.###}) dist_base={baseDist:0.###} dist_new={detDist:0.###} scale={scale:0.####} angle_delta_deg={angleDeltaDeg:0.###} scaleLock={effectiveScaleLock} disableRot={disableRot}"));
+
+            var anchorsContext = new AnchorTransformContext(
+                new Point2d(m1Base.X, m1Base.Y),
+                new Point2d(m2Base.X, m2Base.Y),
+                new Point2d(m1Cross.X, m1Cross.Y),
+                new Point2d(m2Cross.X, m2Cross.Y),
+                baselineM1.AngleDeg,
+                baselineM2.AngleDeg,
+                baselineM1.AngleDeg + angleDeltaDeg,
+                baselineM2.AngleDeg + angleDeltaDeg,
+                scale,
+                angleDelta,
+                effectiveScaleLock,
+                disableRot);
 
             if (_useFixedInspectionBaseline)
             {
@@ -2185,23 +2202,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     SeedInspectionBaselineOnce(roi, seedKey);
                 }
-            }
-
-            const double noMoveEps = 0.001;
-            if (effectiveScaleLock && lockRotation
-                && Math.Abs(similarity.Translation.X) < noMoveEps
-                && Math.Abs(similarity.Translation.Y) < noMoveEps)
-            {
-                InspLog($"[RepositionInsp] early-return: locks active and translation < {noMoveEps} (tx={similarity.Translation.X:0.###}, ty={similarity.Translation.Y:0.###}).");
-                VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
-                    "[VISCONF][INSP_APPLY_SKIP] key='{0}' file='{1}' reason='locks_active_zero_translation' scaleLock={2} lockRotation={3} tx={4:0.###} ty={5:0.###}",
-                    visImageKey,
-                    visFileName,
-                    scaleLock,
-                    lockRotation,
-                    similarity.Translation.X,
-                    similarity.Translation.Y));
-                return;
             }
 
             RoiModel? SelectBaselineForInspection(RoiModel roi)
@@ -2287,7 +2287,36 @@ namespace BrakeDiscInspector_GUI_ROI
                     visFileName,
                     target.Label ?? target.Id ?? "<null>",
                     DescribeRoi(baselineToUse)));
-                ApplyRoiTransform(target, baselineToUse, pivotOld.X, pivotOld.Y, pivotNew.X, pivotNew.Y, scaleFactor, angleDelta);
+                var anchorMaster = ResolveAnchorForRoi(target);
+                var parsedIndex = TryParseInspectionIndex(target);
+                InspectionRoiConfig? cfg = null;
+                if (parsedIndex.HasValue)
+                {
+                    cfg = GetInspectionConfigByIndex(parsedIndex.Value);
+                }
+
+                if (cfg == null && _layout?.InspectionRois != null && !string.IsNullOrWhiteSpace(target.Id))
+                {
+                    cfg = _layout.InspectionRois.FirstOrDefault(r =>
+                        string.Equals(r.Id, target.Id, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (cfg == null)
+                {
+                    InspLog($"[RepositionInsp][WARN] Missing anchor config for roiId='{target.Id ?? "<null>"}'; defaulting to {anchorMaster}.");
+                }
+
+                var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
+                var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
+                if (disableRot)
+                {
+                    var expectedDx = anchorNew.X - anchorBase.X;
+                    var expectedDy = anchorNew.Y - anchorBase.Y;
+                    InspLog($"[RepositionInsp][ROI] roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} translation_only dx={expectedDx:0.###} dy={expectedDy:0.###}");
+                }
+
+                InspLog($"[RepositionInsp][ROI] before roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} baseline={DescribeRoi(baselineToUse)}");
+                InspectionAlignmentHelper.MoveInspectionTo(target, baselineToUse, anchorMaster, anchorsContext);
                 if (_imgW > 0 && _imgH > 0)
                 {
                     ClipInspectionROI(target, _imgW, _imgH);
@@ -2300,6 +2329,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     visFileName,
                     target.Label ?? target.Id ?? "<null>",
                     DescribeRoi(target)));
+                InspLog($"[RepositionInsp][ROI] after roi='{target.Label ?? target.Id ?? "<null>"}' anchor={anchorMaster} applied={DescribeRoi(target)}");
 
                 moved++;
                 firstBefore ??= new SWPoint(beforeCx, beforeCy);
@@ -2318,15 +2348,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     movedLabels.Add("Inspection");
                 }
-
-                var anchorMaster = ResolveAnchorForRoi(target);
-                var anchorBase = anchorMaster == MasterAnchorChoice.Master2 ? m2Base : m1Base;
-                var anchorNew = anchorMaster == MasterAnchorChoice.Master2 ? m2Cross : m1Cross;
-                double tx = similarity.Translation.X;
-                double ty = similarity.Translation.Y;
                 double distAfter = Dist(afterCx, afterCy, anchorNew.X, anchorNew.Y);
                 var repositionMessage = FormattableStringFactory.Create(
-                    "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(tx={12:0.###},ty={13:0.###},angΔ={14:0.###},scale={15:0.###}) locks=(scaleLock={25},lockRotation={26}) roiBefore=(CX={16:0.###},CY={17:0.###},Ang={18:0.###}) roiAfter=(CX={19:0.###},CY={20:0.###},Ang={21:0.###}) residualToAnchor=(dx={22:0.###},dy={23:0.###},dist={24:0.###})",
+                    "[VISCONF][APPLY_REPOSITION] key='{0}' file='{1}' roi='{2}' anchor={3} baseM1=({4:0.###},{5:0.###}) baseM2=({6:0.###},{7:0.###}) newM1=({8:0.###},{9:0.###}) newM2=({10:0.###},{11:0.###}) xform=(angΔ={12:0.###},scale={13:0.###}) locks=(scaleLock={23},disableRot={24}) roiBefore=(CX={14:0.###},CY={15:0.###},Ang={16:0.###}) roiAfter=(CX={17:0.###},CY={18:0.###},Ang={19:0.###}) residualToAnchor=(dx={20:0.###},dy={21:0.###},dist={22:0.###})",
                     visImageKey,
                     visFileName,
                     target.Label ?? target.Id ?? "<null>",
@@ -2339,10 +2363,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     m1Cross.Y,
                     m2Cross.X,
                     m2Cross.Y,
-                    tx,
-                    ty,
-                    angleDelta * 180.0 / Math.PI,
-                    scaleFactor,
+                    angleDeltaDeg,
+                    scale,
                     beforeCx,
                     beforeCy,
                     baselineToUse.AngleDeg,
@@ -2352,8 +2374,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     afterCx - anchorNew.X,
                     afterCy - anchorNew.Y,
                     distAfter,
-                    scaleLock,
-                    lockRotation);
+                    effectiveScaleLock,
+                    disableRot);
                 VisConfLog.Roi(FormattableString.Invariant(repositionMessage));
             }
 
@@ -2382,17 +2404,12 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 var summaryMessage = FormattableStringFactory.Create(
                     "[VISCONF][APPLY_REPOSITION][SUMMARY] key='{0}' file='{1}' moved={2} scale={3:0.###} rotDeg={4:0.###} " +
-                    "pivotOld=({5:0.###},{6:0.###}) pivotNew=({7:0.###},{8:0.###}) " +
-                    "first=({9:0.###},{10:0.###})->({11:0.###},{12:0.###}) last=({13:0.###},{14:0.###})->({15:0.###},{16:0.###})",
+                    "first=({5:0.###},{6:0.###})->({7:0.###},{8:0.###}) last=({9:0.###},{10:0.###})->({11:0.###},{12:0.###})",
                     visImageKey,
                     visFileName,
                     moved,
-                    scaleFactor,
-                    angleDelta * 180.0 / Math.PI,
-                    pivotOld.X,
-                    pivotOld.Y,
-                    pivotNew.X,
-                    pivotNew.Y,
+                    scale,
+                    angleDeltaDeg,
                     firstBefore.Value.X,
                     firstBefore.Value.Y,
                     firstAfter.Value.X,
@@ -4814,6 +4831,7 @@ namespace BrakeDiscInspector_GUI_ROI
             string featureM2 = NormalizeFeature(layoutAnalyze?.FeatureM2);
             int thrM1 = layoutAnalyze?.ThrM1 > 0 ? layoutAnalyze.ThrM1 : 85;
             int thrM2 = layoutAnalyze?.ThrM2 > 0 ? layoutAnalyze.ThrM2 : 85;
+            bool useLocalMatcher = layoutAnalyze?.UseLocalMatcher ?? true;
             double opacity = layoutUi != null && layoutUi.HeatmapOverlayOpacity >= 0
                 ? Math.Max(0.0, Math.Min(1.0, layoutUi.HeatmapOverlayOpacity))
                 : defaultOpacity;
@@ -4825,6 +4843,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 : 1.0;
             gain = Math.Clamp(gain, 0.25, 4.0);
             gamma = Math.Clamp(gamma, 0.25, 4.0);
+
+            InspLog($"[layout-load] Analyze: featureM1='{featureM1}' thrM1={thrM1} featureM2='{featureM2}' thrM2={thrM2} " +
+                    $"posTolPx={posTol:0.###} angTolDeg={angTol:0.###} scaleLock={scaleLock} disableRot={disableRot} useLocalMatcher={useLocalMatcher} " +
+                    $"rotRange={layoutAnalyze?.RotRange ?? _preset?.RotRange ?? 0} scaleMin={layoutAnalyze?.ScaleMin ?? _preset?.ScaleMin ?? 0:0.####} " +
+                    $"scaleMax={layoutAnalyze?.ScaleMax ?? _preset?.ScaleMax ?? 0:0.####}");
 
             _inspectionBaselinesByImage.Clear();
             _lastAlignmentByImage.Clear();
@@ -4860,7 +4883,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 HeatmapOverlayOpacity = opacity;
                 if (ChkUseLocalMatcher != null)
                 {
-                    ChkUseLocalMatcher.IsChecked = layoutAnalyze?.UseLocalMatcher ?? true;
+                    ChkUseLocalMatcher.IsChecked = useLocalMatcher;
                 }
             }
             finally

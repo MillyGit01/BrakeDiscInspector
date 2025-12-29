@@ -664,7 +664,11 @@
                             <ColumnDefinition Width="9"/>
                             <ColumnDefinition Width="Auto" MinWidth="228"/>
                         </Grid.ColumnDefinitions>
-                        <GroupBox Header="Analyze Options M1" UseLayoutRounding="False" Grid.Column="0" Margin="10,0,10,11">
+                        <GroupBox Header="Analyze Options M1"
+                                  UseLayoutRounding="False"
+                                  Grid.Column="0"
+                                  Margin="10,0,10,11"
+                                  DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                             <StackPanel Margin="0,4,0,0">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Width="195">
                                     <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0" HorizontalAlignment="Left"/>
@@ -687,7 +691,10 @@
                                 </StackPanel>
                             </StackPanel>
                         </GroupBox>
-                        <GroupBox Header="Analyze Options M2" Grid.Column="2" Margin="0,0,0,12">
+                        <GroupBox Header="Analyze Options M2"
+                                  Grid.Column="2"
+                                  Margin="0,0,0,12"
+                                  DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                             <StackPanel Margin="8,4,0,0">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
                                     <TextBlock Text="Feature:" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -710,7 +717,12 @@
                             </StackPanel>
                         </GroupBox>
                     </Grid>
-                    <GroupBox Header="Analyze Options" Width="240" Height="204" Padding="8,16,8,8" ScrollViewer.CanContentScroll="True">
+                    <GroupBox Header="Analyze Options"
+                              Width="240"
+                              Height="204"
+                              Padding="8,16,8,8"
+                              ScrollViewer.CanContentScroll="True"
+                              DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                         <StackPanel Margin="8,4,0,0">
                             <StackPanel Height="102" CanVerticallyScroll="True">
                                 <CheckBox x:Name="ChkDisableRot"
@@ -735,7 +747,9 @@
                         </StackPanel>
                     </GroupBox>
 
-                    <GroupBox Header="Match Options" Width="260">
+                    <GroupBox Header="Match Options"
+                              Width="260"
+                              DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
                         <StackPanel Margin="8,4,0,0">
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
                                 <TextBlock Text="RotRange:" VerticalAlignment="Center"/>

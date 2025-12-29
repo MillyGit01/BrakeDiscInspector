@@ -37,25 +37,25 @@ public class InspectionAlignmentHelperTests
         var master1 = new Point(150, 140);
         var master2 = new Point(320, 210);
 
+        var anchors = BuildAnchorsFromPoints(baselineMaster1, baselineMaster2, master1, master2, scaleLock: false, disableRot: false);
+
         InspectionAlignmentHelper.MoveInspectionTo(
             target,
             baselineInspection.Clone(),
-            baselineMaster1,
-            baselineMaster2,
-            master1,
-            master2);
+            MasterAnchorChoice.Master1,
+            anchors);
 
         Assert.False(AreApproximatelyEqual(baselineInspection, target, shape));
 
         var firstResult = target.Clone();
 
+        anchors = BuildAnchorsFromPoints(baselineMaster1, baselineMaster2, master1, master2, scaleLock: false, disableRot: false);
+
         InspectionAlignmentHelper.MoveInspectionTo(
             target,
             baselineInspection.Clone(),
-            baselineMaster1,
-            baselineMaster2,
-            master1,
-            master2);
+            MasterAnchorChoice.Master1,
+            anchors);
 
         AssertClose(firstResult, target, shape);
     }
@@ -78,7 +78,7 @@ public class InspectionAlignmentHelperTests
 
         InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
 
-        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(6, target.X, 6);
         Assert.Equal(7, target.Y, 6);
         Assert.Equal(4, target.Width, 6);
         Assert.Equal(6, target.Height, 6);
@@ -103,10 +103,34 @@ public class InspectionAlignmentHelperTests
 
         InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
 
-        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(6, target.X, 6);
         Assert.Equal(7, target.Y, 6);
         Assert.Equal(4, target.Width, 6);
         Assert.Equal(6, target.Height, 6);
+        Assert.Equal(10, target.AngleDeg, 6);
+    }
+
+    [Fact]
+    public void MoveInspectionTo_DisableRot_DoesNotRotateCenterOffset_WhenAngleDeltaNonZero()
+    {
+        var baselineInspection = new RoiModel
+        {
+            Shape = RoiShape.Rectangle,
+            X = 5,
+            Y = 5,
+            Width = 4,
+            Height = 6,
+            AngleDeg = 10
+        };
+
+        var target = baselineInspection.Clone();
+        var anchors = CreateAnchorContext(scaleLock: false, disableRot: true); // angleDelta is PI/2 in helper
+
+        InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
+
+        // DisableRot option B: center offset does NOT rotate (only translation is applied)
+        Assert.Equal(6, target.X, 6);
+        Assert.Equal(7, target.Y, 6);
         Assert.Equal(10, target.AngleDeg, 6);
     }
 
@@ -153,7 +177,7 @@ public class InspectionAlignmentHelperTests
 
         InspectionAlignmentHelper.MoveInspectionTo(target, baselineInspection, MasterAnchorChoice.Master1, anchors);
 
-        Assert.Equal(-4, target.X, 6);
+        Assert.Equal(6, target.X, 6);
         Assert.Equal(7, target.Y, 6);
         Assert.Equal(4, target.Width, 6);
         Assert.Equal(6, target.Height, 6);
@@ -234,6 +258,33 @@ public class InspectionAlignmentHelperTests
             Math.PI / 2.0,
             scaleLock,
             disableRot);
+    }
+
+    private static AnchorTransformContext BuildAnchorsFromPoints(
+        RoiModel baselineMaster1,
+        RoiModel baselineMaster2,
+        Point m1Detected,
+        Point m2Detected,
+        bool scaleLock = false,
+        bool disableRot = false)
+    {
+        var b1 = baselineMaster1.GetCenter();
+        var b2 = baselineMaster2.GetCenter();
+
+        double baseDx = b2.X - b1.X;
+        double baseDy = b2.Y - b1.Y;
+        double detDx = m2Detected.X - m1Detected.X;
+        double detDy = m2Detected.Y - m1Detected.Y;
+
+        double baseDist = Math.Sqrt(baseDx * baseDx + baseDy * baseDy);
+        double detDist = Math.Sqrt(detDx * detDx + detDy * detDy);
+
+        double scale = baseDist < 1e-9 ? 1.0 : detDist / baseDist;
+        double angleBase = Math.Atan2(baseDy, baseDx);
+        double angleDet = Math.Atan2(detDy, detDx);
+        double angleDelta = angleDet - angleBase;
+
+        return new AnchorTransformContext(b1, b2, m1Detected, m2Detected, 0, 0, 0, 0, scale, angleDelta, scaleLock, disableRot);
     }
 
     private static RoiModel CreateBaselineInspection(RoiShape shape)

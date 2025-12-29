@@ -5687,8 +5687,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var key = Path.GetFileName(CurrentImagePath ?? string.Empty);
             LogAlign(FormattableString.Invariant(
-                $"[PLACE][SUMMARY] key='{key}' disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
-                $"scale={output.Debug.Scale:0.####} angDelta={output.Debug.AngleDeltaDeg:0.###} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
+                $"[PLACE][SUMMARY] key='{key}' disableRot={input.DisableRot} scaleLock={input.ScaleLock} scale={output.Debug.Scale:0.####} angDelta={output.Debug.AngleDeltaDeg:0.###} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
 
             if (output.Debug.RoiDetails == null)
             {
@@ -5698,9 +5697,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             foreach (var detail in output.Debug.RoiDetails)
             {
                 LogAlign(FormattableString.Invariant(
-                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) " +
-                    $"sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
-                    $"sizeNew=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
+                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) sizeNew=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
             }
         }
 

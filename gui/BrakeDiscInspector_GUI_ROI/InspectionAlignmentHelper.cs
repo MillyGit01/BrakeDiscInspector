@@ -67,13 +67,17 @@ internal static class InspectionAlignmentHelper
         var (baseCx, baseCy) = baselineInspection.GetCenter();
         var vBase = new Point2d(baseCx - pivotBaseline.X, baseCy - pivotBaseline.Y);
 
-        var rotForCenter = anchors.AngleDeltaGlobal;
-        var rotForAngle = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
+        // ROI scaling is disabled globally: inspection ROIs keep a fixed size/offset across images.
+        // We still compute anchors.Scale for diagnostics, but we do NOT apply it to ROI size or offset.
+        var scaleRequested = anchors.ScaleLock ? 1.0 : anchors.Scale; // what the matcher estimated (or locked)
+        var scaleEffective = 1.0; // intentionally fixed (no scaling of inspection ROI geometry)
 
-        // ROI scaling is disabled globally: ROIs must keep fixed size/offset across images.
-        // Keep anchors.Scale only for logging/diagnostics.
-        var scaleRequested = anchors.Scale;
-        var scaleEffective = anchors.ScaleLock ? 1.0 : anchors.Scale;
+        // DisableRot option B:
+        // - When DisableRot=true, the inspection ROI should NOT rotate,
+        //   and its *center offset* from the chosen master anchor should also NOT be rotated.
+        // - Therefore rotForCenter MUST follow rotForAngle (0 when DisableRot=true).
+        var rotForAngle = anchors.DisableRot ? 0.0 : anchors.AngleDeltaGlobal;
+        var rotForCenter = rotForAngle;
         var angleDeltaDeg = anchors.AngleDeltaGlobal * 180.0 / Math.PI;
 
         var cosA = Math.Cos(rotForCenter);
@@ -125,10 +129,12 @@ internal static class InspectionAlignmentHelper
                 roiNewCenter.Y - baseCy));
         LogAlign(trace,
             FormattableStringFactory.Create(
-                "[BATCH][ROI] roi={0} applied rot_deg_center={1:0.###} rot_deg_angle={2:0.###} scale_req={3:0.####} scale_applied={4:0.####} tx={5:0.###} ty={6:0.###} scaleLock={7} disableRot={8}",
+                "[BATCH][ROI] roi={0} applied rot_deg_center={1:0.###} rot_deg_angle={2:0.###} scale_req={3:0.####} scale_applied={4:0.####} scaleReq={5:0.####} scaleEff={6:0.####} tx={7:0.###} ty={8:0.###} scaleLock={9} disableRot={10}",
                 inspectionTarget.Label ?? inspectionTarget.Id,
                 rotForCenter * 180.0 / Math.PI,
                 rotForAngle * 180.0 / Math.PI,
+                scaleRequested,
+                scaleEffective,
                 scaleRequested,
                 scaleEffective,
                 tx,

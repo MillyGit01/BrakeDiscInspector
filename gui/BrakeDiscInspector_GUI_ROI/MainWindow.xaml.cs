@@ -160,9 +160,6 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool IsEditingInspection => _editingInspectionSlot.HasValue;
         private bool _editModeActive = false;
         private string? _activeEditableRoiId = null;
-        private bool _hasInspectionAnalysisTransform;
-        private bool _isFirstImageForCurrentKey = true;
-        private bool _inspectionBaselineRestorePending;
         private volatile bool _suspendManualOverlayInvalidations;
         private bool _layoutAutosaveEnabled;
         private bool _hasAppliedLayoutSnapshot;
@@ -1863,210 +1860,70 @@ namespace BrakeDiscInspector_GUI_ROI
             return new SWPoint(cx, cy);
         }
 
+        private bool TryGetLayoutOriginalMasterCenters(out SWPoint baseM1, out SWPoint baseM2)
+        {
+            baseM1 = new SWPoint(double.NaN, double.NaN);
+            baseM2 = new SWPoint(double.NaN, double.NaN);
+
+            if (_workflowViewModel != null
+                && _workflowViewModel.TryGetLayoutOriginalMasterCenters(out var vmM1, out var vmM2))
+            {
+                baseM1 = new SWPoint(vmM1.X, vmM1.Y);
+                baseM2 = new SWPoint(vmM2.X, vmM2.Y);
+                return true;
+            }
+
+            if (_layout?.Master1Pattern == null || _layout.Master2Pattern == null)
+            {
+                return false;
+            }
+
+            var (m1bx, m1by) = _layout.Master1Pattern.GetCenter();
+            var (m2bx, m2by) = _layout.Master2Pattern.GetCenter();
+            baseM1 = new SWPoint(m1bx, m1by);
+            baseM2 = new SWPoint(m2bx, m2by);
+            return true;
+        }
+
         private void ApplyPlacementForAnchors(
             string imageKey,
             SWPoint m1Detected,
             SWPoint m2Detected,
-            string reason,
-            RoiModel? master1Baseline = null,
-            RoiModel? master2Baseline = null,
-            bool? forceScaleLock = null,
-            bool? forceDisableRot = null)
+            string reason)
         {
             if (_layout == null)
             {
                 return;
             }
 
-            var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
-            var baselineM1 = master1Baseline ?? snapshotM1;
-            var baselineM2 = master2Baseline ?? snapshotM2;
-            if (baselineM1 == null || baselineM2 == null)
+            if (!IsFinitePoint(m1Detected) || !IsFinitePoint(m2Detected))
             {
-                InspLog($"[PLACE] baseline missing; reason={reason}");
+                InspLog($"[PLACE] skip non-finite anchors det=({m1Detected.X:0.###},{m1Detected.Y:0.###}) ({m2Detected.X:0.###},{m2Detected.Y:0.###})");
                 return;
             }
 
-            var (m1bX, m1bY) = GetCenterShapeAware(baselineM1);
-            var (m2bX, m2bY) = GetCenterShapeAware(baselineM2);
-            var m1Base = new SWPoint(m1bX, m1bY);
-            var m2Base = new SWPoint(m2bX, m2bY);
-
-            if (!IsFinitePoint(m1Base) || !IsFinitePoint(m2Base) || !IsFinitePoint(m1Detected) || !IsFinitePoint(m2Detected))
+            if (_workflowViewModel == null)
             {
-                InspLog($"[PLACE] skip non-finite anchors base=({m1Base.X:0.###},{m1Base.Y:0.###}) ({m2Base.X:0.###},{m2Base.Y:0.###}) " +
-                        $"det=({m1Detected.X:0.###},{m1Detected.Y:0.###}) ({m2Detected.X:0.###},{m2Detected.Y:0.###})");
+                InspLog($"[PLACE] skipped: workflow viewmodel missing reason={reason}");
                 return;
             }
 
-            bool disableRot = forceDisableRot ?? (DisableRot || (ChkDisableRot?.IsChecked == true));
-            bool scaleLock = forceScaleLock ?? GetScaleLockUi();
-
-            if (_useFixedInspectionBaseline)
-            {
-                foreach (var roi in CollectSavedInspectionRois())
-                {
-                    SeedInspectionBaselineOnce(roi, imageKey);
-                }
-            }
-
-            var anchorMap = BuildAnchorMapFromLayout();
-            var input = new RoiPlacementInput(
-                new ImgPoint(m1Base.X, m1Base.Y),
-                new ImgPoint(m2Base.X, m2Base.Y),
+            if (!_workflowViewModel.TryApplyPlacementToLayout(
+                _layout,
                 new ImgPoint(m1Detected.X, m1Detected.Y),
                 new ImgPoint(m2Detected.X, m2Detected.Y),
-                disableRot,
-                scaleLock,
-                ScaleMode.None,
-                true,
-                anchorMap);
-
-            var baselineMasters = new List<RoiModel> { baselineM1.Clone(), baselineM2.Clone() };
-            var inspectionTargets = CollectInspectionPlacementTargets(imageKey);
-            var baselineInspections = inspectionTargets.Select(t => t.Baseline).ToList();
-
-            var output = RoiPlacementEngine.Place(input, baselineMasters, baselineInspections);
-
-            ApplyPlacementResults(output, inspectionTargets);
-            LogPlacement(output, imageKey, input);
-
-            _lastInspectionRepositioned = inspectionTargets.Count > 0;
-            UI(() =>
+                imageKey,
+                out var output))
             {
-                RedrawAllRois();
-                UpdateRoiHud();
-                try { RedrawAnalysisCrosses(); }
-                catch { }
-            });
-        }
-
-        private sealed record InspectionPlacementTarget(int SlotIndex, RoiModel Baseline);
-
-        private List<InspectionPlacementTarget> CollectInspectionPlacementTargets(string imageKey)
-        {
-            var targets = new List<InspectionPlacementTarget>();
-
-            void AddTarget(int slotIndex, RoiModel? roi)
-            {
-                if (roi == null)
-                {
-                    return;
-                }
-
-                var baseline = ResolveBaselineForInspection(roi, imageKey);
-                if (baseline == null)
-                {
-                    InspLog($"[PLACE][WARN] Missing baseline for roiId='{roi.Id ?? "<null>"}'; skipping placement.");
-                    return;
-                }
-
-                targets.Add(new InspectionPlacementTarget(slotIndex, baseline));
-            }
-
-            AddTarget(1, _layout?.Inspection1);
-            AddTarget(2, _layout?.Inspection2);
-            AddTarget(3, _layout?.Inspection3);
-            AddTarget(4, _layout?.Inspection4);
-            AddTarget(0, _layout?.Inspection);
-
-            return targets;
-        }
-
-        private RoiModel? ResolveBaselineForInspection(RoiModel roi, string imageKey)
-        {
-            if (_useFixedInspectionBaseline
-                && !string.IsNullOrWhiteSpace(roi.Id)
-                && _inspectionBaselineFixedById.TryGetValue(roi.Id, out var fixedBaseline))
-            {
-                return fixedBaseline.Clone();
-            }
-
-            var persistedBaseline = GetInspectionBaselineClone(roi.Id, imageKey);
-            if (persistedBaseline == null)
-            {
-                return null;
-            }
-
-            return persistedBaseline.Clone();
-        }
-
-        private IReadOnlyDictionary<string, MasterAnchorChoice> BuildAnchorMapFromLayout()
-        {
-            var map = new Dictionary<string, MasterAnchorChoice>(StringComparer.OrdinalIgnoreCase);
-            if (_layout?.InspectionRois == null)
-            {
-                return map;
-            }
-
-            foreach (var cfg in _layout.InspectionRois)
-            {
-                if (cfg == null)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(cfg.Id))
-                {
-                    map[cfg.Id] = cfg.AnchorMaster;
-                }
-
-                if (!string.IsNullOrWhiteSpace(cfg.ModelKey))
-                {
-                    map[cfg.ModelKey] = cfg.AnchorMaster;
-                }
-            }
-
-            return map;
-        }
-
-        private void ApplyPlacementResults(RoiPlacementOutput output, IReadOnlyList<InspectionPlacementTarget> inspectionTargets)
-        {
-            if (_layout == null)
-            {
+                InspLog($"[PLACE] failed to apply placement reason={reason}");
                 return;
             }
 
-            foreach (var master in output.MastersPlaced)
-            {
-                switch (master.Role)
-                {
-                    case RoiRole.Master1Pattern:
-                        _layout.Master1Pattern = master;
-                        break;
-                    case RoiRole.Master2Pattern:
-                        _layout.Master2Pattern = master;
-                        break;
-                }
-            }
-
-            for (int i = 0; i < inspectionTargets.Count; i++)
-            {
-                if (i >= output.InspectionsPlaced.Count)
-                {
-                    break;
-                }
-
-                var placed = output.InspectionsPlaced[i];
-                switch (inspectionTargets[i].SlotIndex)
-                {
-                    case 1:
-                        _layout.Inspection1 = placed;
-                        break;
-                    case 2:
-                        _layout.Inspection2 = placed;
-                        break;
-                    case 3:
-                        _layout.Inspection3 = placed;
-                        break;
-                    case 4:
-                        _layout.Inspection4 = placed;
-                        break;
-                    case 0:
-                        _layout.Inspection = placed;
-                        break;
-                }
-            }
+            _workflowViewModel.SetInspectionRoiModels(
+                _layout.Inspection1,
+                _layout.Inspection2,
+                _layout.Inspection3,
+                _layout.Inspection4);
 
             RefreshInspectionRoiSlots(new[]
             {
@@ -2075,18 +1932,15 @@ namespace BrakeDiscInspector_GUI_ROI
                 _layout.Inspection3,
                 _layout.Inspection4
             });
-        }
 
-        private void LogPlacement(RoiPlacementOutput output, string imageKey, RoiPlacementInput input)
-        {
-            AppendLog(FormattableString.Invariant(
-                $"[PLACE][SUMMARY] key={imageKey} M1_base=({input.BaseM1.X:0.###},{input.BaseM1.Y:0.###}) M1_det=({input.DetM1.X:0.###},{input.DetM1.Y:0.###}) M2_base=({input.BaseM2.X:0.###},{input.BaseM2.Y:0.###}) M2_det=({input.DetM2.X:0.###},{input.DetM2.Y:0.###}) rawScale={output.Debug.Scale:0.####} rawAngleDeg={output.Debug.AngleDeltaDeg:0.###} disableRot={input.DisableRot} scaleLock={input.ScaleLock} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
-
-            foreach (var detail in output.Debug.RoiDetails)
+            _lastInspectionRepositioned = output.InspectionsPlaced.Count > 0;
+            UI(() =>
             {
-                AppendLog(FormattableString.Invariant(
-                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) dx={detail.Delta.X:0.###} dy={detail.Delta.Y:0.###} sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) sizeNew=({detail.NewWidth:0.###},{detail.NewHeight:0.###},{detail.NewR:0.###},{detail.NewRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
-            }
+                RedrawAllRois();
+                UpdateRoiHud();
+                try { RedrawAnalysisCrosses(); }
+                catch { }
+            });
         }
 
         private sealed class AnalyzeMasterDecisionInfo
@@ -2103,10 +1957,7 @@ namespace BrakeDiscInspector_GUI_ROI
             public string Reason { get; set; } = string.Empty;
         }
 
-        private bool AcceptNewDetectionIfDifferent(SWPoint newM1, SWPoint newM2, double score1, double score2, bool scaleLock,
-                                                   RoiModel? master1Baseline,
-                                                   RoiModel? master2Baseline,
-                                                   out AnalyzeMasterDecisionInfo decisionInfo)
+        private bool AcceptNewDetectionIfDifferent(SWPoint newM1, SWPoint newM2, double score1, double score2, out AnalyzeMasterDecisionInfo decisionInfo)
         {
             decisionInfo = new AnalyzeMasterDecisionInfo
             {
@@ -2119,17 +1970,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 return false;
             }
 
-            var (snapshotM1, snapshotM2, fromFixed) = GetMastersBaselineSnapshot();
-            var baselineM1 = master1Baseline ?? snapshotM1;
-            var baselineM2 = master2Baseline ?? snapshotM2;
-            string baselineSource = master1Baseline != null || master2Baseline != null
-                ? "explicit"
-                : (fromFixed ? "fixed" : "layout-fallback");
+            var hasBaseline = TryGetLayoutOriginalMasterCenters(out var baselineM1Point, out var baselineM2Point);
+            string baselineSource = hasBaseline ? "layout-original" : "missing";
             decisionInfo.BaselineSource = baselineSource;
-            var baselineM1Center = baselineM1 != null ? baselineM1.GetCenter() : (double.NaN, double.NaN);
-            var baselineM2Center = baselineM2 != null ? baselineM2.GetCenter() : (double.NaN, double.NaN);
-            var baselineM1Point = new SWPoint(baselineM1Center.Item1, baselineM1Center.Item2);
-            var baselineM2Point = new SWPoint(baselineM2Center.Item1, baselineM2Center.Item2);
 
             var effectiveAnalyze = GetEffectiveAnalyzeOptions();
             var imageKey = GetCurrentImageKey();
@@ -2230,7 +2073,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var applyDx = m1ToApply.X - baselineM1Point.X;
             var applyDy = m1ToApply.Y - baselineM1Point.Y;
             InspLog($"[APPLY] baselineM1=({baselineM1Point.X:0.###},{baselineM1Point.Y:0.###}) acceptedM1=({m1ToApply.X:0.###},{m1ToApply.Y:0.###}) deltaPx=({applyDx:0.###},{applyDy:0.###}) angle={applyAngle:0.###}");
-            ApplyPlacementForAnchors(imageKey, m1ToApply, m2ToApply, "analyze-master", baselineM1, baselineM2);
+            ApplyPlacementForAnchors(imageKey, m1ToApply, m2ToApply, "analyze-master");
 
             if (accept)
             {
@@ -4519,6 +4362,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 _isInitializingOptions = false;
             }
 
+            SetFeatureSelection(featureM1);
+            SetFeatureSelectionM2(featureM2);
+
+            GuiLog.Info(FormattableString.Invariant(
+                $"[LAYOUT-LOAD][ANALYZE] featureM1={featureM1} thrM1={thrM1} featureM2={featureM2} thrM2={thrM2} " +
+                $"scaleLock={scaleLock} disableRot={disableRot} rotRange={rotRange} scaleMin={scaleMin:0.###} scaleMax={scaleMax:0.###}"));
+
             PersistAnalyzeOptions();
             PersistUiOptions();
         }
@@ -5545,9 +5395,6 @@ namespace BrakeDiscInspector_GUI_ROI
             _inspectionBaselineSeededForImage = false;   // force reseed of inspection baseline for this image
             _imageKeyForMasters = string.Empty;          // so masters won't be considered already seeded
             _mastersSeededForImage = false;              // seed again during auto Analyze Master
-            _hasInspectionAnalysisTransform = false;
-            _isFirstImageForCurrentKey = true;
-            _inspectionBaselineRestorePending = false;
             RemoveAllRoiAdorners();
             LogDebug($"[roi-diag] load image → seeded=false, mastersSeeded={_mastersSeededForImage}, imageKey='{_imageKeyForMasters}'");
             OnImageLoaded_SetCurrentSource(_imgSourceBI);
@@ -5602,7 +5449,6 @@ namespace BrakeDiscInspector_GUI_ROI
             RedrawOverlaySafe();
             DumpUiShapesMap("imgload:post-redraw");
             ClearHeatmapOverlay();
-            RestoreInspectionBaselineForCurrentImage();
 
             Dispatcher.InvokeAsync(async () =>
             {
@@ -11473,31 +11319,18 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 var crossM1 = c1.Value;
                 var crossM2 = c2.Value;
-                var master1Baseline = _layout?.Master1Pattern?.Clone();
-                var master2Baseline = _layout?.Master2Pattern?.Clone();
-                var baseM1 = master1Baseline != null ? master1Baseline.GetCenter() : (double.NaN, double.NaN);
-                var baseM2 = master2Baseline != null ? master2Baseline.GetCenter() : (double.NaN, double.NaN);
-                var baseM1Point = new SWPoint(baseM1.Item1, baseM1.Item2);
-                var baseM2Point = new SWPoint(baseM2.Item1, baseM2.Item2);
+                TryGetLayoutOriginalMasterCenters(out var baseM1Point, out var baseM2Point);
                 double posTolPx = effectiveAnalyze.PosTolPx;
-                bool scaleLock = false;
-                UI(() => scaleLock = GetScaleLockUi());
 
                 LogAnalyzeMasterRawVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2, s1, s2, posTolPx);
                 LogAnalyzeMasterDeltaVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2);
                 LogAnalyzeMasterPreAcceptVisConf(analyzeImageKey, analyzeFileName, baseM1Point, baseM2Point, crossM1, crossM2, s1, s2);
-
-                var preMoveSnapshot = SnapshotInspectionRois();
-                TrySeedInspectionBaselineForImage(analyzeImageKey, preMoveSnapshot, "analyze:pre-move");
 
                 _ = AcceptNewDetectionIfDifferent(
                     crossM1,
                     crossM2,
                     s1,
                     s2,
-                    scaleLock,
-                    master1Baseline,
-                    master2Baseline,
                     out var decisionInfo);
 
                 LogAnalyzeMasterVisConf(analyzeImageKey, analyzeFileName, c1.Value, c2.Value, s1, s2, decisionInfo);
@@ -11554,14 +11387,6 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[FLOW] Layout guardado");
-            }
-
-            _hasInspectionAnalysisTransform = true;
-            _isFirstImageForCurrentKey = false;
-
-            if (_inspectionBaselineRestorePending)
-            {
-                RestoreInspectionBaselineForCurrentImage();
             }
 
             var uiApplySw = Stopwatch.StartNew();
@@ -12305,34 +12130,6 @@ namespace BrakeDiscInspector_GUI_ROI
             TrySeedInspectionBaselineForImage(_currentImageHash, snapshot, "save-current");
         }
 
-        private void RestoreInspectionBaselineForCurrentImage()
-        {
-            if (string.IsNullOrWhiteSpace(_currentImageHash))
-            {
-                _inspectionBaselineRestorePending = false;
-                return;
-            }
-
-            if (!_hasInspectionAnalysisTransform || _isFirstImageForCurrentKey)
-            {
-                _inspectionBaselineRestorePending = true;
-                return;
-            }
-
-            _inspectionBaselineRestorePending = false;
-
-            if (_inspectionBaselinesByImage.TryGetValue(_currentImageHash, out var snapshot) && snapshot.Count > 0)
-            {
-                var clones = snapshot.Select(r => r.Clone()).ToList();
-                if (clones.Count > 0)
-                {
-                    _layout.Inspection = clones[0];
-                }
-
-                RefreshInspectionRoiSlots(clones);
-                RedrawAllRois();
-            }
-        }
         private RoiModel? GetInspectionBaselineClone(string? roiId, string? imageKey)
         {
             if (!string.IsNullOrWhiteSpace(imageKey))
@@ -13310,6 +13107,23 @@ namespace BrakeDiscInspector_GUI_ROI
             if (ComboFeature.Items.Count > 0 && ComboFeature.SelectedIndex < 0)
             {
                 ComboFeature.SelectedIndex = 0;
+            }
+        }
+
+        private void SetFeatureSelectionM2(string feature)
+        {
+            string normalized = NormalizeFeature(feature);
+            foreach (var item in ComboFeatureM2.Items)
+            {
+                if (NormalizeFeature(GetFeatureLabel(item)) == normalized)
+                {
+                    ComboFeatureM2.SelectedItem = item;
+                    return;
+                }
+            }
+            if (ComboFeatureM2.Items.Count > 0 && ComboFeatureM2.SelectedIndex < 0)
+            {
+                ComboFeatureM2.SelectedIndex = 0;
             }
         }
 

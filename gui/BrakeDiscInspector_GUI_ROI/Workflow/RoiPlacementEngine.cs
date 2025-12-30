@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using BrakeDiscInspector_GUI_ROI.Models;
+using BrakeDiscInspector_GUI_ROI.Util;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
@@ -28,7 +29,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         bool ScaleLock,
         ScaleMode ScaleMode,
         bool UseMidAnchorFallback,
-        IReadOnlyDictionary<string, MasterAnchorChoice>? AnchorByRoiId);
+        IReadOnlyDictionary<string, MasterAnchorChoice>? AnchorByRoiId)
+    {
+        public string? ImageKey { get; init; }
+    }
 
     public sealed record PlacementRoiDebug(
         string RoiId,
@@ -90,6 +94,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var distBase = Hypot(baseVec);
             var distDet = Hypot(detVec);
             var scale = distBase > 1e-9 ? distDet / distBase : 1.0;
+            var translateOnly = input.DisableRot && input.ScaleLock;
 
             var mastersPlaced = new List<RoiModel>();
             if (baselineMasters != null)
@@ -122,7 +127,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     ImgPoint newCenter;
                     double newAngle = baseline.AngleDeg;
 
-                    if (input.DisableRot)
+                    if (translateOnly || input.DisableRot)
                     {
                         var delta = anchor switch
                         {
@@ -175,6 +180,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 deltaM2,
                 deltaMid,
                 debugEntries);
+
+            LogPlacement(input, translateOnly, debug);
 
             return new RoiPlacementOutput(mastersPlaced, inspectionPlaced, debug);
         }
@@ -248,6 +255,31 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             return normalized - Math.PI;
+        }
+
+        private static void LogPlacement(RoiPlacementInput input, bool translateOnly, PlacementDebug debug)
+        {
+            Util.GuiLog.Info(FormattableString.Invariant(
+                $"[PLACE][SUMMARY] imageKey='{input.ImageKey ?? "<none>"}' disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
+                $"translateOnly={translateOnly} baseM1=({input.BaseM1.X:0.###},{input.BaseM1.Y:0.###}) " +
+                $"baseM2=({input.BaseM2.X:0.###},{input.BaseM2.Y:0.###}) " +
+                $"detM1=({input.DetM1.X:0.###},{input.DetM1.Y:0.###}) " +
+                $"detM2=({input.DetM2.X:0.###},{input.DetM2.Y:0.###})"));
+            Util.GuiLog.Info(FormattableString.Invariant(
+                $"[PLACE][DELTAS] dM1=({debug.DeltaM1.X:0.###},{debug.DeltaM1.Y:0.###}) " +
+                $"dM2=({debug.DeltaM2.X:0.###},{debug.DeltaM2.Y:0.###}) " +
+                $"dMid=({debug.DeltaMid.X:0.###},{debug.DeltaMid.Y:0.###}) " +
+                $"angDeltaDeg={debug.AngleDeltaDeg:0.###} scale={debug.Scale:0.####}"));
+
+            foreach (var detail in debug.RoiDetails)
+            {
+                Util.GuiLog.Info(FormattableString.Invariant(
+                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} baseC=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) " +
+                    $"newC=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) dxdy=({detail.Delta.X:0.###},{detail.Delta.Y:0.###}) " +
+                    $"baseSize=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
+                    $"newSize=({detail.NewWidth:0.###},{detail.NewHeight:0.###},{detail.NewR:0.###},{detail.NewRInner:0.###}) " +
+                    $"baseAng={detail.AngleBase:0.###} newAng={detail.AngleNew:0.###}"));
+            }
         }
     }
 }

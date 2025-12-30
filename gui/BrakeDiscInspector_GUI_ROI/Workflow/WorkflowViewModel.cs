@@ -1637,7 +1637,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public void InitializeBatchSession()
         {
-            if (_layout != null)
+            if (_layoutOriginal == null && _layout != null)
             {
                 _layoutOriginal = _layout.DeepClone();
             }
@@ -1655,7 +1655,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             for (int idx = 1; idx <= _batchBaselineRois.Length; idx++)
             {
-                var roi = GetLayoutBaselineRoi(GetInspectionConfigByIndex(idx), GetInspectionRoiModelByIndex(idx))
+                var roi = _layoutOriginal != null
+                    ? GetLayoutBaselineRoi(_layoutOriginal, GetInspectionConfigByIndex(idx), GetInspectionRoiModelByIndex(idx))
+                    : null
                           ?? GetInspectionRoiModelByIndex(idx);
                 _batchBaselineRois[idx - 1] = roi?.DeepClone();
             }
@@ -1903,13 +1905,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             RoiModel? source = roi;
-            if (_isBatchRunning && config != null)
+            if (_layoutOriginal != null)
             {
-                source = GetBatchBaselineRoi(config.Index) ?? roi;
-            }
-            else
-            {
-                var stable = GetLayoutBaselineRoi(config, roi);
+                var stable = GetLayoutBaselineRoi(_layoutOriginal, config, roi);
                 if (stable != null)
                 {
                     source = stable;
@@ -1919,9 +1917,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return SeedBaselineForRoi(config, source ?? roi, reason);
         }
 
-        private RoiModel? GetLayoutBaselineRoi(InspectionRoiConfig? config, RoiModel roi)
+        private RoiModel? GetLayoutBaselineRoi(MasterLayout layout, InspectionRoiConfig? config, RoiModel? roi)
         {
-            if (_layoutOriginal == null)
+            if (layout == null)
             {
                 return null;
             }
@@ -1931,23 +1929,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 baseline = config.Index switch
                 {
-                    1 => _layoutOriginal.Inspection1,
-                    2 => _layoutOriginal.Inspection2,
-                    3 => _layoutOriginal.Inspection3,
-                    4 => _layoutOriginal.Inspection4,
+                    1 => layout.Inspection1,
+                    2 => layout.Inspection2,
+                    3 => layout.Inspection3,
+                    4 => layout.Inspection4,
                     _ => null
                 };
             }
 
-            if (baseline == null && !string.IsNullOrWhiteSpace(roi.Id))
+            if (baseline == null && !string.IsNullOrWhiteSpace(roi?.Id))
             {
                 baseline = new[]
                     {
-                        _layoutOriginal.Inspection1,
-                        _layoutOriginal.Inspection2,
-                        _layoutOriginal.Inspection3,
-                        _layoutOriginal.Inspection4,
-                        _layoutOriginal.Inspection
+                        layout.Inspection1,
+                        layout.Inspection2,
+                        layout.Inspection3,
+                        layout.Inspection4,
+                        layout.Inspection
                     }
                     .FirstOrDefault(r => r != null && string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase));
             }
@@ -1964,22 +1962,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             foreach (var rcfg in _inspectionRois.Where(r => r.Enabled))
             {
-                RoiModel? roi = null;
-                if (_isBatchRunning)
-                {
-                    roi = GetBatchBaselineRoi(rcfg.Index) ?? GetInspectionRoiModelByIndex(rcfg.Index);
-                }
-                else
-                {
-                    roi = GetInspectionRoiModelByIndex(rcfg.Index);
-                }
+                var roi = GetInspectionRoiModelByIndex(rcfg.Index);
 
                 if (roi == null)
                 {
                     continue;
                 }
 
-                SeedBaselineForRoi(rcfg, roi, reason);
+                var baseline = _layoutOriginal != null ? GetLayoutBaselineRoi(_layoutOriginal, rcfg, roi) : null;
+                SeedBaselineForRoi(rcfg, baseline ?? roi, reason);
             }
         }
 
@@ -5378,32 +5369,205 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return false;
             }
 
+            var m1DetectedCenter = _m1Detection.Center!.Value;
+            var m2DetectedCenter = _m2Detection.Center!.Value;
+            var detM1 = new ImgPoint(m1DetectedCenter.X, m1DetectedCenter.Y);
+            var detM2 = new ImgPoint(m2DetectedCenter.X, m2DetectedCenter.Y);
+            var imageKey = Path.GetFileName(CurrentImagePath ?? string.Empty);
+
+            return TryBuildPlacementInputFromDetections(detM1, detM2, imageKey, out input);
+        }
+
+        public bool TryBuildPlacementInputFromDetections(ImgPoint detM1, ImgPoint detM2, string? imageKey, out RoiPlacementInput input)
+        {
+            input = default;
+            if (_layoutOriginal?.Master1Pattern == null || _layoutOriginal.Master2Pattern == null)
+            {
+                return false;
+            }
+
             var (m1bx, m1by) = _layoutOriginal.Master1Pattern.GetCenter();
             var (m2bx, m2by) = _layoutOriginal.Master2Pattern.GetCenter();
             var m1BaselineCenter = new ImgPoint(m1bx, m1by);
             var m2BaselineCenter = new ImgPoint(m2bx, m2by);
 
-            var m1DetectedCenter = _m1Detection.Center!.Value;
-            var m2DetectedCenter = _m2Detection.Center!.Value;
-            var detM1 = new ImgPoint(m1DetectedCenter.X, m1DetectedCenter.Y);
-            var detM2 = new ImgPoint(m2DetectedCenter.X, m2DetectedCenter.Y);
-
             var analyzeOpts = _layoutOriginal.Analyze ?? new AnalyzeOptions();
-            bool scaleLock = analyzeOpts.ScaleLock;
-            bool disableRot = analyzeOpts.DisableRot;
-
             input = new RoiPlacementInput(
                 m1BaselineCenter,
                 m2BaselineCenter,
                 detM1,
                 detM2,
-                disableRot,
-                scaleLock,
+                analyzeOpts.DisableRot,
+                analyzeOpts.ScaleLock,
                 ScaleMode.None,
                 true,
-                BuildAnchorMap());
+                BuildAnchorMap())
+            {
+                ImageKey = imageKey
+            };
 
             return true;
+        }
+
+        public bool TryGetLayoutOriginalMasterCenters(out ImgPoint baseM1, out ImgPoint baseM2)
+        {
+            baseM1 = default;
+            baseM2 = default;
+
+            if (_layoutOriginal?.Master1Pattern == null || _layoutOriginal.Master2Pattern == null)
+            {
+                return false;
+            }
+
+            var (m1bx, m1by) = _layoutOriginal.Master1Pattern.GetCenter();
+            var (m2bx, m2by) = _layoutOriginal.Master2Pattern.GetCenter();
+            baseM1 = new ImgPoint(m1bx, m1by);
+            baseM2 = new ImgPoint(m2bx, m2by);
+            return true;
+        }
+
+        public bool TryApplyPlacementToLayout(MasterLayout layout, ImgPoint detM1, ImgPoint detM2, string? imageKey, out RoiPlacementOutput output)
+        {
+            output = default;
+            if (!TryBuildPlacementInputFromDetections(detM1, detM2, imageKey, out var input))
+            {
+                return false;
+            }
+
+            if (_layoutOriginal?.Master1Pattern == null || _layoutOriginal.Master2Pattern == null)
+            {
+                return false;
+            }
+
+            var targets = BuildPlacementTargetsFromLayoutOriginal(includeLegacyInspection: true);
+            if (targets.Count == 0)
+            {
+                return false;
+            }
+
+            var baselineMasters = new List<RoiModel>
+            {
+                _layoutOriginal.Master1Pattern.Clone(),
+                _layoutOriginal.Master2Pattern.Clone()
+            };
+            var baselineInspections = targets.Select(t => t.Baseline).ToList();
+            output = RoiPlacementEngine.Place(input, baselineMasters, baselineInspections);
+
+            ApplyPlacementToLayout(layout, targets, output);
+            LogBatchPlacement(output, input);
+            return true;
+        }
+
+        private sealed record LayoutPlacementTarget(int SlotIndex, RoiModel Baseline);
+
+        private IReadOnlyList<LayoutPlacementTarget> BuildPlacementTargetsFromLayoutOriginal(bool includeLegacyInspection)
+        {
+            if (_layoutOriginal == null)
+            {
+                return Array.Empty<LayoutPlacementTarget>();
+            }
+
+            var targets = new List<LayoutPlacementTarget>();
+            var configs = _inspectionRois ?? _layoutOriginal.InspectionRois;
+
+            if (configs != null && configs.Count > 0)
+            {
+                foreach (var cfg in configs.OrderBy(c => c.Index))
+                {
+                    var baseline = GetLayoutBaselineRoi(_layoutOriginal, cfg, null);
+                    if (baseline != null)
+                    {
+                        targets.Add(new LayoutPlacementTarget(cfg.Index, baseline.Clone()));
+                    }
+                }
+            }
+            else
+            {
+                var fallback = new[]
+                {
+                    (1, _layoutOriginal.Inspection1),
+                    (2, _layoutOriginal.Inspection2),
+                    (3, _layoutOriginal.Inspection3),
+                    (4, _layoutOriginal.Inspection4)
+                };
+
+                foreach (var (idx, roi) in fallback)
+                {
+                    if (roi != null)
+                    {
+                        targets.Add(new LayoutPlacementTarget(idx, roi.Clone()));
+                    }
+                }
+            }
+
+            if (includeLegacyInspection && _layoutOriginal.Inspection != null)
+            {
+                targets.Add(new LayoutPlacementTarget(0, _layoutOriginal.Inspection.Clone()));
+            }
+
+            return targets;
+        }
+
+        private static void ApplyPlacementToLayout(MasterLayout layout, IReadOnlyList<LayoutPlacementTarget> targets, RoiPlacementOutput output)
+        {
+            foreach (var master in output.MastersPlaced)
+            {
+                switch (master.Role)
+                {
+                    case RoiRole.Master1Pattern:
+                        layout.Master1Pattern = master;
+                        break;
+                    case RoiRole.Master2Pattern:
+                        layout.Master2Pattern = master;
+                        break;
+                }
+            }
+
+            for (int i = 0; i < targets.Count && i < output.InspectionsPlaced.Count; i++)
+            {
+                var placed = output.InspectionsPlaced[i];
+                switch (targets[i].SlotIndex)
+                {
+                    case 1:
+                        layout.Inspection1 = placed;
+                        break;
+                    case 2:
+                        layout.Inspection2 = placed;
+                        break;
+                    case 3:
+                        layout.Inspection3 = placed;
+                        break;
+                    case 4:
+                        layout.Inspection4 = placed;
+                        break;
+                    case 0:
+                        layout.Inspection = placed;
+                        break;
+                }
+            }
+        }
+
+        private void ApplyPlacementToViewModel(IReadOnlyList<LayoutPlacementTarget> targets, RoiPlacementOutput output)
+        {
+            for (int i = 0; i < targets.Count && i < output.InspectionsPlaced.Count; i++)
+            {
+                var placed = output.InspectionsPlaced[i];
+                switch (targets[i].SlotIndex)
+                {
+                    case 1:
+                        Inspection1 = placed;
+                        break;
+                    case 2:
+                        Inspection2 = placed;
+                        break;
+                    case 3:
+                        Inspection3 = placed;
+                        break;
+                    case 4:
+                        Inspection4 = placed;
+                        break;
+                }
+            }
         }
 
         private Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
@@ -5423,48 +5587,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            var placementTargets = new List<(InspectionRoiConfig cfg, RoiModel target, RoiModel baseline)>();
-            foreach (var rcfg in _inspectionRois)
-            {
-                var roi = GetInspectionModelByIndex(rcfg.Index);
-                if (roi == null)
-                {
-                    continue;
-                }
-
-                var baseline = EnsureBaselineForRoi(rcfg, roi, "reposition");
-                var baselineModel = BuildBaselineModel(roi, baseline);
-                placementTargets.Add((rcfg, roi, baselineModel));
-            }
-
+            var placementTargets = BuildPlacementTargetsFromLayoutOriginal(includeLegacyInspection: false);
             if (placementTargets.Count == 0)
             {
                 return;
             }
 
-            var baselineList = placementTargets.Select(p => p.baseline).ToList();
+            var baselineList = placementTargets.Select(p => p.Baseline).ToList();
             var output = RoiPlacementEngine.Place(input, Array.Empty<RoiModel>(), baselineList);
 
-            for (var i = 0; i < placementTargets.Count; i++)
-            {
-                var cfg = placementTargets[i].cfg;
-                var placed = output.InspectionsPlaced[i];
-                switch (cfg.Index)
-                {
-                    case 1:
-                        Inspection1 = placed;
-                        break;
-                    case 2:
-                        Inspection2 = placed;
-                        break;
-                    case 3:
-                        Inspection3 = placed;
-                        break;
-                    case 4:
-                        Inspection4 = placed;
-                        break;
-                }
-            }
+            ApplyPlacementToViewModel(placementTargets, output);
 
             LogBatchPlacement(output, input);
         }

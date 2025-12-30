@@ -1495,15 +1495,16 @@ namespace BrakeDiscInspector_GUI_ROI
         private void RefreshInspectionSlotsFromLayout()
         {
             var sources = new List<RoiModel?>(capacity: 4);
+            var imageKey = _hasLoadedImage ? GetCurrentImageKey() : string.Empty;
             for (int index = 1; index <= 4; index++)
             {
-                var roi = GetInspectionSlotModel(index) ?? FindInspectionBaselineForIndex(index);
+                var roi = GetInspectionSlotModel(index) ?? FindInspectionBaselineForIndex(index, imageKey);
                 if (roi == null && _layout?.InspectionRois != null)
                 {
                     var cfg = _layout.InspectionRois.FirstOrDefault(r => r != null && r.Index == index);
                     if (cfg?.Enabled == true && !string.IsNullOrWhiteSpace(cfg.Id))
                     {
-                        roi = FindInspectionBaselineById(cfg.Id);
+                        roi = FindInspectionBaselineById(cfg.Id, imageKey);
                     }
                 }
                 if (roi != null)
@@ -1550,18 +1551,18 @@ namespace BrakeDiscInspector_GUI_ROI
             _workflowViewModel?.SetInspectionRoiModels(null, null, null, null);
         }
 
-        private RoiModel? FindInspectionBaselineForIndex(int index)
+        private RoiModel? FindInspectionBaselineForIndex(int index, string? imageKey)
         {
-            if (_layout?.InspectionBaselinesByImage == null)
+            if (string.IsNullOrWhiteSpace(imageKey) || _layout?.InspectionBaselinesByImage == null)
             {
                 return null;
             }
 
             var id = $"Inspection_{index}";
 
-            foreach (var kv in _layout.InspectionBaselinesByImage)
+            if (_layout.InspectionBaselinesByImage.TryGetValue(imageKey, out var snapshot))
             {
-                var match = kv.Value?
+                var match = snapshot?
                     .FirstOrDefault(r => r != null && string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase));
 
                 if (match != null)
@@ -1575,16 +1576,16 @@ namespace BrakeDiscInspector_GUI_ROI
             return null;
         }
 
-        private RoiModel? FindInspectionBaselineById(string id)
+        private RoiModel? FindInspectionBaselineById(string id, string? imageKey)
         {
-            if (string.IsNullOrWhiteSpace(id) || _layout?.InspectionBaselinesByImage == null)
+            if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(imageKey) || _layout?.InspectionBaselinesByImage == null)
             {
                 return null;
             }
 
-            foreach (var kv in _layout.InspectionBaselinesByImage)
+            if (_layout.InspectionBaselinesByImage.TryGetValue(imageKey, out var snapshot))
             {
-                var match = kv.Value?
+                var match = snapshot?
                     .FirstOrDefault(r => r != null && string.Equals(r.Id, id, StringComparison.OrdinalIgnoreCase));
 
                 if (match != null)
@@ -1596,138 +1597,6 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             return null;
-        }
-
-        private void RescaleInspectionRoisToNewImageSize(double newW, double newH)
-        {
-            if (newW <= 0 || newH <= 0)
-            {
-                return;
-            }
-
-            var rois = GetInspectionRoiModelsForRescale();
-            if (rois.Count == 0)
-            {
-                return;
-            }
-
-            bool anyScaled = false;
-
-            foreach (var roi in rois)
-            {
-                if (roi == null)
-                {
-                    continue;
-                }
-
-                int? index = TryParseInspectionIndex(roi);
-                if (!index.HasValue && _layout != null)
-                {
-                    if (ReferenceEquals(roi, _layout.Inspection1)) index = 1;
-                    else if (ReferenceEquals(roi, _layout.Inspection2)) index = 2;
-                    else if (ReferenceEquals(roi, _layout.Inspection3)) index = 3;
-                    else if (ReferenceEquals(roi, _layout.Inspection4)) index = 4;
-                }
-
-                var config = index.HasValue ? GetInspectionConfigByIndex(index.Value) : null;
-                string slotLabel = index.HasValue ? index.Value.ToString(CultureInfo.InvariantCulture) : "?";
-                string roiId = !string.IsNullOrWhiteSpace(roi.Id) ? roi.Id : "<null>";
-
-                double oldW = roi.BaseImgW ?? 0.0;
-                double oldH = roi.BaseImgH ?? 0.0;
-
-                if ((oldW <= 0.0 || oldH <= 0.0) && config != null)
-                {
-                    oldW = config.BaseImgW ?? 0.0;
-                    oldH = config.BaseImgH ?? 0.0;
-                }
-
-                if (oldW <= 0.0 || oldH <= 0.0)
-                {
-                    roi.BaseImgW ??= newW;
-                    roi.BaseImgH ??= newH;
-                    if (config != null)
-                    {
-                        config.BaseImgW ??= newW;
-                        config.BaseImgH ??= newH;
-                    }
-                    AppendLog(string.Format(CultureInfo.InvariantCulture,
-                        "[scale] slot={0} id={1} base-missing -> base set to ({2:0.###}x{3:0.###})",
-                        slotLabel,
-                        roiId,
-                        newW,
-                        newH));
-                    continue;
-                }
-
-                double sx = newW / oldW;
-                double sy = newH / oldH;
-
-                AppendLog(string.Format(CultureInfo.InvariantCulture,
-                    "[scale] slot={0} id={1} sx={2:0.###} sy={3:0.###} base=({4:0.###}x{5:0.###}) -> ({6:0.###}x{7:0.###})",
-                    slotLabel,
-                    roiId,
-                    sx,
-                    sy,
-                    oldW,
-                    oldH,
-                    newW,
-                    newH));
-
-                if (Math.Abs(sx - 1.0) < 1e-9 && Math.Abs(sy - 1.0) < 1e-9)
-                {
-                    roi.BaseImgW = newW;
-                    roi.BaseImgH = newH;
-                    if (config != null)
-                    {
-                        config.BaseImgW = newW;
-                        config.BaseImgH = newH;
-                    }
-                    continue;
-                }
-
-                switch (roi.Shape)
-                {
-                    case RoiShape.Rectangle:
-                        roi.X *= sx;
-                        roi.Y *= sy;
-                        roi.Width *= sx;
-                        roi.Height *= sy;
-                        break;
-
-                    case RoiShape.Circle:
-                    case RoiShape.Annulus:
-                        roi.CX *= sx;
-                        roi.CY *= sy;
-                        roi.X *= sx;
-                        roi.Y *= sy;
-                        double s = Math.Min(sx, sy);
-                        roi.R *= s;
-                        if (roi.Shape == RoiShape.Annulus)
-                        {
-                            roi.RInner *= s;
-                        }
-                        roi.Width *= s;
-                        roi.Height *= s;
-                        break;
-                }
-
-                roi.BaseImgW = newW;
-                roi.BaseImgH = newH;
-
-                if (config != null)
-                {
-                    config.BaseImgW = newW;
-                    config.BaseImgH = newH;
-                }
-
-                anyScaled = true;
-            }
-
-            if (anyScaled)
-            {
-                TryPersistLayout();
-            }
         }
 
         // === ROI diagnostics ===
@@ -2054,7 +1923,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 anchorMap);
 
             var baselineMasters = new List<RoiModel> { baselineM1.Clone(), baselineM2.Clone() };
-            var inspectionTargets = CollectInspectionPlacementTargets();
+            var inspectionTargets = CollectInspectionPlacementTargets(imageKey);
             var baselineInspections = inspectionTargets.Select(t => t.Baseline).ToList();
 
             var output = RoiPlacementEngine.Place(input, baselineMasters, baselineInspections);
@@ -2074,7 +1943,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private sealed record InspectionPlacementTarget(int SlotIndex, RoiModel Baseline);
 
-        private List<InspectionPlacementTarget> CollectInspectionPlacementTargets()
+        private List<InspectionPlacementTarget> CollectInspectionPlacementTargets(string imageKey)
         {
             var targets = new List<InspectionPlacementTarget>();
 
@@ -2085,7 +1954,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                var baseline = ResolveBaselineForInspection(roi);
+                var baseline = ResolveBaselineForInspection(roi, imageKey);
                 if (baseline == null)
                 {
                     InspLog($"[PLACE][WARN] Missing baseline for roiId='{roi.Id ?? "<null>"}'; skipping placement.");
@@ -2104,7 +1973,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return targets;
         }
 
-        private RoiModel? ResolveBaselineForInspection(RoiModel roi)
+        private RoiModel? ResolveBaselineForInspection(RoiModel roi, string imageKey)
         {
             if (_useFixedInspectionBaseline
                 && !string.IsNullOrWhiteSpace(roi.Id)
@@ -2113,7 +1982,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return fixedBaseline.Clone();
             }
 
-            var persistedBaseline = GetInspectionBaselineClone(roi.Id);
+            var persistedBaseline = GetInspectionBaselineClone(roi.Id, imageKey);
             if (persistedBaseline == null)
             {
                 return null;
@@ -2211,12 +2080,20 @@ namespace BrakeDiscInspector_GUI_ROI
         private void LogPlacement(RoiPlacementOutput output, string imageKey, RoiPlacementInput input)
         {
             AppendLog(FormattableString.Invariant(
-                $"[PLACE][SUMMARY] key={imageKey} disableRot={input.DisableRot} scaleLock={input.ScaleLock} scale={output.Debug.Scale:0.####} angDelta={output.Debug.AngleDeltaDeg:0.###} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
+                $"[PLACE][SUMMARY] key={imageKey} " +
+                $"M1_base=({input.BaseM1.X:0.###},{input.BaseM1.Y:0.###}) M1_det=({input.DetM1.X:0.###},{input.DetM1.Y:0.###}) " +
+                $"M2_base=({input.BaseM2.X:0.###},{input.BaseM2.Y:0.###}) M2_det=({input.DetM2.X:0.###},{input.DetM2.Y:0.###}) " +
+                $"rawScale={output.Debug.Scale:0.####} rawAngleDeg={output.Debug.AngleDeltaDeg:0.###} disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
+                $"distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
 
             foreach (var detail in output.Debug.RoiDetails)
             {
                 AppendLog(FormattableString.Invariant(
-                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) sizeNew=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
+                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) " +
+                    $"new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) dx={detail.Delta.X:0.###} dy={detail.Delta.Y:0.###} " +
+                    $"sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
+                    $"sizeNew=({detail.NewWidth:0.###},{detail.NewHeight:0.###},{detail.NewR:0.###},{detail.NewRInner:0.###}) " +
+                    $"angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
             }
         }
 
@@ -4476,25 +4353,23 @@ namespace BrakeDiscInspector_GUI_ROI
         private void SyncPresetUiFromLayoutAnalyzeOptions()
         {
             var layoutAnalyze = _layout?.Analyze;
-            if (_preset == null)
-            {
-                return;
-            }
-
             var defaults = new AnalyzeOptions();
             int rotRange = layoutAnalyze != null && layoutAnalyze.RotRange > 0
                 ? layoutAnalyze.RotRange
-                : (_preset.RotRange > 0 ? _preset.RotRange : defaults.RotRange);
+                : (_preset != null && _preset.RotRange > 0 ? _preset.RotRange : defaults.RotRange);
             double scaleMin = layoutAnalyze != null && IsPositiveFinite(layoutAnalyze.ScaleMin)
                 ? layoutAnalyze.ScaleMin
-                : (IsPositiveFinite(_preset.ScaleMin) ? _preset.ScaleMin : defaults.ScaleMin);
+                : (_preset != null && IsPositiveFinite(_preset.ScaleMin) ? _preset.ScaleMin : defaults.ScaleMin);
             double scaleMax = layoutAnalyze != null && IsPositiveFinite(layoutAnalyze.ScaleMax)
                 ? layoutAnalyze.ScaleMax
-                : (IsPositiveFinite(_preset.ScaleMax) ? _preset.ScaleMax : defaults.ScaleMax);
+                : (_preset != null && IsPositiveFinite(_preset.ScaleMax) ? _preset.ScaleMax : defaults.ScaleMax);
 
-            _preset.RotRange = rotRange;
-            _preset.ScaleMin = scaleMin;
-            _preset.ScaleMax = scaleMax;
+            if (_preset != null)
+            {
+                _preset.RotRange = rotRange;
+                _preset.ScaleMin = scaleMin;
+                _preset.ScaleMax = scaleMax;
+            }
 
             TxtRot.Text = rotRange.ToString(CultureInfo.InvariantCulture);
             TxtSMin.Text = scaleMin.ToString(CultureInfo.InvariantCulture);
@@ -5691,7 +5566,6 @@ namespace BrakeDiscInspector_GUI_ROI
             _imgH = _imgSourceBI.PixelHeight;
 
             LogImgLoadAndRois("imgload:pre-rescale");
-            RescaleInspectionRoisToNewImageSize(_imgW, _imgH);
             LogImgLoadAndRois("imgload:post-rescale");
 
             try
@@ -12300,7 +12174,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return adjusted;
             }
 
-            var persisted = GetInspectionBaselineClone(roiId);
+            var persisted = GetInspectionBaselineClone(roiId, seedKey);
             if (persisted == null)
             {
                 InspLog($"[Seed][WARN] Missing persisted baseline for roiId='{roiId}'; skipping current ROI baseline.");
@@ -12467,8 +12341,22 @@ namespace BrakeDiscInspector_GUI_ROI
                 RedrawAllRois();
             }
         }
-        private RoiModel? GetInspectionBaselineClone(string? roiId = null)
+        private RoiModel? GetInspectionBaselineClone(string? roiId, string? imageKey)
         {
+            if (!string.IsNullOrWhiteSpace(imageKey))
+            {
+                var imageBaseline = FindInspectionBaselineById(roiId ?? string.Empty, imageKey);
+                if (imageBaseline != null)
+                {
+                    return imageBaseline.Clone();
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(roiId) && _inspectionBaselineLayoutFixedById.TryGetValue(roiId, out var layoutBaseline))
+            {
+                return layoutBaseline.Clone();
+            }
+
             var baseline = _layout?.InspectionBaseline;
             if (baseline != null)
             {
@@ -12478,9 +12366,22 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(roiId))
+            if (!string.IsNullOrWhiteSpace(roiId) && _layout != null)
             {
-                return FindInspectionBaselineById(roiId);
+                var fallback = new[]
+                    {
+                        _layout.Inspection1,
+                        _layout.Inspection2,
+                        _layout.Inspection3,
+                        _layout.Inspection4,
+                        _layout.Inspection
+                    }
+                    .FirstOrDefault(r => r != null && string.Equals(r.Id, roiId, StringComparison.OrdinalIgnoreCase));
+
+                if (fallback != null)
+                {
+                    return fallback.Clone();
+                }
             }
 
             return null;

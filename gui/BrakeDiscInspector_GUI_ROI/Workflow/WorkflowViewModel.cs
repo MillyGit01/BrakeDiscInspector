@@ -802,58 +802,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             TraceBatch($"[batch-xform] reset step={_batchXform.StepId} S=1 R=0 Tx=0 Ty=0");
         }
 
-        private static (double scale, double tx, double ty, double rotDeg) BuildTransformFromMasters(
-            double cx1Old, double cy1Old, double cx2Old, double cy2Old,
-            double cx1New, double cy1New, double cx2New, double cy2New)
-        {
-            var dxO = cx2Old - cx1Old; var dyO = cy2Old - cy1Old;
-            var dxN = cx2New - cx1New; var dyN = cy2New - cy1New;
-
-            var distO = Math.Sqrt(dxO * dxO + dyO * dyO);
-            var distN = Math.Sqrt(dxN * dxN + dyN * dyN);
-            var scale = (distO > 1e-6) ? distN / distO : 1.0;
-
-            var angO = Math.Atan2(dyO, dxO);
-            var angN = Math.Atan2(dyN, dxN);
-            var rotRad = angN - angO;
-            var rotDeg = rotRad * 180.0 / Math.PI;
-
-            // Translation is anchor-specific at placement time; keep identity offsets here
-            // to avoid suggesting a single global anchor. Values retained for legacy logging.
-            return (scale, 0.0, 0.0, rotDeg);
-        }
-
-        private static Rect ApplyBatchTransformToRect(Rect r, (double s, double dx, double dy, double rot) xf)
-        {
-            double rad = xf.rot * Math.PI / 180.0;
-            double cos = Math.Cos(rad), sin = Math.Sin(rad), s = xf.s;
-            Point[] pts = new[]
-            {
-                new Point(r.Left,  r.Top),
-                new Point(r.Right, r.Top),
-                new Point(r.Right, r.Bottom),
-                new Point(r.Left,  r.Bottom),
-            };
-
-            for (int i = 0; i < 4; i++)
-            {
-                var x = pts[i].X; var y = pts[i].Y;
-                var xr = (x * cos - y * sin) * s + xf.dx;
-                var yr = (x * sin + y * cos) * s + xf.dy;
-                pts[i] = new Point(xr, yr);
-            }
-
-            double minX = double.PositiveInfinity, minY = double.PositiveInfinity, maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
-            foreach (var p in pts)
-            {
-                if (p.X < minX) minX = p.X;
-                if (p.Y < minY) minY = p.Y;
-                if (p.X > maxX) maxX = p.X;
-                if (p.Y > maxY) maxY = p.Y;
-            }
-
-            return new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
-        }
 
         private bool AnchorsMeetThreshold()
         {
@@ -874,71 +822,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchXformComputed = false;
             _batchAnchorM1Score = scoreM1;
             _batchAnchorM2Score = scoreM2;
-            var thrM1 = GetBatchThrM1();
-            var thrM2 = GetBatchThrM2();
             _batchAnchorsOk = AnchorsMeetThreshold();
             _currentBatchFile = System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty);
 
-            var t = BuildTransformFromMasters(
-                baselineM1.X, baselineM1.Y, baselineM2.X, baselineM2.Y,
-                detectedM1.X, detectedM1.Y, detectedM2.X, detectedM2.Y);
-
-            if (!_batchAnchorsOk)
-            {
-                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} (thrM1={thrM1}) m2={_batchAnchorM2Score} (thrM2={thrM2})");
-                t = (1.0, 0.0, 0.0, 0.0);
-            }
-
-            _batchXform.Scale = t.scale;
-            _batchXform.RotationDeg = t.rotDeg;
-            _batchXform.Tx = t.tx;
-            _batchXform.Ty = t.ty;
+            _batchXform.Scale = 1.0;
+            _batchXform.RotationDeg = 0.0;
+            _batchXform.Tx = 0.0;
+            _batchXform.Ty = 0.0;
             _batchXform.StepId = BatchStepId;
             _batchXformComputed = true;
 
             TraceBatch($"[batch] anchors-ready file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' M1=({detectedM1.X:0.0},{detectedM1.Y:0.0}) M2=({detectedM2.X:0.0},{detectedM2.Y:0.0}) scores=({_batchAnchorM1Score},{_batchAnchorM2Score})");
             GuiLog.Info($"[anchors] m1Score={_batchAnchorM1Score} m2Score={_batchAnchorM2Score} anchorsOk={_batchAnchorsOk}");
-            GuiLog.Info($"[xform] deg={t.rotDeg:0.###} scale={t.scale:0.###} dx={t.tx:0.##} dy={t.ty:0.##} anchorsOk={_batchAnchorsOk}");
-        }
-
-        private bool TryComputeBatchXform(out (double s, double dx, double dy, double rot) x, out bool anchorsOk)
-        {
-            x = (_batchXform.Scale, _batchXform.Tx, _batchXform.Ty, _batchXform.RotationDeg);
-            anchorsOk = _batchAnchorsOk;
-            if (_batchXformComputed)
-            {
-                return true;
-            }
-
-            if (!_batchAnchorM1Ready || !_batchAnchorM2Ready || _batchBaselineM1 == null || _batchBaselineM2 == null || _batchDetectedM1 == null || _batchDetectedM2 == null)
-            {
-                GuiLog.Warn($"[batch-ui] xform not ready (anchors missing) step={_batchStepId} file='{_currentBatchFile}'");
-                return false;
-            }
-
-            var t = BuildTransformFromMasters(
-                _batchBaselineM1.Value.X, _batchBaselineM1.Value.Y, _batchBaselineM2.Value.X, _batchBaselineM2.Value.Y,
-                _batchDetectedM1.Value.X, _batchDetectedM1.Value.Y, _batchDetectedM2.Value.X, _batchDetectedM2.Value.Y);
-
-            var thrM1 = GetBatchThrM1();
-            var thrM2 = GetBatchThrM2();
-            anchorsOk = AnchorsMeetThreshold();
-            if (!anchorsOk)
-            {
-                GuiLog.Warn($"[anchors] below threshold: using Identity m1={_batchAnchorM1Score} (thrM1={thrM1}) m2={_batchAnchorM2Score} (thrM2={thrM2})");
-                t = (1.0, 0.0, 0.0, 0.0);
-            }
-
-            _batchXformComputed = true;
-            _batchAnchorsOk = anchorsOk;
-            _batchXform.Scale = t.scale;
-            _batchXform.Tx = t.tx;
-            _batchXform.Ty = t.ty;
-            _batchXform.RotationDeg = t.rotDeg;
-            _batchXform.StepId = BatchStepId;
-            x = (_batchXform.Scale, _batchXform.Tx, _batchXform.Ty, _batchXform.RotationDeg);
-            GuiLog.Info($"[batch-ui] xform computed step={_batchStepId} file='{_currentBatchFile}' xform(s={x.s:0.###},dx={x.dx:0.##},dy={x.dy:0.##},rot={x.rot:0.##}) anchorsOk={anchorsOk}");
-            return true;
+            GuiLog.Info($"[xform] deg=0 scale=1 dx=0 dy=0 anchorsOk={_batchAnchorsOk}");
         }
 
         public string? BatchFolder
@@ -1759,7 +1655,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             for (int idx = 1; idx <= _batchBaselineRois.Length; idx++)
             {
-                var roi = GetInspectionRoiModelByIndex(idx);
+                var roi = GetLayoutBaselineRoi(GetInspectionConfigByIndex(idx), GetInspectionRoiModelByIndex(idx))
+                          ?? GetInspectionRoiModelByIndex(idx);
                 _batchBaselineRois[idx - 1] = roi?.DeepClone();
             }
 
@@ -2117,48 +2014,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return baselineModel;
         }
 
-        private void ApplyTransformedRectToRoi(RoiModel roi, RoiBaseline baseline, Rect tRect, double scale, double rot)
-        {
-            double width = Math.Max(1.0, baseline.BaseRect.Width * scale);
-            double height = Math.Max(1.0, baseline.BaseRect.Height * scale);
-            double cx = tRect.X + tRect.Width * 0.5;
-            double cy = tRect.Y + tRect.Height * 0.5;
-
-            if (_baseImagePixelWidth > 0)
-            {
-                cx = Math.Clamp(cx, 0, _baseImagePixelWidth);
-            }
-
-            if (_baseImagePixelHeight > 0)
-            {
-                cy = Math.Clamp(cy, 0, _baseImagePixelHeight);
-            }
-
-            roi.Width = width;
-            roi.Height = height;
-            roi.X = cx;
-            roi.Y = cy;
-            roi.Left = cx - width * 0.5;
-            roi.Top = cy - height * 0.5;
-            roi.CX = cx;
-            roi.CY = cy;
-
-            if (roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus)
-            {
-                roi.R = Math.Max(0.0, baseline.R * scale);
-                roi.RInner = Math.Max(0.0, baseline.Rin * scale);
-                if (roi.RInner >= roi.R)
-                {
-                    roi.RInner = Math.Max(0.0, roi.R - 1.0);
-                }
-            }
-
-            if (Math.Abs(rot) > 0.01)
-            {
-                roi.AngleDeg = (baseline.AngleDeg + rot) % 360.0;
-            }
-        }
-
         public void TraceBatchHeatmapPlacement(string reason, int roiIndex, Rect? canvasRect)
         {
             try
@@ -2247,9 +2102,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             r.Inflate(dx, dy);
             return r;
         }
-
-        private static Rect ApplyXformToRect(Rect r, (double s, double dx, double dy, double rot) xf)
-            => ApplyBatchTransformToRect(r, xf);
 
         private async Task PlaceBatchFinalAsync(string reason, CancellationToken ct)
         {
@@ -5687,7 +5539,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var key = Path.GetFileName(CurrentImagePath ?? string.Empty);
             LogAlign(FormattableString.Invariant(
-                $"[PLACE][SUMMARY] key='{key}' disableRot={input.DisableRot} scaleLock={input.ScaleLock} scale={output.Debug.Scale:0.####} angDelta={output.Debug.AngleDeltaDeg:0.###} distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
+                $"[PLACE][SUMMARY] key='{key}' " +
+                $"M1_base=({input.BaseM1.X:0.###},{input.BaseM1.Y:0.###}) M1_det=({input.DetM1.X:0.###},{input.DetM1.Y:0.###}) " +
+                $"M2_base=({input.BaseM2.X:0.###},{input.BaseM2.Y:0.###}) M2_det=({input.DetM2.X:0.###},{input.DetM2.Y:0.###}) " +
+                $"rawScale={output.Debug.Scale:0.####} rawAngleDeg={output.Debug.AngleDeltaDeg:0.###} disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
+                $"distBase={output.Debug.DistBase:0.###} distDet={output.Debug.DistDet:0.###}"));
 
             if (output.Debug.RoiDetails == null)
             {
@@ -5697,7 +5553,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             foreach (var detail in output.Debug.RoiDetails)
             {
                 LogAlign(FormattableString.Invariant(
-                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) sizeNew=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
+                    $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} base=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) " +
+                    $"new=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) dx={detail.Delta.X:0.###} dy={detail.Delta.Y:0.###} " +
+                    $"sizeBase=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
+                    $"sizeNew=({detail.NewWidth:0.###},{detail.NewHeight:0.###},{detail.NewR:0.###},{detail.NewRInner:0.###}) " +
+                    $"angleBase={detail.AngleBase:0.###} angleNew={detail.AngleNew:0.###}"));
             }
         }
 
@@ -5734,7 +5594,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             await EnsureBatchRepositionAsync(imagePath, ct, "row-start").ConfigureAwait(false);
         }
 
-        private async Task _repositionInspectionRoisAsync(string imagePath, CancellationToken ct, bool skipIfAnchorsReady = false)
+        private async Task _repositionInspectionRoisAsync(string imagePath, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(imagePath) || _layoutOriginal == null)
             {
@@ -5748,12 +5608,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 TraceBatch("[match] SKIP: missing master patterns/search");
                 _batchAnchorsOk = false;
-                return;
-            }
-
-            if (skipIfAnchorsReady && _batchAnchorReadyForStep == _batchStepId && _batchAnchorsOk)
-            {
-                TraceBatch("[match] SKIP: anchors already computed for current step");
                 return;
             }
 
@@ -5979,7 +5833,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 if (_layoutOriginal != null)
                 {
-                    await _repositionInspectionRoisAsync(imagePath, ct, skipIfAnchorsReady: true).ConfigureAwait(false);
+                    await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
                     if (!TryBuildPlacementInput(out var placementInput, logError: true))
                     {
                         TraceBatch("[batch-repos] skip: anchors unavailable for reposition");
@@ -7096,7 +6950,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public async Task RepositionInspectionRoisAsync(string imagePath)
         {
             EnsureLayoutOriginalSnapshot();
-            await _repositionInspectionRoisAsync(imagePath, CancellationToken.None, skipIfAnchorsReady: true)
+            await _repositionInspectionRoisAsync(imagePath, CancellationToken.None)
                 .ConfigureAwait(false);
 
             if (!TryBuildPlacementInput(out var placementInput, logError: false))

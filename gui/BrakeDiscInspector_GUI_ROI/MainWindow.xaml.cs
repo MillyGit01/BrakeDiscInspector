@@ -4284,6 +4284,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var layoutAnalyze = _layout?.Analyze;
             var layoutUi = _layout?.Ui;
+            var defaults = new AnalyzeOptions();
 
             SyncPresetUiFromLayoutAnalyzeOptions();
 
@@ -4296,6 +4297,15 @@ namespace BrakeDiscInspector_GUI_ROI
             int thrM1 = layoutAnalyze?.ThrM1 > 0 ? layoutAnalyze.ThrM1 : 85;
             int thrM2 = layoutAnalyze?.ThrM2 > 0 ? layoutAnalyze.ThrM2 : 85;
             bool useLocalMatcher = layoutAnalyze?.UseLocalMatcher ?? true;
+            int rotRange = layoutAnalyze?.RotRange > 0
+                ? layoutAnalyze.RotRange
+                : (_preset?.RotRange > 0 ? _preset.RotRange : defaults.RotRange);
+            double scaleMin = layoutAnalyze != null && IsPositiveFinite(layoutAnalyze.ScaleMin)
+                ? layoutAnalyze.ScaleMin
+                : (_preset != null && IsPositiveFinite(_preset.ScaleMin) ? _preset.ScaleMin : defaults.ScaleMin);
+            double scaleMax = layoutAnalyze != null && IsPositiveFinite(layoutAnalyze.ScaleMax)
+                ? layoutAnalyze.ScaleMax
+                : (_preset != null && IsPositiveFinite(_preset.ScaleMax) ? _preset.ScaleMax : defaults.ScaleMax);
             double opacity = layoutUi != null && layoutUi.HeatmapOverlayOpacity >= 0
                 ? Math.Max(0.0, Math.Min(1.0, layoutUi.HeatmapOverlayOpacity))
                 : defaultOpacity;
@@ -4310,8 +4320,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             InspLog($"[layout-load] Analyze: featureM1='{featureM1}' thrM1={thrM1} featureM2='{featureM2}' thrM2={thrM2} " +
                     $"posTolPx={posTol:0.###} angTolDeg={angTol:0.###} scaleLock={scaleLock} disableRot={disableRot} useLocalMatcher={useLocalMatcher} " +
-                    $"rotRange={layoutAnalyze?.RotRange ?? _preset?.RotRange ?? 0} scaleMin={layoutAnalyze?.ScaleMin ?? _preset?.ScaleMin ?? 0:0.####} " +
-                    $"scaleMax={layoutAnalyze?.ScaleMax ?? _preset?.ScaleMax ?? 0:0.####}");
+                    $"rotRange={rotRange} scaleMin={scaleMin:0.####} scaleMax={scaleMax:0.####}");
 
             _inspectionBaselinesByImage.Clear();
             if (_layout?.InspectionBaselinesByImage != null)

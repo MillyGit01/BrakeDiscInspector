@@ -4374,9 +4374,9 @@ namespace BrakeDiscInspector_GUI_ROI
             SetFeatureSelection(featureM1);
             SetFeatureSelectionM2(featureM2);
 
-            GuiLog.Info(FormattableString.Invariant(
+            GuiLog.Info(
                 $"[LAYOUT-LOAD][ANALYZE] featureM1={featureM1} thrM1={thrM1} featureM2={featureM2} thrM2={thrM2} " +
-                $"scaleLock={scaleLock} disableRot={disableRot} rotRange={rotRange} scaleMin={scaleMin:0.###} scaleMax={scaleMax:0.###}"));
+                $"scaleLock={scaleLock} disableRot={disableRot} rotRange={rotRange} scaleMin={scaleMin:0.###} scaleMax={scaleMax:0.###}");
 
             PersistAnalyzeOptions();
             PersistUiOptions();

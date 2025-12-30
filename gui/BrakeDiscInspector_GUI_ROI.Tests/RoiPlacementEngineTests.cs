@@ -210,4 +210,44 @@ public class RoiPlacementEngineTests
         Assert.Equal(a1.Height, a2.Height, 6);
         Assert.NotEqual(a1.X, outputB.InspectionsPlaced.Single().X, 6);
     }
+
+    [Fact]
+    public void ScaleNeverAppliesToOffsetOrSize()
+    {
+        var baselineMasters = new List<RoiModel>
+        {
+            new RoiModel { Role = RoiRole.Master1Pattern, Shape = RoiShape.Rectangle, X = 0, Y = 0, Width = 10, Height = 10 },
+            new RoiModel { Role = RoiRole.Master2Pattern, Shape = RoiShape.Rectangle, X = 10, Y = 0, Width = 10, Height = 10 }
+        };
+
+        var inspection = new RoiModel
+        {
+            Id = "r1",
+            Shape = RoiShape.Rectangle,
+            X = 4,
+            Y = 2,
+            Width = 6,
+            Height = 8,
+            AngleDeg = 0
+        };
+
+        var input = new RoiPlacementInput(
+            new ImgPoint(0, 0),
+            new ImgPoint(10, 0),
+            new ImgPoint(0, 0),
+            new ImgPoint(20, 0),
+            DisableRot: false,
+            ScaleLock: false,
+            ScaleMode.OffsetOnly,
+            true,
+            new Dictionary<string, MasterAnchorChoice> { ["r1"] = MasterAnchorChoice.Master1 });
+
+        var output = RoiPlacementEngine.Place(input, baselineMasters, new List<RoiModel> { inspection });
+        var placed = output.InspectionsPlaced.Single();
+
+        Assert.Equal(4, placed.X, 6);
+        Assert.Equal(2, placed.Y, 6);
+        Assert.Equal(6, placed.Width, 6);
+        Assert.Equal(8, placed.Height, 6);
+    }
 }

@@ -35,10 +35,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         MasterAnchorChoice Anchor,
         ImgPoint BaselineCenter,
         ImgPoint NewCenter,
+        ImgPoint Delta,
         double BaseWidth,
         double BaseHeight,
         double BaseR,
         double BaseRInner,
+        double NewWidth,
+        double NewHeight,
+        double NewR,
+        double NewRInner,
         double AngleBase,
         double AngleNew);
 
@@ -132,15 +137,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     {
                         var vBase = baselineCenter - pivotBase;
                         var vRot = Rotate(vBase, angDelta);
-                        var vFinal = (input.ScaleMode == ScaleMode.OffsetOnly && !input.ScaleLock)
-                            ? vRot * scale
-                            : vRot;
-                        newCenter = pivotDet + vFinal;
+                        newCenter = pivotDet + vRot;
                         newAngle = baseline.AngleDeg + angDeltaDeg;
                     }
 
                     ApplyCenter(placed, newCenter);
                     placed.AngleDeg = newAngle;
+
+                    var deltaCenter = new ImgPoint(newCenter.X - baselineCenter.X, newCenter.Y - baselineCenter.Y);
 
                     inspectionPlaced.Add(placed);
                     debugEntries.Add(new PlacementRoiDebug(
@@ -148,10 +152,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         anchor,
                         baselineCenter,
                         newCenter,
+                        deltaCenter,
                         baseline.Width,
                         baseline.Height,
                         baseline.R,
                         baseline.RInner,
+                        placed.Width,
+                        placed.Height,
+                        placed.R,
+                        placed.RInner,
                         baseline.AngleDeg,
                         newAngle));
                 }

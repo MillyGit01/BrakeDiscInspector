@@ -259,26 +259,30 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private static void LogPlacement(RoiPlacementInput input, bool translateOnly, PlacementDebug debug)
         {
-            Util.GuiLog.Info(FormattableString.Invariant(
+            FormattableString summary =
                 $"[PLACE][SUMMARY] imageKey='{input.ImageKey ?? "<none>"}' disableRot={input.DisableRot} scaleLock={input.ScaleLock} " +
                 $"translateOnly={translateOnly} baseM1=({input.BaseM1.X:0.###},{input.BaseM1.Y:0.###}) " +
                 $"baseM2=({input.BaseM2.X:0.###},{input.BaseM2.Y:0.###}) " +
                 $"detM1=({input.DetM1.X:0.###},{input.DetM1.Y:0.###}) " +
-                $"detM2=({input.DetM2.X:0.###},{input.DetM2.Y:0.###})"));
-            Util.GuiLog.Info(FormattableString.Invariant(
+                $"detM2=({input.DetM2.X:0.###},{input.DetM2.Y:0.###})";
+            Util.GuiLog.Info(summary);
+
+            FormattableString deltas =
                 $"[PLACE][DELTAS] dM1=({debug.DeltaM1.X:0.###},{debug.DeltaM1.Y:0.###}) " +
                 $"dM2=({debug.DeltaM2.X:0.###},{debug.DeltaM2.Y:0.###}) " +
                 $"dMid=({debug.DeltaMid.X:0.###},{debug.DeltaMid.Y:0.###}) " +
-                $"angDeltaDeg={debug.AngleDeltaDeg:0.###} scale={debug.Scale:0.####}"));
+                $"angDeltaDeg={debug.AngleDeltaDeg:0.###} scale={debug.Scale:0.####}";
+            Util.GuiLog.Info(deltas);
 
             foreach (var detail in debug.RoiDetails)
             {
-                Util.GuiLog.Info(FormattableString.Invariant(
+                FormattableString roiDetail =
                     $"[PLACE][ROI] id={detail.RoiId} anchor={detail.Anchor} baseC=({detail.BaselineCenter.X:0.###},{detail.BaselineCenter.Y:0.###}) " +
                     $"newC=({detail.NewCenter.X:0.###},{detail.NewCenter.Y:0.###}) dxdy=({detail.Delta.X:0.###},{detail.Delta.Y:0.###}) " +
                     $"baseSize=({detail.BaseWidth:0.###},{detail.BaseHeight:0.###},{detail.BaseR:0.###},{detail.BaseRInner:0.###}) " +
                     $"newSize=({detail.NewWidth:0.###},{detail.NewHeight:0.###},{detail.NewR:0.###},{detail.NewRInner:0.###}) " +
-                    $"baseAng={detail.AngleBase:0.###} newAng={detail.AngleNew:0.###}"));
+                    $"baseAng={detail.AngleBase:0.###} newAng={detail.AngleNew:0.###}";
+                Util.GuiLog.Info(roiDetail);
             }
         }
     }

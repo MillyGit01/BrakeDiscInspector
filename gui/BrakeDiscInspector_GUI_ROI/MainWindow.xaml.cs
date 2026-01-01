@@ -145,7 +145,15 @@ namespace BrakeDiscInspector_GUI_ROI
             Comms
         }
 
+        private enum RoiPanelMode
+        {
+            Selector,
+            Master,
+            Inspection
+        }
+
         private int _freezeRoiRepositionCounter;
+        private RoiPanelMode _roiPanelMode = RoiPanelMode.Selector;
         private bool _pendingActiveInspectionSync;
         private bool _globalUnlocked = false;
         private bool _editingM1;
@@ -189,6 +197,21 @@ namespace BrakeDiscInspector_GUI_ROI
             private set
             {
                 _busyStatusText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public RoiPanelMode RoiPanelMode
+        {
+            get => _roiPanelMode;
+            set
+            {
+                if (_roiPanelMode == value)
+                {
+                    return;
+                }
+
+                _roiPanelMode = value;
                 OnPropertyChanged();
             }
         }
@@ -3633,6 +3656,11 @@ namespace BrakeDiscInspector_GUI_ROI
             RoiManagementPanel.Visibility = mode == SidePanelMode.RoiManagement ? Visibility.Visible : Visibility.Collapsed;
             BatchInspectionPanel.Visibility = mode == SidePanelMode.BatchInspection ? Visibility.Visible : Visibility.Collapsed;
             CommsPanel.Visibility = mode == SidePanelMode.Comms ? Visibility.Visible : Visibility.Collapsed;
+
+            if (mode == SidePanelMode.RoiManagement)
+            {
+                RoiPanelMode = RoiPanelMode.Selector;
+            }
         }
 
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
@@ -3643,6 +3671,21 @@ namespace BrakeDiscInspector_GUI_ROI
         private void NavRoiManagement_Click(object sender, RoutedEventArgs e)
         {
             ShowSidePanel(SidePanelMode.RoiManagement);
+        }
+
+        private void RoiManagementSelectMaster_Click(object sender, RoutedEventArgs e)
+        {
+            RoiPanelMode = RoiPanelMode.Master;
+        }
+
+        private void RoiManagementSelectInspection_Click(object sender, RoutedEventArgs e)
+        {
+            RoiPanelMode = RoiPanelMode.Inspection;
+        }
+
+        private void RoiManagementBack_Click(object sender, RoutedEventArgs e)
+        {
+            RoiPanelMode = RoiPanelMode.Selector;
         }
 
         private void NavBatchInspection_Click(object sender, RoutedEventArgs e)

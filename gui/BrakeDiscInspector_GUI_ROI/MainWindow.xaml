@@ -443,9 +443,8 @@
                             <ui:Button Content="Apply" Style="{StaticResource AppButtonStyle}" Margin="0,0,8,0" Click="ApplyColorsButton_Click"/>
                             <ui:Button Content="Reset" Style="{StaticResource AppButtonStyle}" Margin="0,0,8,0" Click="ResetGuiDefaultsButton_Click"/>
                             <ui:Button Content="Close" Style="{StaticResource AppButtonStyle}" Click="CloseGuiSetupButton_Click"/>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
+                </StackPanel>
+            </ScrollViewer>
             </Border>
         </Popup>
 

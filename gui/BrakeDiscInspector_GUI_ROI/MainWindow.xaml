@@ -542,24 +542,10 @@
                 <StackPanel Margin="8" Orientation="Vertical">
                     <StackPanel x:Name="RoiManagementSelector"
                                 Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Selector}">
-                        <!-- 90% of LeftNavButtonStyle Height (48 -> 43). -->
-                        <ui:Button Height="43"
-                                   Style="{StaticResource LeftNavButtonStyle}"
-                                   Click="RoiManagementSelectMaster_Click">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" FontSize="18" Margin="0,0,10,0"/>
-                                <TextBlock Text="Master ROIs" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </ui:Button>
-                        <!-- 90% of LeftNavButtonStyle Height (48 -> 43). -->
-                        <ui:Button Height="43"
-                                   Style="{StaticResource LeftNavButtonStyle}"
-                                   Click="RoiManagementSelectInspection_Click">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}" FontSize="18" Margin="0,0,10,0"/>
-                                <TextBlock Text="Inspection ROIs" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </ui:Button>
+                        <TextBlock Text="Selecciona 'Master ROIs' o 'Inspection ROIs' desde el menú de la izquierda."
+                                   TextWrapping="Wrap"
+                                   Opacity="0.7"
+                                   Margin="4,8,4,0"/>
                     </StackPanel>
 
                     <StackPanel x:Name="MasterRoisPanel"
@@ -1632,6 +1618,27 @@
                         <TextBlock Text="ROIs Management" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
+                <!-- Submenú colapsable: aparece debajo de ROIs Management -->
+                <StackPanel x:Name="RoiNavSubmenu" Visibility="Collapsed" Margin="0">
+                    <!-- 90% de la altura del LeftNavButtonStyle (48 -> 43). -->
+                    <ui:Button Height="43"
+                               Style="{StaticResource LeftNavButtonStyle}"
+                               Click="RoiManagementSelectMaster_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" FontSize="18" Margin="0,0,10,0"/>
+                            <TextBlock Text="Master ROIs" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ui:Button>
+
+                    <ui:Button Height="43"
+                               Style="{StaticResource LeftNavButtonStyle}"
+                               Click="RoiManagementSelectInspection_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}" FontSize="18" Margin="0,0,10,0"/>
+                            <TextBlock Text="Inspection ROIs" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ui:Button>
+                </StackPanel>
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavBatchInspection_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

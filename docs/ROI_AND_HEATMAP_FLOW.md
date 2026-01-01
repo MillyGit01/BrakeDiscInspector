@@ -9,7 +9,7 @@ This document explains how ROIs are defined, exported, aligned and how heatmaps 
 
 ## 1. Canonical ROI export
 1. `WorkflowViewModel` calls `_exportRoiAsync`, which ultimately uses `RoiCropUtils.TryBuildRoiCropInfo` to capture the ROI geometry (`shape`, `Left/Top/Width/Height`, rotation pivot).
-2. `RoiCropUtils.TryGetRotatedCrop` rotates the full image around the ROI pivot (OpenCV warp affine) and extracts a crop with the exact same width/height as the drawn ROI. Rectangles use the `Left/Top/Width/Height` bounds; circles/annulus compute the bounding box from `CX/CY/R/RInner`.
+2. `RoiCropUtils.TryGetRotatedCrop` rotates the full image around the ROI pivot (OpenCV warp affine) and extracts a crop with the exact same width/height as the drawn ROI. Rectangles use the `Left/Top/Width/Height` bounds; circles/annulus use `CX/CY/R/RInner` with a **square** bounding box (diameter) so the crop stays centered.
 3. `RoiCropUtils.BuildRoiMask` generates a binary mask in crop coordinates that matches the shape (rectangles fill the crop, circles/annulus draw concentric discs). This mask is embedded into the metadata and used both by dataset saves and backend requests.
 4. `RoiExportResult` wraps the PNG bytes, `shape_json`, the `RoiModel` snapshot (with base image dimensions) and the integer crop rectangle. Those fields are logged before sending them to the backend or saving them to disk.
 
@@ -42,3 +42,4 @@ Values are expressed in pixels of the *canonical crop* (after rotation). Backend
 ## 7. Saving and reloading ROIs
 - `PresetManager.SaveInspection` clones the selected ROI into `Preset.Inspection1/2` with ids `Inspection_<slot>` to keep dataset and backend IDs consistent.
 - Layouts are saved through `MasterLayoutManager.Save` into `Layouts/<timestamp>.layout.json`. When reloading, `EnsureInspectionRoiDefaults` reinstates the four inspection slots even if they were missing in older files.
+- `SyncModelFromShape` keeps `X/Y` aligned with `CX/CY` for circle/annulus ROIs so canvas geometry and persisted layouts stay consistent after edits.

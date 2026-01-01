@@ -536,7 +536,8 @@
                         </StackPanel>
                     </GroupBox>
                 </StackPanel>
-            </ScrollViewer>
+            </StackPanel>
+        </ScrollViewer>
 
             <ScrollViewer x:Name="RoiManagementPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible">
                 <StackPanel Margin="8" Orientation="Vertical">

@@ -145,13 +145,6 @@ namespace BrakeDiscInspector_GUI_ROI
             Comms
         }
 
-        private enum RoiPanelMode
-        {
-            Selector,
-            Master,
-            Inspection
-        }
-
         private int _freezeRoiRepositionCounter;
         private RoiPanelMode _roiPanelMode = RoiPanelMode.Selector;
         private bool _pendingActiveInspectionSync;

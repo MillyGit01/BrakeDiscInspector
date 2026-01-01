@@ -3658,12 +3658,24 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
         {
+            RoiNavSubmenu.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.LayoutSetup);
         }
 
         private void NavRoiManagement_Click(object sender, RoutedEventArgs e)
         {
-            ShowSidePanel(SidePanelMode.RoiManagement);
+            var expand = RoiNavSubmenu.Visibility != Visibility.Visible;
+            RoiNavSubmenu.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+
+            if (expand)
+            {
+                ShowSidePanel(SidePanelMode.RoiManagement);
+                RoiPanelMode = RoiPanelMode.Selector;
+            }
+            else
+            {
+                RoiManagementPanel.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void RoiManagementSelectMaster_Click(object sender, RoutedEventArgs e)
@@ -3683,11 +3695,13 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void NavBatchInspection_Click(object sender, RoutedEventArgs e)
         {
+            RoiNavSubmenu.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.BatchInspection);
         }
 
         private void NavComms_Click(object sender, RoutedEventArgs e)
         {
+            RoiNavSubmenu.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.Comms);
         }
 

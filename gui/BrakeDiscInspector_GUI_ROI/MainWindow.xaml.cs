@@ -3673,6 +3673,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
+            MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.LayoutSetup);
             SetSidePanelTitle("Layout Setup");
         }
@@ -3681,6 +3683,8 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var expand = RoiNavSubmenu.Visibility != Visibility.Visible;
             RoiNavSubmenu.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
+            MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
 
             if (expand)
             {
@@ -3699,17 +3703,29 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             RoiPanelMode = RoiPanelMode.Master;
             SetSidePanelTitle("ROI Management -> ROI Master");
+            MasterRoiSubmenu.Visibility = Visibility.Visible;
+            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
         }
 
         private void RoiManagementSelectInspection_Click(object sender, RoutedEventArgs e)
         {
             RoiPanelMode = RoiPanelMode.Inspection;
             SetSidePanelTitle("ROI Management -> ROI Inspection");
+            MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+        }
+
+        private void NavMasterAdvanced_Click(object sender, RoutedEventArgs e)
+        {
+            var show = MasterAdvancedOptionsPanel.Visibility != Visibility.Visible;
+            MasterAdvancedOptionsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void NavBatchInspection_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
+            MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.BatchInspection);
             SetSidePanelTitle("Batch Inspection");
         }
@@ -3717,6 +3733,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private void NavComms_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
+            MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.Comms);
             SetSidePanelTitle("Comms");
         }

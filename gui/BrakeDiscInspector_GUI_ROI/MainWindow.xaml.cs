@@ -3707,11 +3707,6 @@ namespace BrakeDiscInspector_GUI_ROI
             SetSidePanelTitle("ROI Management -> ROI Inspection");
         }
 
-        private void RoiManagementBack_Click(object sender, RoutedEventArgs e)
-        {
-            RoiPanelMode = RoiPanelMode.Selector;
-        }
-
         private void NavBatchInspection_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;

@@ -3670,11 +3670,28 @@ namespace BrakeDiscInspector_GUI_ROI
                 : Visibility.Visible;
         }
 
+        private void SetMasterAdvancedOpen(bool open)
+        {
+            if (MasterAdvancedOptionsPanel != null)
+            {
+                MasterAdvancedOptionsPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            if (MasterDefaultPanel != null)
+            {
+                MasterDefaultPanel.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            SetSidePanelTitle(open
+                ? "ROI Management -> ROI Master -> Advanced"
+                : "ROI Management -> ROI Master");
+        }
+
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
-            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+            SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.LayoutSetup);
             SetSidePanelTitle("Layout Setup");
         }
@@ -3684,7 +3701,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var expand = RoiNavSubmenu.Visibility != Visibility.Visible;
             RoiNavSubmenu.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
-            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+            SetMasterAdvancedOpen(false);
 
             if (expand)
             {
@@ -3702,9 +3719,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private void RoiManagementSelectMaster_Click(object sender, RoutedEventArgs e)
         {
             RoiPanelMode = RoiPanelMode.Master;
-            SetSidePanelTitle("ROI Management -> ROI Master");
             MasterRoiSubmenu.Visibility = Visibility.Visible;
-            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+            SetMasterAdvancedOpen(false);
         }
 
         private void RoiManagementSelectInspection_Click(object sender, RoutedEventArgs e)
@@ -3712,20 +3728,20 @@ namespace BrakeDiscInspector_GUI_ROI
             RoiPanelMode = RoiPanelMode.Inspection;
             SetSidePanelTitle("ROI Management -> ROI Inspection");
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
-            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+            SetMasterAdvancedOpen(false);
         }
 
         private void NavMasterAdvanced_Click(object sender, RoutedEventArgs e)
         {
-            var show = MasterAdvancedOptionsPanel.Visibility != Visibility.Visible;
-            MasterAdvancedOptionsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            var show = MasterAdvancedOptionsPanel?.Visibility != Visibility.Visible;
+            SetMasterAdvancedOpen(show);
         }
 
         private void NavBatchInspection_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
-            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+            SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.BatchInspection);
             SetSidePanelTitle("Batch Inspection");
         }
@@ -3734,7 +3750,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
-            MasterAdvancedOptionsPanel.Visibility = Visibility.Collapsed;
+            SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.Comms);
             SetSidePanelTitle("Comms");
         }

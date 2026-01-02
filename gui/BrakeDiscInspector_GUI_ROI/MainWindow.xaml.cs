@@ -3656,10 +3656,25 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private void SetSidePanelTitle(string? title)
+        {
+            if (SidePanelTitle == null)
+            {
+                return;
+            }
+
+            var trimmed = title?.Trim();
+            SidePanelTitle.Text = trimmed ?? string.Empty;
+            SidePanelTitle.Visibility = string.IsNullOrEmpty(trimmed)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+        }
+
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.LayoutSetup);
+            SetSidePanelTitle("Layout Setup");
         }
 
         private void NavRoiManagement_Click(object sender, RoutedEventArgs e)
@@ -3671,21 +3686,25 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 ShowSidePanel(SidePanelMode.RoiManagement);
                 RoiPanelMode = RoiPanelMode.Selector;
+                SetSidePanelTitle("ROI Management");
             }
             else
             {
                 RoiManagementPanel.Visibility = Visibility.Collapsed;
+                SetSidePanelTitle(string.Empty);
             }
         }
 
         private void RoiManagementSelectMaster_Click(object sender, RoutedEventArgs e)
         {
             RoiPanelMode = RoiPanelMode.Master;
+            SetSidePanelTitle("ROI Management -> ROI Master");
         }
 
         private void RoiManagementSelectInspection_Click(object sender, RoutedEventArgs e)
         {
             RoiPanelMode = RoiPanelMode.Inspection;
+            SetSidePanelTitle("ROI Management -> ROI Inspection");
         }
 
         private void RoiManagementBack_Click(object sender, RoutedEventArgs e)
@@ -3697,12 +3716,14 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.BatchInspection);
+            SetSidePanelTitle("Batch Inspection");
         }
 
         private void NavComms_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             ShowSidePanel(SidePanelMode.Comms);
+            SetSidePanelTitle("Comms");
         }
 
         private void PanelSplitter_OnDragCompleted(object sender, DragCompletedEventArgs e)

@@ -451,7 +451,19 @@
 
         <!-- ===== Side Panel Host ===== -->
         <Grid Grid.Row="1" Grid.Column="1" x:Name="SidePanelHost">
-            <ScrollViewer x:Name="LayoutSetupPanel" VerticalScrollBarVisibility="Auto" d:Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock x:Name="SidePanelTitle"
+                       Grid.Row="0"
+                       Style="{StaticResource HeaderTextStyle}"
+                       FontSize="16"
+                       Margin="8,8,8,4"
+                       Visibility="Collapsed"/>
+
+            <ScrollViewer x:Name="LayoutSetupPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" d:Visibility="Collapsed">
                 <StackPanel Margin="8" Orientation="Vertical">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                         <ui:Button x:Name="BtnLoadImage"
@@ -538,7 +550,7 @@
                 </StackPanel>
         </ScrollViewer>
 
-            <ScrollViewer x:Name="RoiManagementPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible">
+            <ScrollViewer x:Name="RoiManagementPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Visible">
                 <StackPanel Margin="8" Orientation="Vertical">
                     <StackPanel x:Name="RoiManagementSelector"
                                 Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Selector}">
@@ -1287,7 +1299,7 @@
         </StackPanel>
     </ScrollViewer>
 
-            <ScrollViewer x:Name="BatchInspectionPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
+            <ScrollViewer x:Name="BatchInspectionPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
                 <Grid Margin="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -1452,7 +1464,7 @@
                 </Grid>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="CommsPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+            <ScrollViewer x:Name="CommsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
                 <Grid Margin="8" x:Name="CommsRoot">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>

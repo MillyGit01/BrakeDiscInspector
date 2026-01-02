@@ -685,7 +685,7 @@
 
                         <StackPanel x:Name="MasterAdvancedOptionsPanel"
                                     Visibility="Collapsed"
-                                    Margin="12,0,0,0">
+                                    Margin="0,8,0,0">
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" MinWidth="221"/>
@@ -1633,9 +1633,9 @@
                         <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                                    Click="NavMasterAdvanced_Click">
                             <!-- tabulación para subnivel -->
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="40,0,0,0">
                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" FontSize="18" Margin="0,0,10,0"/>
-                                <TextBlock Text="Advnaced" VerticalAlignment="Center"/>
+                                <TextBlock Text="Advanced" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ui:Button>
                     </StackPanel>

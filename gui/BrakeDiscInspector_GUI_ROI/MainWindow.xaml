@@ -1618,35 +1618,22 @@
                         <TextBlock Text="ROIs Management" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
-                <!-- Submenú colapsable: aparece debajo de ROIs Management -->
+                <!-- Submenú colapsable: mismo tamaño/estilo que el resto, con tabulación -->
                 <StackPanel x:Name="RoiNavSubmenu" Visibility="Collapsed" Margin="0">
-                    <ui:Button Height="37"
-                               Style="{StaticResource LeftNavButtonStyle}"
-                               Click="RoiManagementSelectMaster_Click"
-                               HorizontalAlignment="Right"
-                               Margin="18,0,0,0">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}"
-                                           FontSize="15"
-                                           Margin="0,0,8,0"/>
-                            <TextBlock Text="Master ROIs"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"/>
+                    <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                               Click="RoiManagementSelectMaster_Click">
+                        <!-- Tabulación: indentamos SOLO el contenido para mantener mismo ancho/alineación del botón -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" FontSize="18" Margin="0,0,10,0"/>
+                            <TextBlock Text="Master ROIs" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ui:Button>
 
-                    <ui:Button Height="37"
-                               Style="{StaticResource LeftNavButtonStyle}"
-                               Click="RoiManagementSelectInspection_Click"
-                               HorizontalAlignment="Right"
-                               Margin="18,0,0,0">
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}"
-                                           FontSize="15"
-                                           Margin="0,0,8,0"/>
-                            <TextBlock Text="Inspection ROIs"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"/>
+                    <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                               Click="RoiManagementSelectInspection_Click">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}" FontSize="18" Margin="0,0,10,0"/>
+                            <TextBlock Text="Inspection ROIs" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ui:Button>
                 </StackPanel>

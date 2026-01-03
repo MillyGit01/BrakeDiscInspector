@@ -8023,6 +8023,26 @@ namespace BrakeDiscInspector_GUI_ROI
                 Dispatcher.Invoke(RefreshCreateButtonsEnabled);
                 return;
             }
+
+            if (BtnCreateInspection1 != null)
+            {
+                BtnCreateInspection1.IsEnabled = !HasInspectionRoi(1);
+            }
+
+            if (BtnCreateInspection2 != null)
+            {
+                BtnCreateInspection2.IsEnabled = !HasInspectionRoi(2);
+            }
+
+            if (BtnCreateInspection3 != null)
+            {
+                BtnCreateInspection3.IsEnabled = !HasInspectionRoi(3);
+            }
+
+            if (BtnCreateInspection4 != null)
+            {
+                BtnCreateInspection4.IsEnabled = !HasInspectionRoi(4);
+            }
         }
 
         private void RefreshInspectionRoiSlots(IReadOnlyList<RoiModel>? rois = null)
@@ -9785,6 +9805,20 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private RoiShape ReadInspectionShapeForIndex(int index)
         {
+            ComboBox? combo = index switch
+            {
+                1 => CmbShapeInspection1,
+                2 => CmbShapeInspection2,
+                3 => CmbShapeInspection3,
+                4 => CmbShapeInspection4,
+                _ => null
+            };
+
+            if (combo?.SelectedItem is RoiShape shape)
+            {
+                return shape;
+            }
+
             var config = GetInspectionConfigByIndex(index);
             if (config != null)
             {

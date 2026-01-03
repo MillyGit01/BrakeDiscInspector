@@ -807,19 +807,489 @@
 
                     <StackPanel x:Name="InspectionRoisPanel"
                                 Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Inspection}">
-                        <workflow:WorkflowControl x:Name="WorkflowHost" Visibility="Collapsed"/>
                         <StackPanel x:Name="InspectionDefaultPanel">
-                            <TextBlock Text="Para gestionar el dataset y las Inspection ROIs, abre: Dataset."
-                                       Opacity="0.7"
-                                       Margin="4,8,4,0"
-                                       TextWrapping="Wrap"/>
+                            <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
+                                <StackPanel Margin="8,4,0,0">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
+                                    <TextBlock Text="Inspection 1" Width="80" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="CmbShapeInspection1"
+                                              Width="80"
+                                              Tag="1"
+                                              ItemsSource="{Binding AvailableShapes}"
+                                              SelectedItem="{Binding DataContext.InspectionRois[0].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                                              SelectionChanged="InspectionShape_SelectionChanged"/>
+                                    <ui:Button x:Name="BtnCreateInspection1"
+                                               Margin="4,0,0,0"
+                                               Style="{StaticResource IconOnlyButton}"
+                                               ToolTip="Create ROI 1"
+                                               Tag="1"
+                                               Click="BtnCreateInspection_Click">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
+                                    </ui:Button>
+                                    <ui:Button Margin="4,0,0,0"
+                                               DataContext="{Binding DataContext.InspectionRois[0], ElementName=WorkflowHost}"
+                                               Click="BtnToggleEdit_Click"
+                                               IsEnabled="{Binding Enabled}">
+                                        <ui:Button.Style>
+                                            <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                                <Setter Property="Content">
+                                                    <Setter.Value>
+                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Setter Property="ToolTip" Value="Edit ROI 1"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                                                        <Setter Property="Content">
+                                                            <Setter.Value>
+                                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                        <Setter Property="ToolTip" Value="Save ROI 1"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ui:Button.Style>
+                                    </ui:Button>
+                                    <ui:Button x:Name="BtnAddOkInspection1"
+                                               Margin="4,0,0,0"
+                                               ToolTip="Add ROI 1 to OK"
+                                               Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                                               CommandParameter="{Binding Inspection1}">
+                                        <ui:Button.Style>
+                                            <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                                <Setter Property="Content">
+                                                    <Setter.Value>
+                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ui:Button.Style>
+                                    </ui:Button>
+                                    <ui:Button x:Name="BtnAddNgInspection1"
+                                               Margin="4,0,0,0"
+                                               ToolTip="Add ROI 1 to NG"
+                                               Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                                               CommandParameter="{Binding Inspection1}">
+                                        <ui:Button.Style>
+                                            <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                                <Setter Property="Content">
+                                                    <Setter.Value>
+                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding DataContext.InspectionRois[0].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ui:Button.Style>
+                                    </ui:Button>
+                                    <ui:Button x:Name="BtnRemoveInspection1"
+                                               Margin="4,0,0,0"
+                                               ToolTip="Remove ROI 1"
+                                               Click="BtnRemoveInspection1_Click">
+                                        <ui:Button.Style>
+                                            <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                                <Setter Property="IsEnabled" Value="True"/>
+                                                <Setter Property="Content">
+                                                    <Setter.Value>
+                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.Inspection1, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                        <Setter Property="IsEnabled" Value="False"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ui:Button.Style>
+                                    </ui:Button>
+                                </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
+                                <TextBlock Text="Inspection 2" Width="80" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CmbShapeInspection2"
+                                          Width="80"
+                                          Tag="2"
+                                          ItemsSource="{Binding AvailableShapes}"
+                                          SelectedItem="{Binding DataContext.InspectionRois[1].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                                          SelectionChanged="InspectionShape_SelectionChanged"/>
+                                <ui:Button x:Name="BtnCreateInspection2"
+                                           Margin="4,0,0,0"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 2"
+                                           Tag="2"
+                                           Click="BtnCreateInspection_Click">
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
+                                </ui:Button>
+                                <ui:Button Margin="4,0,0,0"
+                                           DataContext="{Binding DataContext.InspectionRois[1], ElementName=WorkflowHost}"
+                                           Click="BtnToggleEdit_Click"
+                                           IsEnabled="{Binding Enabled}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 2"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                                                    <Setter Property="Content">
+                                                        <Setter.Value>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 2"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnAddOkInspection2"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Add ROI 2 to OK"
+                                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                                           CommandParameter="{Binding Inspection2}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnAddNgInspection2"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Add ROI 2 to NG"
+                                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                                           CommandParameter="{Binding Inspection2}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[1].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnRemoveInspection2"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Remove ROI 2"
+                                           Click="BtnRemoveInspection2_Click">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection2, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
+                                <TextBlock Text="Inspection 3" Width="80" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CmbShapeInspection3"
+                                          Width="80"
+                                          Tag="3"
+                                          ItemsSource="{Binding AvailableShapes}"
+                                          SelectedItem="{Binding DataContext.InspectionRois[2].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                                          SelectionChanged="InspectionShape_SelectionChanged"/>
+                                <ui:Button x:Name="BtnCreateInspection3"
+                                           Margin="4,0,0,0"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 3"
+                                           Tag="3"
+                                           Click="BtnCreateInspection_Click">
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
+                                </ui:Button>
+                                <ui:Button Margin="4,0,0,0"
+                                           DataContext="{Binding DataContext.InspectionRois[2], ElementName=WorkflowHost}"
+                                           Click="BtnToggleEdit_Click"
+                                           IsEnabled="{Binding Enabled}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 3"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                                                    <Setter Property="Content">
+                                                        <Setter.Value>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 3"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnAddOkInspection3"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Add ROI 3 to OK"
+                                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                                           CommandParameter="{Binding Inspection3}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnAddNgInspection3"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Add ROI 3 to NG"
+                                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                                           CommandParameter="{Binding Inspection3}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[2].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnRemoveInspection3"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Remove ROI 3"
+                                           Click="BtnRemoveInspection3_Click">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection3, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,12" VerticalAlignment="Center">
+                                <TextBlock Text="Inspection 4" Width="80" VerticalAlignment="Center"/>
+                                <ComboBox x:Name="CmbShapeInspection4"
+                                          Width="80"
+                                          Tag="4"
+                                          ItemsSource="{Binding AvailableShapes}"
+                                          SelectedItem="{Binding DataContext.InspectionRois[3].Shape, ElementName=WorkflowHost, Mode=TwoWay}"
+                                          SelectionChanged="InspectionShape_SelectionChanged"/>
+                                <ui:Button x:Name="BtnCreateInspection4"
+                                           Margin="4,0,0,0"
+                                           Style="{StaticResource IconOnlyButton}"
+                                           ToolTip="Create ROI 4"
+                                           Tag="4"
+                                           Click="BtnCreateInspection_Click">
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.AddSquare24}" FontSize="16"/>
+                                </ui:Button>
+                                <ui:Button Margin="4,0,0,0"
+                                           DataContext="{Binding DataContext.InspectionRois[3], ElementName=WorkflowHost}"
+                                           Click="BtnToggleEdit_Click"
+                                           IsEnabled="{Binding Enabled}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Setter Property="ToolTip" Value="Edit ROI 4"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                                                    <Setter Property="Content">
+                                                        <Setter.Value>
+                                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" FontSize="16"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Setter Property="ToolTip" Value="Save ROI 4"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnAddOkInspection4"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Add ROI 4 to OK"
+                                           Command="{Binding DataContext.AddRoiToOkCommand, ElementName=WorkflowHost}"
+                                           CommandParameter="{Binding Inspection4}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.CheckmarkCircle24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnAddNgInspection4"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Add ROI 4 to NG"
+                                           Command="{Binding DataContext.AddRoiToNgCommand, ElementName=WorkflowHost}"
+                                           CommandParameter="{Binding Inspection4}">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.DismissCircle24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding DataContext.InspectionRois[3].Enabled, ElementName=WorkflowHost}" Value="False">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                                <ui:Button x:Name="BtnRemoveInspection4"
+                                           Margin="4,0,0,0"
+                                           ToolTip="Remove ROI 4"
+                                           Click="BtnRemoveInspection4_Click">
+                                    <ui:Button.Style>
+                                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource IconOnlyButtonStyle}">
+                                            <Setter Property="IsEnabled" Value="True"/>
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" FontSize="16"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.Inspection4, ElementName=WorkflowHost}" Value="{x:Null}">
+                                                    <Setter Property="IsEnabled" Value="False"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ui:Button.Style>
+                                </ui:Button>
+                            </StackPanel>
+
+                                    <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
                         </StackPanel>
 
                         <StackPanel x:Name="InspectionDatasetPanel" Visibility="Collapsed" Margin="0,12,0,0">
-                            <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs">
-                                <workflow:InspectionDatasetTabsControl x:Name="InspectionDatasetTabsHost"
-                                                                       DataContext="{Binding ElementName=WorkflowHost, Path=DataContext}"/>
-                            </GroupBox>
+                            <workflow:InspectionDatasetTabsControl x:Name="InspectionDatasetTabsHost"
+                                                                   DataContext="{Binding ElementName=WorkflowHost, Path=DataContext}"/>
                         </StackPanel>
                     </StackPanel>
         </StackPanel>

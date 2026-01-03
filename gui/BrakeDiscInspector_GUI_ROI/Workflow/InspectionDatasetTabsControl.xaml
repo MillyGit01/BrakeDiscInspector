@@ -1,0 +1,268 @@
+<UserControl x:Class="BrakeDiscInspector_GUI_ROI.Workflow.InspectionDatasetTabsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:m="clr-namespace:BrakeDiscInspector_GUI_ROI.Models"
+             xmlns:w="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             mc:Ignorable="d"
+             d:DesignHeight="300"
+             d:DesignWidth="480">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </UserControl.Resources>
+    <TabControl ItemsSource="{Binding InspectionRois}"
+                SelectedItem="{Binding SelectedInspectionRoi}">
+        <TabControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type m:InspectionRoiConfig}">
+                <TextBlock Text="{Binding Name}"/>
+            </DataTemplate>
+        </TabControl.ItemTemplate>
+        <TabControl.ContentTemplate>
+            <DataTemplate DataType="{x:Type m:InspectionRoiConfig}">
+                <Grid Margin="0,8,0,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding Name}" Width="200" Margin="0,0,12,0"/>
+                        <CheckBox Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center"/>
+                        <ui:Button Margin="8,0,0,0"
+                                   Padding="12,4"
+                                   Click="BtnToggleEdit_Click"
+                                   IsEnabled="{Binding Enabled}">
+                            <ui:Button.Style>
+                                <Style TargetType="{x:Type ui:Button}">
+                                    <Setter Property="Content">
+                                        <Setter.Value>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
+                                                <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEditable}" Value="True">
+                                            <Setter Property="Content">
+                                                <Setter.Value>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:Button.Style>
+                        </ui:Button>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
+                        <TextBox Text="{Binding ModelKey}" Width="220" Margin="0,0,12,0"/>
+                        <CheckBox Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <ComboBox Width="90"
+                                      SelectedValuePath="Tag"
+                                      SelectedValue="{Binding AnchorMaster, Mode=TwoWay}">
+                                <ComboBoxItem Content="Master1"
+                                              Tag="{x:Static m:MasterAnchorChoice.Master1}" />
+                                <ComboBoxItem Content="Master2"
+                                              Tag="{x:Static m:MasterAnchorChoice.Master2}" />
+                                <ComboBoxItem Content="Mid"
+                                              Tag="{x:Static m:MasterAnchorChoice.Mid}" />
+                            </ComboBox>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Grid Grid.Row="3" Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Dataset" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox Grid.Column="1" Text="{Binding DatasetPath}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <ui:Button Grid.Column="2"
+                                   Padding="12,4"
+                                   Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Browse..." VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                        <ui:Button Grid.Column="3" Padding="12,4"
+                                   Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Open Folder" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                    </Grid>
+
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="{Binding DatasetStatus}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="Foreground" Value="DarkRed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding DatasetReady}" Value="True">
+                                            <Setter Property="Foreground" Value="ForestGreen"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="  "/>
+                        <TextBlock Text="{Binding DatasetCountsText}"/>
+                    </StackPanel>
+
+                    <ProgressBar Grid.Row="5" Height="4" Margin="0,4,0,0"
+                                 IsIndeterminate="True"
+                                 Visibility="{Binding IsDatasetLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                    <StackPanel Grid.Row="6" Margin="0,8,0,0">
+                        <TextBlock Text="OK dataset" FontWeight="SemiBold" Margin="0,6,0,4"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      Height="110">
+                            <ItemsControl ItemsSource="{Binding OkPreview}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type w:DatasetPreviewItem}">
+                                        <Border BorderBrush="#303030" BorderThickness="1" Margin="0">
+                                            <Image Source="{Binding Thumbnail}"
+                                                   Width="120"
+                                                   Height="90"
+                                                   Margin="0,0,8,0"
+                                                   Cursor="Hand"
+                                                   Stretch="UniformToFill"
+                                                   MouseLeftButtonUp="DatasetImage_Click"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+
+                        <TextBlock Text="NG dataset" FontWeight="SemiBold" Margin="0,8,0,4"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      Height="110">
+                            <ItemsControl ItemsSource="{Binding NgPreview}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type w:DatasetPreviewItem}">
+                                        <Border BorderBrush="#303030" BorderThickness="1" Margin="0">
+                                            <Image Source="{Binding Thumbnail}"
+                                                   Width="120"
+                                                   Height="90"
+                                                   Margin="0,0,8,0"
+                                                   Cursor="Hand"
+                                                   Stretch="UniformToFill"
+                                                   MouseLeftButtonUp="DatasetImage_Click"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <ui:Button Padding="12,4"
+                                   Margin="0,0,8,0"
+                                   Tag="{Binding Index}"
+                                   Click="LoadModelButton_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowDownload24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Load model" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                        <ui:Button Padding="12,4"
+                                   Margin="0,0,8,0"
+                                   Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                        <ui:Button Padding="12,4"
+                                   Margin="0,0,8,0"
+                                   Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Rocket24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Train" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                        <ui:Button Padding="12,4"
+                                   Margin="0,0,8,0"
+                                   Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Wrench24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Calibrate" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                        <ui:Button Padding="12,4"
+                                   Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Search24}" Margin="0,0,8,0"/>
+                                <TextBlock Text="Evaluate ROI" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="Score:"/>
+                        <TextBlock Text="{Binding LastScore, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
+                        <TextBlock Text="Threshold:"/>
+                        <TextBlock Text="{Binding CalibratedThreshold, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
+                        <TextBlock Text="Result:"/>
+                        <TextBlock Margin="4,0,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="—"/>
+                                    <Setter Property="Foreground" Value="Gray"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding LastResultOk}" Value="True">
+                                            <Setter Property="Text" Value="OK"/>
+                                            <Setter Property="Foreground" Value="ForestGreen"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding LastResultOk}" Value="False">
+                                            <Setter Property="Text" Value="NOK"/>
+                                            <Setter Property="Foreground" Value="DarkRed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+        </TabControl.ContentTemplate>
+    </TabControl>
+</UserControl>

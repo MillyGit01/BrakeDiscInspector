@@ -3683,14 +3683,46 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             SetSidePanelTitle(open
-                ? "ROI Management -> ROI Master -> Advanced"
-                : "ROI Management -> ROI Master");
+                ? "ROI management → ROI Master → Advanced"
+                : "ROI management → ROI Master");
+        }
+
+        private void ResetInspectionDatasetView()
+        {
+            if (InspectionDatasetPanel != null)
+            {
+                InspectionDatasetPanel.Visibility = Visibility.Collapsed;
+            }
+
+            if (InspectionDefaultPanel != null)
+            {
+                InspectionDefaultPanel.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SetInspectionDatasetView(bool open)
+        {
+            if (InspectionDefaultPanel != null)
+            {
+                InspectionDefaultPanel.Visibility = open ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (InspectionDatasetPanel != null)
+            {
+                InspectionDatasetPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            SetSidePanelTitle(open
+                ? "ROI management → ROI Inspection → Dataset"
+                : "ROI management → ROI Inspection");
         }
 
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
+            ResetInspectionDatasetView();
             SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.LayoutSetup);
             SetSidePanelTitle("Layout Setup");
@@ -3701,13 +3733,15 @@ namespace BrakeDiscInspector_GUI_ROI
             var expand = RoiNavSubmenu.Visibility != Visibility.Visible;
             RoiNavSubmenu.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
+            ResetInspectionDatasetView();
             SetMasterAdvancedOpen(false);
 
             if (expand)
             {
                 ShowSidePanel(SidePanelMode.RoiManagement);
                 RoiPanelMode = RoiPanelMode.Selector;
-                SetSidePanelTitle("ROI Management");
+                SetSidePanelTitle("ROI management");
             }
             else
             {
@@ -3720,15 +3754,25 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             RoiPanelMode = RoiPanelMode.Master;
             MasterRoiSubmenu.Visibility = Visibility.Visible;
+            InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
+            ResetInspectionDatasetView();
             SetMasterAdvancedOpen(false);
         }
 
         private void RoiManagementSelectInspection_Click(object sender, RoutedEventArgs e)
         {
             RoiPanelMode = RoiPanelMode.Inspection;
-            SetSidePanelTitle("ROI Management -> ROI Inspection");
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            InspectionRoiSubmenu.Visibility = Visibility.Visible;
             SetMasterAdvancedOpen(false);
+            ResetInspectionDatasetView();
+            SetSidePanelTitle("ROI management → ROI Inspection");
+        }
+
+        private void RoiManagementInspectionDataset_Click(object sender, RoutedEventArgs e)
+        {
+            var open = InspectionDatasetPanel?.Visibility != Visibility.Visible;
+            SetInspectionDatasetView(open);
         }
 
         private void NavMasterAdvanced_Click(object sender, RoutedEventArgs e)
@@ -3741,6 +3785,8 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
+            ResetInspectionDatasetView();
             SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.BatchInspection);
             SetSidePanelTitle("Batch Inspection");
@@ -3750,6 +3796,8 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
+            InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
+            ResetInspectionDatasetView();
             SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.Comms);
             SetSidePanelTitle("Comms");
@@ -4767,6 +4815,14 @@ namespace BrakeDiscInspector_GUI_ROI
                     WorkflowHost.ClearCanvasRequested -= WorkflowHostOnClearCanvasRequested;
                     WorkflowHost.ClearCanvasRequested += WorkflowHostOnClearCanvasRequested;
                     WorkflowHost.DataContext = _workflowViewModel;
+                }
+
+                if (InspectionDatasetTabsHost != null)
+                {
+                    InspectionDatasetTabsHost.LoadModelRequested -= WorkflowHostOnLoadModelRequested;
+                    InspectionDatasetTabsHost.LoadModelRequested += WorkflowHostOnLoadModelRequested;
+                    InspectionDatasetTabsHost.ToggleEditRequested -= WorkflowHostOnToggleEditRequested;
+                    InspectionDatasetTabsHost.ToggleEditRequested += WorkflowHostOnToggleEditRequested;
                 }
 
                 EnsureInspectionDatasetStructure();

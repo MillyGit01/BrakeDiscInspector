@@ -807,8 +807,9 @@
 
                     <StackPanel x:Name="InspectionRoisPanel"
                                 Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Inspection}">
-                        <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
-                            <StackPanel Margin="8,4,0,0">
+                        <StackPanel x:Name="InspectionDefaultPanel">
+                            <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
+                                <StackPanel Margin="8,4,0,0">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
                                     <TextBlock Text="Inspection 1" Width="80" VerticalAlignment="Center"/>
                                     <ComboBox x:Name="CmbShapeInspection1"
@@ -1281,10 +1282,16 @@
                                 </ui:Button>
                             </StackPanel>
 
-                    <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
-                </StackPanel>
-            </GroupBox>
-        </StackPanel>
+                                    <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+
+                        <StackPanel x:Name="InspectionDatasetPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                            <workflow:InspectionDatasetTabsControl x:Name="InspectionDatasetTabsHost"
+                                                                   DataContext="{Binding ElementName=WorkflowHost, Path=DataContext}"/>
+                        </StackPanel>
+                    </StackPanel>
         </StackPanel>
     </ScrollViewer>
 
@@ -1649,6 +1656,16 @@
                             <TextBlock Text="Inspection ROIs" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ui:Button>
+
+                    <StackPanel x:Name="InspectionRoiSubmenu" Visibility="Collapsed" Margin="0">
+                        <ui:Button Style="{StaticResource LeftNavButtonStyle}"
+                                   Click="RoiManagementInspectionDataset_Click">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="40,0,0,0">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" FontSize="18" Margin="0,0,10,0"/>
+                                <TextBlock Text="Dataset" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+                    </StackPanel>
                 </StackPanel>
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavBatchInspection_Click">

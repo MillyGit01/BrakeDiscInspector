@@ -1282,7 +1282,9 @@
                                 </ui:Button>
                             </StackPanel>
 
-                                    <workflow:WorkflowControl x:Name="WorkflowHost" Margin="0,12,0,0"/>
+                                    <workflow:WorkflowControl x:Name="WorkflowHost"
+                                                              ShowInspectionDatasetSection="False"
+                                                              Margin="0,12,0,0"/>
                                 </StackPanel>
                             </GroupBox>
                         </StackPanel>

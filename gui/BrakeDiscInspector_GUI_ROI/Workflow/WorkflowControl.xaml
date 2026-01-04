@@ -8,6 +8,9 @@
              mc:Ignorable="d"
              d:DesignHeight="600"
              d:DesignWidth="480">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="10" Orientation="Vertical">
             <StackPanel.Resources>
@@ -28,7 +31,10 @@
                 </Grid>
             </GroupBox>
 
-            <GroupBox Header="Inspection ROIs">
+            <GroupBox Header="Inspection ROIs"
+                      Visibility="{Binding ShowInspectionDatasetSection,
+                                           RelativeSource={RelativeSource AncestorType={x:Type w:WorkflowControl}},
+                                           Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
                         <!-- Per-selected-ROI summary -->

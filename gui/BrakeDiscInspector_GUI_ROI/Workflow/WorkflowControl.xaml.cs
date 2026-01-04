@@ -9,9 +9,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 {
     public partial class WorkflowControl : UserControl
     {
+        public static readonly DependencyProperty ShowInspectionDatasetSectionProperty =
+            DependencyProperty.Register(
+                nameof(ShowInspectionDatasetSection),
+                typeof(bool),
+                typeof(WorkflowControl),
+                new PropertyMetadata(true));
+
         public event EventHandler<LoadModelRequestedEventArgs>? LoadModelRequested;
         public event EventHandler<ToggleEditRequestedEventArgs>? ToggleEditRequested;
         public event EventHandler? ClearCanvasRequested;
+
+        public bool ShowInspectionDatasetSection
+        {
+            get => (bool)GetValue(ShowInspectionDatasetSectionProperty);
+            set => SetValue(ShowInspectionDatasetSectionProperty, value);
+        }
 
         public WorkflowControl()
         {

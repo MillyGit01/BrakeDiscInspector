@@ -1656,7 +1656,7 @@
         </Grid>
         <Border Grid.Row="1" Grid.Column="0"
             BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
-            Background="#F7F7F7">
+            Background="{DynamicResource BrushAppBackground}">
             <StackPanel Margin="8">
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavLayoutSetup_Click">

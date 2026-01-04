@@ -542,14 +542,6 @@
                                         <TextBlock Text="Delete" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </ui:Button>
-                                <ui:Button Margin="4,0,0,0"
-                                           Command="{Binding BlankDatasetCommand}"
-                                           ToolTip="Create a blank dataset for the current layout" Height="45" Width="72" Padding="4,5,4,6">
-                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
-                                        <TextBlock Text="Blank "/>
-                                    </StackPanel>
-                                </ui:Button>
                             </WrapPanel>
                         </StackPanel>
                     </GroupBox>

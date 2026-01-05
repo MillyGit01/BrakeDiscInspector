@@ -547,7 +547,7 @@
                         <StackPanel>
                             <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"
                                      SelectedItem="{Binding LayoutProfiles.SelectedProfile}"
-                                     Height="240">
+                                     Height="240" SelectionChanged="ListBox_SelectionChanged">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">

@@ -183,20 +183,11 @@
 
                     <Image x:Name="NavLogo"
                            Width="203"
-                           Height="22"
+                           Height="77"
                            Margin="0"
                            Stretch="Uniform"
                            SnapsToDevicePixels="True"
-                           Source="pack://application:,,,/BrakeDiscInspector_GUI_ROI;component/LogoPlanta.png" />
-
-                    <TextBox x:Name="NavLogoTextBox"
-                             Width="203"
-                             Height="22"
-                             Margin="0"
-                             Padding="10,0"
-                             TextAlignment="Center"
-                             VerticalContentAlignment="Center"
-                             Text="" />
+                           Source="/LogoPlanta2.png" />
                 </StackPanel>
 
             </Grid>

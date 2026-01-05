@@ -14,6 +14,7 @@
 	</PropertyGroup>
         <ItemGroup>
           <None Remove="LogoPlanta.png" />
+          <None Remove="LogoPlanta2.png" />
         </ItemGroup>
 
         <ItemGroup>
@@ -35,6 +36,7 @@
 
         <ItemGroup>
           <Resource Include="LogoPlanta.png" />
+          <Resource Include="LogoPlanta2.png" />
         </ItemGroup>
 
         <ItemGroup>

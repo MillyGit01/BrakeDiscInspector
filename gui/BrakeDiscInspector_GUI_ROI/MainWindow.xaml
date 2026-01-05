@@ -147,7 +147,8 @@
 
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
-            <RowDefinition Height="652" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -258,7 +259,7 @@
                StaysOpen="False"
                Closed="GuiSetupPopup_Closed"
                AllowsTransparency="True"
-               PopupAnimation="Fade" Margin="0,0,0,572">
+               PopupAnimation="Fade">
             <Border Background="{DynamicResource BrushAppBackground}"
                     BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
                     BorderThickness="1"
@@ -558,7 +559,7 @@
         </Popup>
 
         <!-- ===== Side Panel Host ===== -->
-        <Grid Grid.Column="1" x:Name="SidePanelHost" Margin="0,80,0,0">
+        <Grid Grid.Row="1" Grid.Column="1" x:Name="SidePanelHost" Margin="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
@@ -1714,11 +1715,12 @@
                 </Grid>
             </ScrollViewer>
         </Grid>
-        <Border Grid.Column="0"
+        <Border Grid.Row="1"
+                Grid.Column="0"
                 BorderBrush="#D0D0D0"
                 BorderThickness="0,0,1,0"
                 Background="{DynamicResource BrushAppBackground}"
-                Margin="0,80,0,0">
+                Margin="0">
             <StackPanel Margin="8">
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavLayoutSetup_Click">
@@ -1793,10 +1795,10 @@
             </StackPanel>
         </Border>
 
-        <GridSplitter Grid.Column="2" Style="{StaticResource PanelGridSplitterStyle}" ShowsPreview="True" ResizeBehavior="PreviousAndNext" DragCompleted="PanelSplitter_OnDragCompleted" Margin="0,80,0,0" />
+        <GridSplitter Grid.Row="1" Grid.Column="2" Style="{StaticResource PanelGridSplitterStyle}" ShowsPreview="True" ResizeBehavior="PreviousAndNext" DragCompleted="PanelSplitter_OnDragCompleted" Margin="0" />
 
         <!-- ===== Viewer/Canvas (right) ===== -->
-        <Grid Grid.Column="3" x:Name="ViewerHost" Margin="0,80,0,0">
+        <Grid Grid.Row="1" Grid.Column="3" x:Name="ViewerHost" Margin="0">
             <Grid Margin="10">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -2022,7 +2024,7 @@
                 </Border>
             </Grid>
         </Grid>
-        <Border Grid.Row="1" Grid.ColumnSpan="4" Padding="12,10" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Grid.ColumnSpan="4" Padding="12,10" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
@@ -2051,7 +2053,7 @@
               Background="#66000000"
               Visibility="Collapsed"
               Panel.ZIndex="999"
-              Grid.RowSpan="2"
+              Grid.RowSpan="3"
               Grid.ColumnSpan="4">
             <Border Width="360"
                   Padding="18"

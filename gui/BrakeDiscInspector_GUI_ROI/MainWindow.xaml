@@ -159,7 +159,43 @@
         </Grid.ColumnDefinitions>
 
         <!-- ===== Top bar ===== -->
-        <Border Grid.Row="0" Grid.ColumnSpan="4" Padding="16,10" Background="{DynamicResource BrushAppBackground}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0"
+                Grid.Column="0"
+                Background="{DynamicResource BrushAppBackground}"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                BorderThickness="0,0,0,1"
+                Padding="0"
+                SnapsToDevicePixels="True">
+            <StackPanel Width="215"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Margin="0"
+                        Orientation="Vertical">
+                <Image x:Name="NavLogo"
+                       Width="215"
+                       Height="22"
+                       Margin="0"
+                       Stretch="Uniform"
+                       SnapsToDevicePixels="True"
+                       Source="pack://application:,,,/BrakeDiscInspector_GUI_ROI;component/LogoPlanta.png" />
+                <TextBox x:Name="NavLogoTextBox"
+                         Width="215"
+                         Height="22"
+                         Margin="0"
+                         Padding="10,0"
+                         TextAlignment="Center"
+                         VerticalContentAlignment="Center"
+                         Text="" />
+            </StackPanel>
+        </Border>
+        <Border x:Name="TopBarRightBorder"
+                Grid.Row="0"
+                Grid.Column="1"
+                Grid.ColumnSpan="3"
+                Padding="16,10"
+                Background="{DynamicResource BrushAppBackground}"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                BorderThickness="0,0,0,1">
             <DockPanel Margin="221,0,0,-1">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left"/>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" HorizontalAlignment="Right">
@@ -1653,25 +1689,9 @@
             </ScrollViewer>
         </Grid>
         <Border Grid.Row="1" Grid.Column="0"
-            BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
-            Background="{DynamicResource BrushAppBackground}">
+                BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
+                Background="{DynamicResource BrushAppBackground}">
             <StackPanel Margin="8">
-                <Image x:Name="NavLogo"
-                       Width="215"
-                       HorizontalAlignment="Center"
-                       Margin="0,12,0,0"
-                       Stretch="Uniform"
-                       SnapsToDevicePixels="True"
-                       Source="pack://application:,,,/BrakeDiscInspector_GUI_ROI;component/LogoPlanta.png" />
-                <TextBox x:Name="NavLogoTextBox"
-                         Width="215"
-                         HorizontalAlignment="Center"
-                         Margin="0,0,0,16"
-                         Padding="10,6"
-                         TextAlignment="Center"
-                         VerticalContentAlignment="Center"
-                         Text=""
-                         ToolTip=""/>
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavLayoutSetup_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">

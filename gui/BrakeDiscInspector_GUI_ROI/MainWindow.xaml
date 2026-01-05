@@ -172,51 +172,16 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Botones (esquina superior izquierda) -->
-                <StackPanel Grid.Row="0"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top"
-                            Margin="8,8,0,0"
-                            Panel.ZIndex="5">
-
-                    <ui:Button x:Name="SetupGuiButton"
-                               Style="{StaticResource AppButtonStyle}"
-                               Click="SetupGuiButton_Click"
-                               Margin="0,0,8,0"
-                               ToolTip="Open GUI setup">
-                        <StackPanel Orientation="Horizontal">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" Margin="0,0,6,0" FontSize="16"/>
-                            <TextBlock Text="Setup GUI" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </ui:Button>
-
-                    <ui:Button x:Name="ThemeLightButton"
-                               Style="{StaticResource AppButtonStyle}"
-                               Click="ThemeLightButton_Click"
-                               Margin="0,0,6,0"
-                               ToolTip="Light theme">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherSunny24}" FontSize="18"/>
-                    </ui:Button>
-
-                    <ui:Button x:Name="ThemeDarkButton"
-                               Style="{StaticResource AppButtonStyle}"
-                               Click="ThemeDarkButton_Click"
-                               ToolTip="Dark theme">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherMoon24}" FontSize="18"/>
-                    </ui:Button>
-                </StackPanel>
-
-                <!-- Logo recuperado (centrado bajo los botones, mismo ancho 215) -->
+                <!-- Logo recuperado (centrado bajo los botones, mismo ancho 203) -->
                 <StackPanel Grid.Row="1"
-                            Width="215"
+                            Width="203"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top"
                             Margin="0,6,0,0"
                             Orientation="Vertical">
 
                     <Image x:Name="NavLogo"
-                           Width="215"
+                           Width="203"
                            Height="22"
                            Margin="0"
                            Stretch="Uniform"
@@ -224,7 +189,7 @@
                            Source="pack://application:,,,/BrakeDiscInspector_GUI_ROI;component/LogoPlanta.png" />
 
                     <TextBox x:Name="NavLogoTextBox"
-                             Width="215"
+                             Width="203"
                              Height="22"
                              Margin="0"
                              Padding="10,0"
@@ -246,7 +211,44 @@
                 BorderThickness="0,0,0,1">
             <DockPanel Margin="0,0,0,-1">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left"/>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                <StackPanel Orientation="Horizontal"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Top"
+                            HorizontalAlignment="Right"
+                            Margin="0,6,8,0">
+
+                    <ui:Button x:Name="SetupGuiButton"
+                               Style="{StaticResource AppButtonStyle}"
+                               Click="SetupGuiButton_Click"
+                               Margin="0,0,8,0"
+                               ToolTip="Open GUI setup"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" Margin="0,0,6,0" FontSize="16"/>
+                            <TextBlock Text="Setup GUI" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ui:Button>
+
+                    <ui:Button x:Name="ThemeLightButton"
+                               Style="{StaticResource AppButtonStyle}"
+                               Click="ThemeLightButton_Click"
+                               Margin="0,0,6,0"
+                               ToolTip="Light theme"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherSunny24}" FontSize="18"/>
+                    </ui:Button>
+
+                    <ui:Button x:Name="ThemeDarkButton"
+                               Style="{StaticResource AppButtonStyle}"
+                               Click="ThemeDarkButton_Click"
+                               ToolTip="Dark theme"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherMoon24}" FontSize="18"/>
+                    </ui:Button>
+                </StackPanel>
             </DockPanel>
         </Border>
 

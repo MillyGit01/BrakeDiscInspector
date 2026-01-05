@@ -160,16 +160,14 @@
 
         <!-- ===== Top bar ===== -->
         <Border Grid.Row="0" Grid.ColumnSpan="4" Padding="16,10" Background="{DynamicResource BrushAppBackground}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left">
-                    <TextBlock Text="BrakeDiscInspector" Style="{StaticResource TitleTextStyle}" Margin="0,0,12,0" />
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+            <DockPanel Margin="221,0,0,-1">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left"/>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <ui:Button x:Name="SetupGuiButton"
                                Style="{StaticResource AppButtonStyle}"
                                Click="SetupGuiButton_Click"
                                Margin="0,0,8,0"
-                               ToolTip="Open GUI setup">
+                               ToolTip="Open GUI setup" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" Margin="0,0,6,0" FontSize="16"/>
                             <TextBlock Text="Setup GUI" VerticalAlignment="Center"/>
@@ -179,13 +177,13 @@
                                Style="{StaticResource AppButtonStyle}"
                                Click="ThemeLightButton_Click"
                                Margin="0,0,6,0"
-                               ToolTip="Light theme">
+                               ToolTip="Light theme" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherSunny24}" FontSize="18"/>
                     </ui:Button>
                     <ui:Button x:Name="ThemeDarkButton"
                                Style="{StaticResource AppButtonStyle}"
                                Click="ThemeDarkButton_Click"
-                               ToolTip="Dark theme">
+                               ToolTip="Dark theme" HorizontalAlignment="Right" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherMoon24}" FontSize="18"/>
                     </ui:Button>
                 </StackPanel>
@@ -542,7 +540,7 @@
                     </StackPanel>
                     <ui:ToggleSwitch Content="{DynamicResource LayoutAutosave}"
                                      IsChecked="{Binding LayoutAutosaveEnabled, Mode=TwoWay, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                     Margin="20,20,0,8"/>
+                                     Margin="20,10,0,8"/>
                     <GroupBox Header="{DynamicResource Layouts}" Width="441" DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Margin="0,20,0,120" HorizontalAlignment="Center">
                         <StackPanel>
                             <ListBox ItemsSource="{Binding LayoutProfiles.Profiles}"

@@ -158,7 +158,6 @@
         </Grid.ColumnDefinitions>
 
         <!-- ===== Top bar ===== -->
-<<<<<<< HEAD
         <Border Grid.Row="0"
                 Grid.Column="0"
                 Background="{DynamicResource BrushAppBackground}"
@@ -188,6 +187,7 @@
                          Text="" />
             </StackPanel>
         </Border>
+
         <Border x:Name="TopBarRightBorder"
                 Grid.Row="0"
                 Grid.Column="1"
@@ -196,10 +196,7 @@
                 Background="{DynamicResource BrushAppBackground}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
                 BorderThickness="0,0,0,1">
-=======
-        <Border Grid.Row="0" Grid.ColumnSpan="4" Padding="16,10" Background="{DynamicResource BrushAppBackground}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,0,0,1" Margin="0,0,0,577">
->>>>>>> 12701d8 (Update MainWindow.xaml)
-            <DockPanel Margin="221,0,0,-1">
+            <DockPanel Margin="0,0,0,-1">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left"/>
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" HorizontalAlignment="Right">
                     <ui:Button x:Name="SetupGuiButton"
@@ -853,7 +850,7 @@
                                         </StackPanel>
 
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0" Width="221" HorizontalAlignment="Left">
-                                            <TextBlock Text="Thershold" VerticalAlignment="Center" Margin="0,0,1,0" Width="63"/>
+                                            <TextBlock Text="Threshold" VerticalAlignment="Center" Margin="0,0,1,0" Width="63"/>
                                             <TextBox x:Name="TxtThrM2" Width="128"
                                                      Text="{Binding AnalyzeThrM2, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Height="37"/>
                                         </StackPanel>
@@ -1691,15 +1688,11 @@
                 </Grid>
             </ScrollViewer>
         </Grid>
-<<<<<<< HEAD
-        <Border Grid.Row="1" Grid.Column="0"
-                BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
-                Background="{DynamicResource BrushAppBackground}">
-=======
         <Border Grid.Column="0"
-            BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
-            Background="{DynamicResource BrushAppBackground}" Margin="0,80,0,0">
->>>>>>> 12701d8 (Update MainWindow.xaml)
+                BorderBrush="#D0D0D0"
+                BorderThickness="0,0,1,0"
+                Background="{DynamicResource BrushAppBackground}"
+                Margin="0,80,0,0">
             <StackPanel Margin="8">
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavLayoutSetup_Click">
@@ -1712,7 +1705,7 @@
                            Click="NavRoiManagement_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}" FontSize="18" Margin="0,0,10,0"/>
-                        <TextBlock Text="ROIs Management" VerticalAlignment="Center"/>
+                        <TextBlock Text="ROI Management" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
                 <!-- Submenú colapsable: mismo tamaño/estilo que el resto, con tabulación -->

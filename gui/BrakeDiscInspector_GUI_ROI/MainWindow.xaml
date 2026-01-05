@@ -198,31 +198,7 @@
                 BorderThickness="0,0,0,1">
             <DockPanel Margin="0,0,0,-1">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left"/>
-                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <ui:Button x:Name="SetupGuiButton"
-                               Style="{StaticResource AppButtonStyle}"
-                               Click="SetupGuiButton_Click"
-                               Margin="0,0,8,0"
-                               ToolTip="Open GUI setup" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" Margin="0,0,6,0" FontSize="16"/>
-                            <TextBlock Text="Setup GUI" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </ui:Button>
-                    <ui:Button x:Name="ThemeLightButton"
-                               Style="{StaticResource AppButtonStyle}"
-                               Click="ThemeLightButton_Click"
-                               Margin="0,0,6,0"
-                               ToolTip="Light theme" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherSunny24}" FontSize="18"/>
-                    </ui:Button>
-                    <ui:Button x:Name="ThemeDarkButton"
-                               Style="{StaticResource AppButtonStyle}"
-                               Click="ThemeDarkButton_Click"
-                               ToolTip="Dark theme" HorizontalAlignment="Right" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherMoon24}" FontSize="18"/>
-                    </ui:Button>
-                </StackPanel>
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center" HorizontalAlignment="Right"/>
             </DockPanel>
         </Border>
 
@@ -1777,6 +1753,47 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
+
+                <!-- ===== Top-right overlay buttons (over the viewer canvas) ===== -->
+                <StackPanel x:Name="ViewerTopRightButtons"
+                            Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            Margin="0,8,12,0"
+                            Panel.ZIndex="1200">
+                    <ui:Button x:Name="SetupGuiButton"
+                               Style="{StaticResource AppButtonStyle}"
+                               Click="SetupGuiButton_Click"
+                               Margin="0,0,8,0"
+                               ToolTip="Open GUI setup"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" Margin="0,0,6,0" FontSize="16"/>
+                            <TextBlock Text="Setup GUI" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </ui:Button>
+
+                    <ui:Button x:Name="ThemeLightButton"
+                               Style="{StaticResource AppButtonStyle}"
+                               Click="ThemeLightButton_Click"
+                               Margin="0,0,6,0"
+                               ToolTip="Light theme"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherSunny24}" FontSize="18"/>
+                    </ui:Button>
+
+                    <ui:Button x:Name="ThemeDarkButton"
+                               Style="{StaticResource AppButtonStyle}"
+                               Click="ThemeDarkButton_Click"
+                               ToolTip="Dark theme"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherMoon24}" FontSize="18"/>
+                    </ui:Button>
+                </StackPanel>
 
                 <AdornerDecorator Grid.Row="1" Margin="0,8,0,0">
                     <Grid Background="#111">

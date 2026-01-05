@@ -147,8 +147,8 @@
 
     <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" MinHeight="80" />
+            <RowDefinition />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
@@ -1656,13 +1656,6 @@
             BorderBrush="#D0D0D0" BorderThickness="0,0,1,0"
             Background="{DynamicResource BrushAppBackground}">
             <StackPanel Margin="8">
-                <Image x:Name="NavLogo"
-                       Width="215"
-                       HorizontalAlignment="Center"
-                       Margin="0,12,0,16"
-                       Stretch="Uniform"
-                       SnapsToDevicePixels="True"
-                       Source="pack://application:,,,/BrakeDiscInspector_GUI_ROI;component/LogoPlanta.png" />
                 <ui:Button Style="{StaticResource LeftNavButtonStyle}"
                            Click="NavLayoutSetup_Click">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -2019,5 +2012,12 @@
                 </StackPanel>
             </Border>
         </Grid>
+        <Image x:Name="NavLogo"
+                       Width="216"
+                       HorizontalAlignment="Center"
+                       Margin="0,4,0,24"
+                       Stretch="Uniform"
+                       SnapsToDevicePixels="True"
+                       Source="pack://application:,,,/BrakeDiscInspector_GUI_ROI;component/LogoPlanta.png" />
     </Grid>
 </Window>

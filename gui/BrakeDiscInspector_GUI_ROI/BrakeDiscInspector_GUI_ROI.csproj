@@ -12,6 +12,9 @@
 		<PublishReadyToRun>false</PublishReadyToRun>
 		<PublishSingleFile>false</PublishSingleFile>
 	</PropertyGroup>
+        <ItemGroup>
+          <None Remove="LogoPlanta.png" />
+        </ItemGroup>
 
         <ItemGroup>
                 <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
@@ -28,6 +31,10 @@
                 <Content Include="appsettings.json">
                         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
                 </Content>
+        </ItemGroup>
+
+        <ItemGroup>
+          <Resource Include="LogoPlanta.png" />
         </ItemGroup>
 
         <ItemGroup>

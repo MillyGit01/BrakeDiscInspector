@@ -726,7 +726,7 @@
                                         </WrapPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="2" HorizontalAlignment="Left" Width="188" Margin="10,0,0,0">
+                                    <StackPanel Grid.Column="2" Margin="0,0,21,0" HorizontalAlignment="Right" Width="190">
                                         <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146" HorizontalAlignment="Left" Margin="0,0,0,6"/>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -777,10 +777,18 @@
                                     </StackPanel>
                                 </Grid>
                             </GroupBox>
+                            <ui:Button x:Name="BtnAnalyzeMaster"
+                                       Click="BtnAnalyzeMaster_Click"
+                                       Width="180" HorizontalAlignment="Right" Margin="0,20,85,0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
+                                    <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ui:Button>
 
                             <WrapPanel Margin="0,12,0,12">
                                 <ui:Button x:Name="BtnClearCanvas"
-                                           Click="BtnClearCanvas_Click" Margin="10,0,0,0">
+                                           Click="BtnClearCanvas_Click">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Eraser24}" Margin="0,0,8,0" FontSize="16"/>
                                         <TextBlock Text="Clear Canvas" VerticalAlignment="Center"/>
@@ -788,20 +796,11 @@
                                 </ui:Button>
                             </WrapPanel>
 
-                            <ui:Button x:Name="BtnAnalyzeMaster"
-                                       Click="BtnAnalyzeMaster_Click"
-                                       Margin="0,8,0,0">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
-                                    <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </ui:Button>
-
                             <GroupBox Header="Match Options"
                                       Width="260"
-                                      DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
+                                      DataContext="{Binding RelativeSource={RelativeSource AncestorType={x:Type Window}}}" HorizontalAlignment="Left" Margin="0,30,0,12">
                                 <StackPanel Margin="8,4,0,0">
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <StackPanel Orientation="Horizontal" Margin="0,15,0,8">
                                         <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
                                         <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
                                         <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
@@ -810,7 +809,7 @@
                                         <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
                                     </StackPanel>
                                     <WrapPanel>
-                                        <ui:Button x:Name="BtnSavePreset" Click="BtnSavePreset_Click" Margin="0,0,8,0">
+                                        <ui:Button x:Name="BtnSavePreset" Click="BtnSavePreset_Click" Margin="0,20,8,0">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
                                                 <TextBlock Text="Save Preset" VerticalAlignment="Center"/>

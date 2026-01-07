@@ -669,23 +669,24 @@
                         <StackPanel x:Name="MasterDefaultPanel" Visibility="Visible">
                             <GroupBox x:Name="MasterRoiGroup"
                                       Header="Master ROI"
-                                      Margin="10,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" Width="441" HorizontalAlignment="Left">
+                                      Margin="0,0,0,0" Height="202" ScrollViewer.VerticalScrollBarVisibility="Disabled" Width="441" HorizontalAlignment="Left">
                                 <Grid Margin="8">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="10*"/>
-                                        <ColumnDefinition Width="179*"/>
-                                        <ColumnDefinition Width="204*"/>
+                                        <ColumnDefinition Width="11*"/>
+                                        <ColumnDefinition Width="203*"/>
+                                        <ColumnDefinition Width="211*"/>
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="0" Grid.ColumnSpan="2">
                                         <TextBlock Text="Master 1" FontWeight="SemiBold" Margin="0,0,0,6" FontSize="18" Width="165" HorizontalAlignment="Left"/>
-                                        <Grid Width="218" HorizontalAlignment="Left">
+                                        <Grid Width="218" HorizontalAlignment="Right" Height="34">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" MinWidth="49"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="0"/>
                                                 <ColumnDefinition/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Shape:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
-                                            <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="1" Height="37" HorizontalAlignment="Left" Width="135" Margin="1,0,0,0">
+                                            <TextBlock Text="Shape:" VerticalAlignment="Top" Height="18" HorizontalAlignment="Left" Grid.ColumnSpan="3" Margin="4,6,0,0"/>
+                                            <ComboBox x:Name="ComboMasterRoiShape" Grid.Column="2" Margin="55,0,28,0" Width="135">
                                                 <ComboBoxItem Content="Rectangle"/>
                                                 <ComboBoxItem Content="Circle"/>
                                                 <ComboBoxItem Content="Annulus"/>
@@ -693,11 +694,12 @@
                                         </Grid>
                                         <Grid Margin="0,0,0,6" Width="216" HorizontalAlignment="Left">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" MinWidth="50"/>
+                                                <ColumnDefinition Width="26"/>
+                                                <ColumnDefinition Width="24"/>
                                                 <ColumnDefinition/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
-                                            <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="1" RenderTransformOrigin="0.521,0.527" HorizontalAlignment="Left" Width="135" Height="37"/>
+                                            <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19" Grid.ColumnSpan="2"/>
+                                            <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="2" RenderTransformOrigin="0.521,0.527" HorizontalAlignment="Left" Width="135" Height="37"/>
                                         </Grid>
                                         <WrapPanel Width="112" RenderTransformOrigin="0.515,0.547" HorizontalAlignment="Left" Margin="65,0,0,0">
                                             <ui:Button x:Name="BtnEditM1"
@@ -726,15 +728,15 @@
                                         </WrapPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="2" Margin="0,0,21,0" HorizontalAlignment="Right" Width="190">
+                                    <StackPanel Grid.Column="2" Margin="3,0,0,0" HorizontalAlignment="Left" Width="198">
                                         <TextBlock Text="Master 2" FontWeight="SemiBold" FontSize="18" Width="146" HorizontalAlignment="Left" Margin="0,0,0,6"/>
-                                        <Grid>
+                                        <Grid HorizontalAlignment="Left">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto" MinWidth="50"/>
+                                                <ColumnDefinition/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Shape:" VerticalAlignment="Top" Margin="0,10,8,0"/>
-                                            <ComboBox x:Name="ComboM2Shape" Grid.Column="1" HorizontalAlignment="Center" Width="135" VerticalAlignment="Center" Height="35">
+                                            <TextBlock Text="Shape:" VerticalAlignment="Center" Margin="0,0,8,0" Height="17"/>
+                                            <ComboBox x:Name="ComboM2Shape" Grid.Column="1" HorizontalAlignment="Center" Width="134" VerticalAlignment="Center" Height="35">
                                                 <ComboBoxItem Content="Rectangle"/>
                                                 <ComboBoxItem Content="Circle"/>
                                                 <ComboBoxItem Content="Annulus"/>

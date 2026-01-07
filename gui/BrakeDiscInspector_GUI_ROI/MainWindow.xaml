@@ -563,7 +563,11 @@
                        Margin="8,8,8,4"
                        Visibility="Collapsed"/>
 
-            <ScrollViewer x:Name="LayoutSetupPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" d:Visibility="Visible">
+            <ScrollViewer x:Name="LayoutSetupPanel"
+                          Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          Visibility="Collapsed"
+                          d:Visibility="Collapsed">
                 <ScrollViewer.Resources>
                     <Style TargetType="{x:Type ui:Button}"
                            BasedOn="{StaticResource LayoutPanelButtonStyle}" />
@@ -646,7 +650,11 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="RoiManagementPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Collapsed">
+            <ScrollViewer x:Name="RoiManagementPanel"
+                          Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          Visibility="Visible"
+                          d:Visibility="Visible">
                 <StackPanel Margin="8" Orientation="Vertical">
                     <StackPanel x:Name="RoiManagementSelector"
                                 Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Selector}">

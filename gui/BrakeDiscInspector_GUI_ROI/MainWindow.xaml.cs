@@ -146,7 +146,7 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private int _freezeRoiRepositionCounter;
-        private RoiPanelMode _roiPanelMode = RoiPanelMode.Selector;
+        private RoiPanelMode _roiPanelMode = RoiPanelMode.Master;
         private bool _pendingActiveInspectionSync;
         private bool _globalUnlocked = false;
         private bool _editingM1;
@@ -3460,7 +3460,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 CaptureDefaultGuiResources();
                 InitializeGuiSetupPanel();
 
-                ShowSidePanel(SidePanelMode.LayoutSetup);
+                ShowSidePanel(SidePanelMode.RoiManagement);
+                RoiPanelMode = RoiPanelMode.Master;
 
                 ConfigureCommandBindings();
                 ApplySavedUiPreferences();

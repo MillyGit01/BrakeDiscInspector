@@ -789,9 +789,9 @@
                                                 <ColumnDefinition/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19" Grid.ColumnSpan="2"/>
-                                            <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="2" RenderTransformOrigin="0.521,0.527" HorizontalAlignment="Left" Width="135" Height="37"/>
+                                            <ComboBox x:Name="ComboMasterRoiRole" Grid.Column="2" RenderTransformOrigin="0.521,0.527" HorizontalAlignment="Left" Width="135" Height="37" Margin="1,0,0,0"/>
                                         </Grid>
-                                        <WrapPanel Width="112" RenderTransformOrigin="0.515,0.547" HorizontalAlignment="Left" Margin="65,0,0,0">
+                                        <WrapPanel Width="140" RenderTransformOrigin="0.515,0.547" HorizontalAlignment="Right" Margin="75,0,0,0">
                                             <ui:Button x:Name="BtnEditM1"
                                                        MinHeight="26"
                                                        Padding="8,4"
@@ -826,7 +826,7 @@
                                                 <ColumnDefinition/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="Shape:" VerticalAlignment="Center" Margin="0,0,8,0" Height="17"/>
-                                            <ComboBox x:Name="ComboM2Shape" Grid.Column="1" HorizontalAlignment="Center" Width="134" VerticalAlignment="Center" Height="35">
+                                            <ComboBox x:Name="ComboM2Shape" Grid.Column="1" HorizontalAlignment="Center" Width="135" VerticalAlignment="Center" Height="35">
                                                 <ComboBoxItem Content="Rectangle"/>
                                                 <ComboBoxItem Content="Circle"/>
                                                 <ComboBoxItem Content="Annulus"/>
@@ -840,11 +840,10 @@
                                             <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,8,0" Height="19"/>
                                             <ComboBox x:Name="ComboM2Role" Grid.Column="1" Margin="10,0,0,0" Height="37" HorizontalAlignment="Left" Width="135"/>
                                         </Grid>
-                                        <WrapPanel Width="118" HorizontalAlignment="Left" Margin="60,7,0,0">
+                                        <WrapPanel Width="124" HorizontalAlignment="Right" Margin="60,7,0,0">
                                             <ui:Button x:Name="BtnEditM2"
                                                        MinHeight="26"
                                                        Padding="8,4"
-                                                       Margin="4,0,0,0"
                                                        ToolTip="Edit Master 2"
                                                        Click="BtnEditM2_Click" Width="37" Height="37">
                                                 <ui:SymbolIcon x:Name="IconEditM2" Symbol="{x:Static ui:SymbolRegular.Edit24}" FontSize="16"/>
@@ -852,16 +851,16 @@
                                             <ui:Button x:Name="BtnM2_Remove"
                                                        MinHeight="26"
                                                        Padding="8,4"
-                                                       Click="BtnM2_Remove_Click" Width="37" HorizontalAlignment="Center" Height="37">
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                       Click="BtnM2_Remove_Click" Width="37" HorizontalAlignment="Left" Height="37">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Width="16">
                                                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0" FontSize="16"/>
                                                 </StackPanel>
                                             </ui:Button>
                                             <ui:Button x:Name="BtnM2_Create"
                                                        MinHeight="26"
                                                        Padding="8,4"
-                                                       Click="BtnM2_Create_Click" RenderTransformOrigin="4.067,0.5" HorizontalAlignment="Center" Width="37" Height="37">
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                       Click="BtnM2_Create_Click" RenderTransformOrigin="4.067,0.5" HorizontalAlignment="Left" Width="37" Height="37">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Width="16">
                                                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Add24}" Margin="0,0,8,0" FontSize="16"/>
                                                 </StackPanel>
                                             </ui:Button>

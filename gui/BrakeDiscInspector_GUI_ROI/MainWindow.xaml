@@ -47,7 +47,7 @@
 
         <Style x:Key="AppButtonStyle" TargetType="{x:Type ui:Button}">
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
+            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
@@ -55,17 +55,107 @@
             <Setter Property="Effect" Value="{x:Null}" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
+                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.35"
-                                              Color="{DynamicResource UI.Color.Accent}" />
+                                              Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
                         </Setter.Value>
                     </Setter>
                 </Trigger>
             </Style.Triggers>
         </Style>
         <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource AppButtonStyle}" />
+
+        <Style x:Key="IconTextButtonStyle" TargetType="{x:Type ui:Button}">
+            <Setter Property="Height" Value="40" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Appearance" Value="Secondary" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
+            <Setter Property="Effect" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="ToolTipService.ShowDuration" Value="30000" />
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <ui:SymbolIcon Symbol="{Binding RelativeSource={RelativeSource AncestorType=ui:Button}, Path=Tag}" FontSize="16" Margin="0,0,8,0" />
+                            <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35"
+                                              Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="IconOnlyButtonStyle" TargetType="{x:Type ui:Button}">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+            <Setter Property="Appearance" Value="Secondary" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+            <Setter Property="Effect" Value="{x:Null}" />
+            <Setter Property="ToolTipService.ShowDuration" Value="30000" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35"
+                                              Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="IconOnlyButton" TargetType="{x:Type ui:Button}"
+               BasedOn="{StaticResource IconOnlyButtonStyle}" />
+
+        <Style x:Key="LeftNavButtonStyle" TargetType="{x:Type ui:Button}">
+            <Setter Property="Appearance" Value="Secondary" />
+            <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
+            <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
+            <Setter Property="Height" Value="48" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Effect" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Effect">
+                        <Setter.Value>
+                            <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35"
+                                              Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+                        </Setter.Value>
+                    </Setter>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
 
         <Style x:Key="LayoutPanelButtonStyle"
                TargetType="{x:Type ui:Button}"
@@ -779,24 +869,34 @@
                                     </StackPanel>
                                 </Grid>
                             </GroupBox>
-                            <ui:Button x:Name="BtnAnalyzeMaster"
-                                       Click="BtnAnalyzeMaster_Click"
-                                       Width="180" HorizontalAlignment="Right" Margin="0,20,85,0">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
-                                    <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </ui:Button>
+                            <Grid Margin="0,12,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                            <WrapPanel Margin="0,12,0,12">
+                                <ui:Button x:Name="BtnAnalyzeMaster"
+                                           Grid.Column="0"
+                                           Click="BtnAnalyzeMaster_Click"
+                                           HorizontalAlignment="Left"
+                                           Margin="0,0,8,0">
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" Margin="0,0,8,0" FontSize="16"/>
+                                        <TextBlock Text="Force Analyze Master" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </ui:Button>
+
                                 <ui:Button x:Name="BtnClearCanvas"
-                                           Click="BtnClearCanvas_Click">
+                                           Grid.Column="1"
+                                           Click="BtnClearCanvas_Click"
+                                           HorizontalAlignment="Right"
+                                           Margin="8,0,0,0">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Eraser24}" Margin="0,0,8,0" FontSize="16"/>
                                         <TextBlock Text="Clear Canvas" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </ui:Button>
-                            </WrapPanel>
+                            </Grid>
 
                             <GroupBox Header="Match Options"
                                       Width="260"

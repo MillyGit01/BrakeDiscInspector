@@ -888,8 +888,7 @@
                                 <ui:Button x:Name="BtnClearCanvas"
                                            Grid.Column="1"
                                            Click="BtnClearCanvas_Click"
-                                           HorizontalAlignment="Right"
-                                           Margin="8,0,0,0">
+                                           Margin="20,0,0,0" HorizontalAlignment="Left" Width="149">
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Eraser24}" Margin="0,0,8,0" FontSize="16"/>
                                         <TextBlock Text="Clear Canvas" VerticalAlignment="Center"/>
@@ -905,11 +904,11 @@
                                         <TextBlock Text="RotRange:" VerticalAlignment="Center"/>
                                         <TextBox x:Name="TxtRot" Width="60" Margin="4,0,8,0" Text="10"/>
                                         <TextBlock Text="ScaleMin:" VerticalAlignment="Center"/>
-                                        <TextBox x:Name="TxtSMin" Width="60" Margin="4,0,8,0" Text="0.95"/>
+                                        <TextBox x:Name="TxtSMin" Width="59" Margin="4,0,8,0" Text="0.95"/>
                                         <TextBlock Text="ScaleMax:" VerticalAlignment="Center"/>
                                         <TextBox x:Name="TxtSMax" Width="60" Margin="4,0,0,0" Text="1.05"/>
                                     </StackPanel>
-                                    <WrapPanel>
+                                    <WrapPanel Height="56" Width="128" HorizontalAlignment="Left">
                                         <ui:Button x:Name="BtnSavePreset" Click="BtnSavePreset_Click" Margin="0,20,8,0">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
@@ -1014,7 +1013,7 @@
                         <StackPanel x:Name="InspectionDefaultPanel">
                             <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
                                 <StackPanel Margin="8,4,0,0">
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center" HorizontalAlignment="Left">
                                         <TextBlock Text="Inspection 1" Width="80" VerticalAlignment="Center"/>
                                         <ComboBox x:Name="CmbShapeInspection1"
                                               Width="80"

@@ -2133,7 +2133,33 @@
 
                 <StackPanel Orientation="Horizontal" Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="{DynamicResource StatusBackend}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding DataContext.HealthSummary, ElementName=WorkflowHost}" Margin="6,0,0,0" />
+                    <Ellipse Width="10"
+                             Height="10"
+                             Margin="6,0,0,0"
+                             VerticalAlignment="Center"
+                             Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                             StrokeThickness="1"
+                             Fill="{Binding DataContext.IsBackendOnline, ElementName=WorkflowHost, Converter={StaticResource BoolToBrush}}" />
+                    <TextBlock Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               FontWeight="SemiBold"
+                               Foreground="{Binding DataContext.IsBackendOnline, ElementName=WorkflowHost, Converter={StaticResource BoolToBrush}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Text" Value="offline" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.IsBackendOnline, ElementName=WorkflowHost}" Value="True">
+                                        <Setter Property="Text" Value="online" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.IsBackendOnline, ElementName=WorkflowHost}" Value="{x:Null}">
+                                        <Setter Property="Text" Value="--" />
+                                        <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Text="{Binding DataContext.HealthSummary, ElementName=WorkflowHost}" Margin="8,0,0,0" />
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Grid.Column="1" VerticalAlignment="Center">

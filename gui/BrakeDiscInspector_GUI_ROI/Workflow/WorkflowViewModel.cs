@@ -125,6 +125,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
+
     }
 
     public sealed class MasterRoleOption
@@ -211,6 +212,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private string _inferenceSummary = string.Empty;
         private double _heatmapOpacity = 0.6;
         private string _healthSummary = "";
+        private bool? _isBackendOnline;
         private readonly IReadOnlyList<RoiShape> _availableRoiShapes = Enum.GetValues(typeof(RoiShape)).Cast<RoiShape>().ToList();
         private RoiShape _selectedMaster1Shape = RoiShape.Rectangle;
         private RoiShape _selectedMaster2Shape = RoiShape.Rectangle;
@@ -2737,6 +2739,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public bool? IsBackendOnline
+        {
+            get => _isBackendOnline;
+            private set => SetProperty(ref _isBackendOnline, value);
+        }
+
         private AsyncCommand CreateCommand(Func<object?, Task> execute, Predicate<object?>? canExecute = null)
         {
             return new AsyncCommand(async param =>
@@ -3419,14 +3427,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task RefreshHealthAsync()
         {
-            var info = await _client.GetHealthAsync().ConfigureAwait(false);
-            if (info == null)
+            try
             {
-                HealthSummary = "Backend offline";
-                return;
-            }
+                var info = await _client.GetHealthAsync().ConfigureAwait(false);
+                IsBackendOnline = info != null;
+                if (info == null)
+                {
+                    HealthSummary = "Backend offline";
+                    return;
+                }
 
-            HealthSummary = $"{info.status ?? "ok"} — {info.device} — {info.model} ({info.version})";
+                HealthSummary = $"{info.status ?? "ok"} — {info.device} — {info.model} ({info.version})";
+            }
+            catch
+            {
+                IsBackendOnline = false;
+                HealthSummary = "Backend offline";
+            }
         }
 
         private async Task BrowseDatasetAsync()
@@ -6925,6 +6942,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+
+        private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? name = null)
+        {
+            if (EqualityComparer<T>.Default.Equals(field, value))
+            {
+                return false;
+            }
+
+            field = value;
+            OnPropertyChanged(name);
+            return true;
         }
 
         private void LogAlign(string message)

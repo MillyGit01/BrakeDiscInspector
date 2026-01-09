@@ -29,9 +29,9 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
 
 ## Dataset layout
 - Root per layout: `RecipePathHelper` creates `<AppContext.BaseDirectory>/Recipes/<LayoutName or DefaultLayout>/` with `Dataset/`, `Model/` and `Master/` subfolders. `WorkflowViewModel.SetLayoutName` propagates the layout name to `DatasetManager` so every command reads/writes inside that recipe tree.
-- For every inspection slot (1–4) the GUI creates `Dataset/Inspection_<n>/{ok,ng}` for the on-disk dataset plus a `Model/Inspection_<n>/` directory for backend artefacts. Samples shown in the UI come from `Dataset/datasets/<roi_id>/<ok|ng>/` where `roi_id` is the stable identifier used in backend calls (e.g. `inspection-1`).
+- For every inspection slot (1–4) the GUI creates `Dataset/Inspection_<n>/{ok,ng}` for the on-disk dataset plus a `Dataset/Inspection_<n>/Model/` directory for backend artefacts. Samples shown in the UI come from the recipe dataset folder; `inspection-1..4` ROI ids map to `Inspection_1..4` on disk, while non-inspection ROIs use their `roi_id` as the folder name.
 - `DatasetManager.SaveSampleAsync` writes:
-  - PNG file: `SAMPLE_<roleId>_<roiId>_<UTC timestamp>.png` under `Dataset/datasets/<roi_id>/ok` or `Dataset/datasets/<roi_id>/ng` (folder created on demand).
+  - PNG file: `SAMPLE_<roleId>_<roiId>_<UTC timestamp>.png` under `Dataset/Inspection_<n>/ok` or `Dataset/<roi_id>/ok` (folder created on demand; same for `ng`).
   - Metadata JSON (same basename) containing `{role_id, roi_id, mm_per_px, shape_json, source_path, angle, timestamp}`.
 - Dataset validation performed by `RefreshDatasetCommand` walks the current recipe tree; CSV imports remain available but the canonical layout is the recipe folder. Older `<data root>/rois/Inspection_<n>` locations are only kept for backward compatibility paths already present in the layout files.
 

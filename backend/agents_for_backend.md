@@ -30,12 +30,13 @@ backend/
 - Estructura:
 ```
 <BDI_MODELS_DIR>/
-  <role>__<roi>.npz            # embeddings + token grid (+metadata)
-  <role>__<roi>_index.faiss    # índice FAISS opcional
-  <role>__<roi>_calib.json     # salida de /calibrate_ng
+  recipes/<recipe_id>/<model_key>/
+    <role>__<roi>.npz          # embeddings + token grid (+metadata)
+    <role>__<roi>_index.faiss  # índice FAISS opcional
+    <role>__<roi>_calib.json   # salida de /calibrate_ng
   datasets/<role>/<roi>/ok|ng  # imágenes de dataset (si se usan los helpers /datasets/*)
 ```
-- `ModelStore.manifest` devuelve memoria, calibración y resumen de datasets.
+- `ModelStore.manifest` devuelve memoria, calibración y resumen de datasets (compatibilidad legacy incluida).
 
 ## 4. Pipeline de inferencia
 1. Validar existencia de memoria y la grilla de tokens.
@@ -49,7 +50,7 @@ backend/
 ## 5. Calibración
 - Si `ng_scores` presente: umbral = punto medio entre `p99_ok` y `p5_ng`.
 - Si solo hay OK: usar percentil (`score_percentile`, por defecto 99).
-- Guardar calibración en `<role>__<roi>_calib.json`.
+- Guardar calibración en `BDI_MODELS_DIR/recipes/<recipe_id>/<model_key>/<role>__<roi>_calib.json`.
 
 ## 6. Configuración
 - Variables: `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT`, `BDI_MODELS_DIR`, `BDI_CORESET_RATE`, `BDI_SCORE_PERCENTILE`, `BDI_AREA_MM2_THR`, `BDI_CORS_ORIGINS`.

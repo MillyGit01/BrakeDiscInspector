@@ -27,8 +27,8 @@ This document summarises how the current codebase is wired: which processes exis
 4. Batch heatmaps share the same overlay control; `SetBatchHeatmapForRoi` and `UpdateBatchHeatmapIndex` keep manual and batch canvases aligned while logging placement metadata.
 
 ## Datasets and persistence
-- Each layout name is a recipe stored at `<exe>/Recipes/<LayoutName or DefaultLayout>/`. `EnsureInspectionDatasetStructure` creates `Dataset/Inspection_<slot>/{ok,ng}` folders and `Model/Inspection_<slot>/` to mirror the GUI panels, while `DatasetManager.SaveSampleAsync` writes PNG+JSON samples to `Dataset/datasets/<roi_id>/<ok|ng>/` using the backend-facing ROI identifiers (`inspection-1..4`).
-- The backend stores embeddings as `<role>__<roi>.npz`, optional FAISS indices as `<role>__<roi>_index.faiss` and calibration files `<role>__<roi>_calib.json` below `BDI_MODELS_DIR` (default `models/`).
+- Each layout name is a recipe stored at `<exe>/Recipes/<LayoutName or DefaultLayout>/`. `EnsureInspectionDatasetStructure` creates `Dataset/Inspection_<slot>/{ok,ng}` folders plus a per-slot `Dataset/Inspection_<slot>/Model/` directory. `DatasetManager.SaveSampleAsync` writes PNG+JSON samples into the recipe dataset tree, mapping backend-facing inspection IDs (`inspection-1..4`) to `Inspection_1..4` folder names (non-inspection ROIs use the ROI id directly).
+- The backend stores embeddings, indices and calibration files under `BDI_MODELS_DIR/recipes/<recipe_id>/<model_key>/` (default `models/`), using urlsafe base64 names for `<role>__<roi>`; legacy flat/legacy directory layouts are still read for backwards compatibility.
 - Batch results can be exported through whatever pipeline consumes the GUI logs; no intermediate CSV is written by the code.
 
 ## Configuration and contracts

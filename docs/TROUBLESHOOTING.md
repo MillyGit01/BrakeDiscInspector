@@ -13,7 +13,7 @@ This checklist is derived from the current GUI/Backend code.
 - **Stale geometry after changing masters:** use **Clear canvas** to wipe masters, inspection slots and cached baselines. The command logs `[align] Reset solicitado/completado` and reinitialises the layout so new anchors do not inherit previous inspection ROIs.
 
 ## Backend-side issues
-- **`400` with "Memoria no encontrada":** `/infer` could not load `<role>__<roi>.npz`. Run `/fit_ok` again via the GUI or copy the expected file into `BDI_MODELS_DIR`.
+- **`400` with "Memoria no encontrada":** `/infer` could not load the model artefact stored under `BDI_MODELS_DIR/recipes/<recipe_id>/<model_key>/<role>__<roi>.npz`. Run `/fit_ok` again via the GUI or copy the expected file into that folder.
 - **Token grid mismatch:** `/infer` returns `error` mentioning `Token grid mismatch`. The embedding grid stored during `/fit_ok` does not match the new input resolution. Rebuild the memory by running `/fit_ok` on crops with the current size.
 - **Calibration missing:** The GUI will still display scores even if `threshold` is `null`. Either run `/calibrate_ng` (button **Calibrate**) or set `InspectionRoiConfig.ThresholdDefault` to a conservative value.
 - **Slow inference:** Heatmaps are generated with Gaussian blur (`blur_sigma=1.0`). If using CPU only, consider reducing image size in the GUI, ensuring `torch` is compiled for CPU and that the Docker image has enough CPU shares.

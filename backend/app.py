@@ -6,6 +6,9 @@ import sys
 import traceback
 import time
 import uuid
+import threading
+from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -115,6 +118,165 @@ _extractor = DinoV2Features(
     input_size=448,   # múltiplo de 14; si envías 384, el extractor reescala internamente
     patch_size=14
 )
+
+
+# --- In-process caches (per uvicorn worker) ---------------------------------
+# NOTE: With `uvicorn --workers > 1` each worker has its own process+GPU context.
+# These caches reduce disk I/O and avoid rebuilding sklearn/FAISS indices on every request.
+
+@dataclass
+class _MemCacheEntry:
+    mem: PatchCoreMemory
+    token_hw: Tuple[int, int]
+    metadata: Dict[str, Any]
+    mem_mtime: float
+    index_mtime: Optional[float]
+
+
+@dataclass
+class _CalibCacheEntry:
+    calib: Dict[str, Any]
+    calib_mtime: float
+
+
+_CACHE_LOCK = threading.RLock()
+_MEM_CACHE: "OrderedDict[str, _MemCacheEntry]" = OrderedDict()
+_CALIB_CACHE: "OrderedDict[str, _CalibCacheEntry]" = OrderedDict()
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return int(default)
+    try:
+        return int(raw)
+    except Exception:
+        return int(default)
+
+
+_CACHE_MAX_ENTRIES = _env_int("BDI_CACHE_MAX_ENTRIES", 32)
+
+
+def _cache_key(recipe_id: str, model_key: str, role_id: str, roi_id: str) -> str:
+    return f"{recipe_id}::{model_key}::{role_id}::{roi_id}"
+
+
+def _evict_lru(cache: "OrderedDict[str, Any]"):
+    while len(cache) > _CACHE_MAX_ENTRIES:
+        cache.popitem(last=False)
+
+
+def _invalidate_memory_cache(recipe_id: str, model_key: str, role_id: str, roi_id: str):
+    key = _cache_key(recipe_id, model_key, role_id, roi_id)
+    with _CACHE_LOCK:
+        _MEM_CACHE.pop(key, None)
+
+
+def _invalidate_calib_cache(recipe_id: str, model_key: str, role_id: str, roi_id: str):
+    key = _cache_key(recipe_id, model_key, role_id, roi_id)
+    with _CACHE_LOCK:
+        _CALIB_CACHE.pop(key, None)
+
+
+def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, model_key: str):
+    key = _cache_key(recipe_id, model_key, role_id, roi_id)
+
+    mem_path = store.resolve_memory_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+    if mem_path is None:
+        with _CACHE_LOCK:
+            _MEM_CACHE.pop(key, None)
+        return None
+
+    mem_mtime = float(mem_path.stat().st_mtime)
+
+    idx_path = store.resolve_index_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+    idx_mtime = float(idx_path.stat().st_mtime) if idx_path is not None and idx_path.exists() else None
+
+    with _CACHE_LOCK:
+        entry = _MEM_CACHE.get(key)
+        if entry and entry.mem_mtime == mem_mtime and entry.index_mtime == idx_mtime:
+            _MEM_CACHE.move_to_end(key)
+            return entry.mem, entry.token_hw, entry.metadata
+
+    loaded = store.load_memory(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+    if loaded is None:
+        with _CACHE_LOCK:
+            _MEM_CACHE.pop(key, None)
+        return None
+    emb_mem, token_hw_mem, metadata = loaded
+
+    # Build PatchCoreMemory once (sklearn NearestNeighbors fit is expensive)
+    mem_obj = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=(metadata or {}).get("coreset_rate"))
+
+    # Optional FAISS index (if available)
+    try:
+        import faiss  # type: ignore
+        blob = store.load_index_blob(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+        if blob is not None:
+            idx = faiss.deserialize_index(np.frombuffer(blob, dtype=np.uint8))
+            mem_obj.index = idx
+            mem_obj.nn = None
+    except Exception:
+        pass
+
+    token_hw_tup = (int(token_hw_mem[0]), int(token_hw_mem[1]))
+    meta_dict = dict(metadata or {})
+
+    with _CACHE_LOCK:
+        _MEM_CACHE[key] = _MemCacheEntry(
+            mem=mem_obj,
+            token_hw=token_hw_tup,
+            metadata=meta_dict,
+            mem_mtime=mem_mtime,
+            index_mtime=idx_mtime,
+        )
+        _MEM_CACHE.move_to_end(key)
+        _evict_lru(_MEM_CACHE)
+
+    return mem_obj, token_hw_tup, meta_dict
+
+
+def _get_calib_cached(role_id: str, roi_id: str, *, recipe_id: str, model_key: str):
+    key = _cache_key(recipe_id, model_key, role_id, roi_id)
+
+    calib_path = store.resolve_calib_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+    if calib_path is None:
+        with _CACHE_LOCK:
+            _CALIB_CACHE.pop(key, None)
+        return None
+
+    calib_mtime = float(calib_path.stat().st_mtime)
+
+    with _CACHE_LOCK:
+        entry = _CALIB_CACHE.get(key)
+        if entry and entry.calib_mtime == calib_mtime:
+            _CALIB_CACHE.move_to_end(key)
+            return entry.calib
+
+    data = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_id, model_key=model_key)
+    if data is None:
+        with _CACHE_LOCK:
+            _CALIB_CACHE.pop(key, None)
+        return None
+
+    data_dict = dict(data)
+
+    with _CACHE_LOCK:
+        _CALIB_CACHE[key] = _CalibCacheEntry(calib=data_dict, calib_mtime=calib_mtime)
+        _CALIB_CACHE.move_to_end(key)
+        _evict_lru(_CALIB_CACHE)
+
+    return data_dict
+
+
+def _scores_1d_finite(raw) -> np.ndarray:
+    if raw is None:
+        return np.asarray([], dtype=float)
+    x = np.asarray(raw, dtype=float).reshape(-1)
+    if x.size == 0:
+        return x
+    return x[np.isfinite(x)]
+
 
 def _read_image_file(file: UploadFile) -> np.ndarray:
     data = file.file.read()
@@ -234,6 +396,10 @@ def fit_ok(
         except Exception:
             pass
 
+        # Invalidate caches for this (recipe, model_key, role, roi) after re-fit
+        _invalidate_memory_cache(recipe_resolved, model_key_effective, role_id, roi_id)
+        _invalidate_calib_cache(recipe_resolved, model_key_effective, role_id, roi_id)
+
         response = {
             "n_embeddings": int(E.shape[0]),
             "coreset_size": int(mem.emb.shape[0]),
@@ -285,8 +451,8 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
         payload_recipe = payload.get("recipe_id")
         request_id, recipe_resolved = _resolve_request_context(request, payload_recipe)
         mm_per_px = float(payload.get("mm_per_px", 0.2))
-        ok_scores = np.asarray(payload.get("ok_scores", []), dtype=float)
-        ng_scores = np.asarray(payload.get("ng_scores", []), dtype=float) if "ng_scores" in payload else None
+        ok_scores = _scores_1d_finite(payload.get("ok_scores"))
+        ng_scores = _scores_1d_finite(payload.get("ng_scores")) if "ng_scores" in payload else None
         area_mm2_thr = float(payload.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)))
         p_score = int(payload.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)))
 
@@ -330,6 +496,8 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
             "recipe_id": recipe_resolved,
         }
         store.save_calib(role_id, roi_id, calib, recipe_id=recipe_resolved, model_key=model_key)
+        _invalidate_calib_cache(recipe_resolved, model_key, role_id, roi_id)
+
         slog(
             "calibrate_ng.response",
             role_id=role_id,
@@ -341,6 +509,19 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
             threshold=float(t),
         )
         return calib
+    except (KeyError, ValueError) as e:
+        req_id, recipe_resolved = _resolve_request_context(request, payload.get("recipe_id") if isinstance(payload, dict) else None)
+        slog(
+            "calibrate_ng.bad_request",
+            error=str(e),
+            payload_keys=list(payload.keys()) if isinstance(payload, dict) else [],
+            request_id=req_id,
+            recipe_id=recipe_resolved,
+        )
+        return JSONResponse(
+            status_code=400,
+            content={"error": str(e), "request_id": req_id, "recipe_id": recipe_resolved},
+        )
     except Exception as e:
         req_id, recipe_resolved = _resolve_request_context(request, payload.get("recipe_id") if isinstance(payload, dict) else None)
         slog(
@@ -379,68 +560,43 @@ def infer(
             request_id=request_id,
         )
         t0 = time.time()
-        import json, base64, numpy as np
-        try:
-            import cv2  # opcional para PNG rápido
-            _has_cv2 = True
-        except Exception:
-            _has_cv2 = False
-            from PIL import Image
-            import io
 
-        # 1) Imagen y features (sólo para verificar grid)
+        import base64, json
+
+        # 1) Imagen ROI canónica
         img = _read_image_file(image)
-        emb, token_hw = _extractor.extract(img)
 
-        # 2) Cargar memoria/coreset
-        loaded = store.load_memory(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
-        if loaded is None:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "Memoria no encontrada. Ejecuta /fit_ok primero.", "request_id": request_id, "recipe_id": recipe_resolved},
-            )
-        emb_mem, token_hw_mem, metadata = loaded
-
-        # 3) Validación de grid aquí (clara al usuario)
-        if tuple(map(int, token_hw)) != tuple(map(int, token_hw_mem)):
+        # 2) Cargar memoria/coreset (cacheado por worker)
+        cached = _get_patchcore_memory_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
+        if cached is None:
             return JSONResponse(
                 status_code=400,
                 content={
-                    "error": f"Token grid mismatch: got {tuple(map(int,token_hw))}, expected {tuple(map(int,token_hw_mem))}",
+                    "error": "Memoria no encontrada. Ejecuta /fit_ok antes de /infer.",
                     "request_id": request_id,
                     "recipe_id": recipe_resolved,
                 },
             )
+        mem, token_hw_mem, metadata = cached
 
-        # 4) Reconstruir memoria (+FAISS si existe)
-        mem = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=metadata.get("coreset_rate"))
-        try:
-            import faiss  # type: ignore
-            blob = store.load_index_blob(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
-            if blob is not None:
-                idx = faiss.deserialize_index(np.frombuffer(blob, dtype=np.uint8))
-                mem.index = idx
-                mem.nn = None
-        except Exception:
-            pass
-
-        # 5) Calibración (puede faltar)
-        calib = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective)
+        # 3) Calibración (opcional, también cacheada)
+        calib = _get_calib_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         thr = calib.get("threshold") if calib else None
         area_mm2_thr = calib.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)) if calib else SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)
         p_score = calib.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)) if calib else SETTINGS.get("inference", {}).get("score_percentile", 99)
 
-        # 6) Shape (máscara) opcional
+        # 4) Shape/máscara (opcional)
         shape_obj = json.loads(shape) if shape else None
 
-        # 7) Crear engine con lo que tu __init__ soporte
-        try:
-            engine = InferenceEngine(_extractor, mem, token_hw_mem, mm_per_px=float(mm_per_px))
-        except TypeError:
-            # Si tu __init__ no acepta mm_per_px
-            engine = InferenceEngine(_extractor, mem, token_hw_mem)
+        # 5) Inferencia (1 sola extracción DINO por request)
+        engine = InferenceEngine(
+            _extractor,
+            mem,
+            token_hw_mem,
+            mm_per_px=float(mm_per_px),
+            memory_metadata=metadata,
+        )
 
-        # 8) Ejecutar run() (probar con token_shape_expected y si no reintentar sin él)
         try:
             res = engine.run(
                 img,
@@ -450,62 +606,42 @@ def infer(
                 area_mm2_thr=float(area_mm2_thr),
                 score_percentile=int(p_score),
             )
-        except TypeError:
-            res = engine.run(
-                img,
-                shape=shape_obj,
-                threshold=thr,
-                area_mm2_thr=float(area_mm2_thr),
-                score_percentile=int(p_score),
+        except ValueError as ve:
+            # Token grid mismatch u otras validaciones de entrada
+            return JSONResponse(
+                status_code=400,
+                content={"error": str(ve), "request_id": request_id, "recipe_id": recipe_resolved},
             )
 
-        # 9) Normalizar salida (dict nuevo o tupla antigua)
-        score: float
-        regions = []
+        score = float(res.get("score", 0.0))
+        heat_u8 = res.get("heatmap_u8", None)
+        regions = res.get("regions", []) or []
+        token_shape_out = res.get("token_shape", [int(token_hw_mem[0]), int(token_hw_mem[1])])
+
+        # 6) Heatmap -> PNG base64
         heatmap_png_b64 = None
-        token_shape_out = [int(token_hw_mem[0]), int(token_hw_mem[1])]
-
-        if isinstance(res, dict):
-            score = float(res.get("score", 0.0))
-            regions = res.get("regions") or []
-            token_shape_out = list(res.get("token_shape") or token_shape_out)
-            # heatmap puede venir como uint8 ("heatmap_u8") o como float32 ("heatmap")
-            hm_u8 = res.get("heatmap_u8")
-            if hm_u8 is None:
-                hm = res.get("heatmap")
-                if hm is not None:
-                    hm_u8 = np.clip(np.asarray(hm, dtype=np.float32) * 255.0, 0, 255).astype(np.uint8)
-            if hm_u8 is not None:
-                if _has_cv2:
-                    ok, png = cv2.imencode(".png", np.asarray(hm_u8, dtype=np.uint8))
-                    if ok:
-                        heatmap_png_b64 = base64.b64encode(png.tobytes()).decode("ascii")
-                else:
-                    pil = Image.fromarray(np.asarray(hm_u8, dtype=np.uint8), mode="L")
-                    buf = io.BytesIO()
-                    pil.save(buf, format="PNG")
-                    heatmap_png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-        else:
-            # Compat tupla antigua: (score, heatmap_float, regions)
-            score, heatmap_f32, regions = res
-            hm_u8 = np.clip(np.asarray(heatmap_f32, dtype=np.float32) * 255.0, 0, 255).astype(np.uint8)
-            if _has_cv2:
-                ok, png = cv2.imencode(".png", hm_u8)
+        if heat_u8 is not None:
+            heat_u8 = np.asarray(heat_u8, dtype=np.uint8)
+            try:
+                ok, buf = cv2.imencode(".png", heat_u8)
                 if ok:
-                    heatmap_png_b64 = base64.b64encode(png.tobytes()).decode("ascii")
-            else:
-                pil = Image.fromarray(hm_u8, mode="L")
-                buf = io.BytesIO()
-                pil.save(buf, format="PNG")
-                heatmap_png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                    heatmap_png_b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+            except Exception:
+                # PIL fallback (evita dependencias GL en algunos entornos)
+                from PIL import Image
+                import io
+                im = Image.fromarray(heat_u8)
+                bio = io.BytesIO()
+                im.save(bio, format="PNG")
+                heatmap_png_b64 = base64.b64encode(bio.getvalue()).decode("ascii")
 
-        # 10) Respuesta (threshold puede ser None → se serializa como null)
+        # 7) Normalizar regiones (solo para visualización)
         normalized_regions = []
-        for r in regions or []:
+        for r in regions:
             if isinstance(r, dict):
                 region = dict(r)
                 bbox = region.get("bbox")
-                if bbox and len(bbox) == 4:
+                if bbox and isinstance(bbox, (list, tuple)) and len(bbox) == 4:
                     region.setdefault("x", float(bbox[0]))
                     region.setdefault("y", float(bbox[1]))
                     region.setdefault("w", float(bbox[2]))
@@ -539,125 +675,182 @@ def infer(
         return response
 
     except Exception as e:
-        req_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+        req_id, recipe_resolved2 = _resolve_request_context(request, recipe_id)
         slog(
             "infer.error",
             role_id=role_id,
             roi_id=roi_id,
-            recipe_id=recipe_resolved,
+            recipe_id=recipe_resolved2,
             model_key=model_key or roi_id,
             request_id=req_id,
             error=str(e),
         )
         return JSONResponse(
             status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc(), "request_id": req_id, "recipe_id": recipe_resolved},
+            content={"error": str(e), "trace": traceback.format_exc(), "request_id": req_id, "recipe_id": recipe_resolved2},
         )
-
 
 
 @app.post("/datasets/ok/upload")
 def datasets_ok_upload(
+    request: Request,
     role_id: str = Form(...),
     roi_id: str = Form(...),
-    images: List[UploadFile] = File(...)
+    images: List[UploadFile] = File(...),
+    recipe_id: Optional[str] = Form(None),
 ):
-    slog("datasets.upload.request", label="ok", role_id=role_id, roi_id=roi_id, n_files=len(images))
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    slog("datasets.upload.request", label="ok", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id, n_files=len(images))
     t0 = time.time()
     saved = []
     for up in images:
         data = up.file.read()
         ext = Path(up.filename).suffix or ".png"
-        path = store.save_dataset_image(role_id, roi_id, "ok", data, ext)
+        path = store.save_dataset_image(role_id, roi_id, "ok", data, ext, recipe_id=recipe_resolved)
         saved.append(Path(path).name)
     slog(
         "datasets.upload.response",
         label="ok",
         role_id=role_id,
         roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        request_id=request_id,
         elapsed_ms=int(1000 * (time.time() - t0)),
         saved=len(saved),
     )
-    return {"status": "ok", "saved": saved}
+    return {"status": "ok", "saved": saved, "request_id": request_id, "recipe_id": recipe_resolved}
 
 
 @app.post("/datasets/ng/upload")
 def datasets_ng_upload(
+    request: Request,
     role_id: str = Form(...),
     roi_id: str = Form(...),
-    images: List[UploadFile] = File(...)
+    images: List[UploadFile] = File(...),
+    recipe_id: Optional[str] = Form(None),
 ):
-    slog("datasets.upload.request", label="ng", role_id=role_id, roi_id=roi_id, n_files=len(images))
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    slog("datasets.upload.request", label="ng", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id, n_files=len(images))
     t0 = time.time()
     saved = []
     for up in images:
         data = up.file.read()
         ext = Path(up.filename).suffix or ".png"
-        path = store.save_dataset_image(role_id, roi_id, "ng", data, ext)
+        path = store.save_dataset_image(role_id, roi_id, "ng", data, ext, recipe_id=recipe_resolved)
         saved.append(Path(path).name)
     slog(
         "datasets.upload.response",
         label="ng",
         role_id=role_id,
         roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        request_id=request_id,
         elapsed_ms=int(1000 * (time.time() - t0)),
         saved=len(saved),
     )
-    return {"status": "ok", "saved": saved}
+    return {"status": "ok", "saved": saved, "request_id": request_id, "recipe_id": recipe_resolved}
 
 
 @app.get("/datasets/list")
-def datasets_list(role_id: str, roi_id: str):
-    slog("datasets.list.request", role_id=role_id, roi_id=roi_id)
-    data = store.list_dataset(role_id, roi_id)
+def datasets_list(request: Request, role_id: str, roi_id: str, recipe_id: Optional[str] = None):
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    slog("datasets.list.request", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id)
+    data = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
+    data["request_id"] = request_id
+    data["recipe_id"] = recipe_resolved
     slog(
         "datasets.list.response",
         role_id=role_id,
         roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        request_id=request_id,
         classes=list((data.get("classes") or {}).keys()),
     )
     return data
 
 
 @app.get("/manifest")
-def manifest(role_id: str, roi_id: str):
-    slog("manifest.request", role_id=role_id, roi_id=roi_id)
-    data = store.manifest(role_id, roi_id)
+def manifest(
+    request: Request,
+    role_id: str,
+    roi_id: str,
+    recipe_id: Optional[str] = None,
+    model_key: Optional[str] = None,
+):
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    model_key_effective = model_key or roi_id
+    slog("manifest.request", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, model_key=model_key_effective, request_id=request_id)
+    data = store.manifest(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
+    data["request_id"] = request_id
     slog(
         "manifest.response",
         role_id=role_id,
         roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        model_key=model_key_effective,
+        request_id=request_id,
         has_memory=bool(data.get("memory")),
         datasets=list((data.get("datasets", {}).get("classes", {}) or {}).keys()) if isinstance(data.get("datasets"), dict) else [],
     )
     return data
 
 
+@app.get("/state")
+def state(
+    request: Request,
+    role_id: str,
+    roi_id: str,
+    recipe_id: Optional[str] = None,
+    model_key: Optional[str] = None,
+):
+    """Lightweight readiness/status endpoint used by the GUI (optional)."""
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    model_key_effective = model_key or roi_id
+    mem_present = store.load_memory(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
+    calib_present = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
+    return {
+        "status": "ok",
+        "memory_fitted": bool(mem_present),
+        "calib_present": bool(calib_present),
+        "request_id": request_id,
+        "recipe_id": recipe_resolved,
+        "role_id": role_id,
+        "roi_id": roi_id,
+        "model_key": model_key_effective,
+    }
+
+
 @app.delete("/datasets/file")
-def datasets_delete_file(role_id: str, roi_id: str, label: str, filename: str):
-    ok = store.delete_dataset_file(role_id, roi_id, label, filename)
+def datasets_delete_file(request: Request, role_id: str, roi_id: str, label: str, filename: str, recipe_id: Optional[str] = None):
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    ok = store.delete_dataset_file(role_id, roi_id, label, filename, recipe_id=recipe_resolved)
     slog(
         "datasets.delete",
         role_id=role_id,
         roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        request_id=request_id,
         label=label,
         filename=filename,
         deleted=bool(ok),
     )
-    return {"deleted": ok, "filename": filename}
+    return {"deleted": ok, "filename": filename, "request_id": request_id, "recipe_id": recipe_resolved}
 
 
 @app.delete("/datasets/clear")
-def datasets_clear_class(role_id: str, roi_id: str, label: str):
-    n = store.clear_dataset_class(role_id, roi_id, label)
+def datasets_clear_class(request: Request, role_id: str, roi_id: str, label: str, recipe_id: Optional[str] = None):
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    n = store.clear_dataset_class(role_id, roi_id, label, recipe_id=recipe_resolved)
     slog(
         "datasets.clear",
         role_id=role_id,
         roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        request_id=request_id,
         label=label,
         cleared=int(n),
     )
-    return {"cleared": n, "label": label}
+    return {"cleared": n, "label": label, "request_id": request_id, "recipe_id": recipe_resolved}
 
 
 if __name__ == "__main__":

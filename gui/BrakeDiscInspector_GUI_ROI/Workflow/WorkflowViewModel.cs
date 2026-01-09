@@ -213,6 +213,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private double _heatmapOpacity = 0.6;
         private string _healthSummary = "";
         private bool? _isBackendOnline;
+        private readonly SemaphoreSlim _healthRefreshGate = new(1, 1);
         private readonly IReadOnlyList<RoiShape> _availableRoiShapes = Enum.GetValues(typeof(RoiShape)).Cast<RoiShape>().ToList();
         private RoiShape _selectedMaster1Shape = RoiShape.Rectangle;
         private RoiShape _selectedMaster2Shape = RoiShape.Rectangle;
@@ -428,7 +429,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             CalibrateCommand = CreateCommand(_ => CalibrateAsync(), _ => !IsBusy && OkSamples.Count > 0);
             InferFromCurrentRoiCommand = CreateCommand(_ => InferCurrentAsync(), _ => !IsBusy);
             RefreshDatasetCommand = CreateCommand(_ => RefreshDatasetAsync(), _ => !IsBusy);
-            RefreshHealthCommand = CreateCommand(_ => RefreshHealthAsync(), _ => !IsBusy);
+            RefreshHealthCommand = new AsyncCommand(_ => RefreshHealthAsync());
 
             BrowseBatchFolderCommand = new AsyncCommand(_ =>
             {
@@ -3441,6 +3442,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task RefreshHealthAsync()
         {
+            if (!await _healthRefreshGate.WaitAsync(0).ConfigureAwait(false))
+            {
+                return;
+            }
+
             try
             {
                 var info = await _client.GetHealthAsync().ConfigureAwait(false);
@@ -3457,6 +3463,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 IsBackendOnline = false;
                 HealthSummary = "Backend offline";
+            }
+            finally
+            {
+                _healthRefreshGate.Release();
             }
         }
 

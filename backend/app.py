@@ -16,7 +16,7 @@ import numpy as np
 import cv2
 
 try:
-    from fastapi import FastAPI, UploadFile, File, Form, Request
+    from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
     from fastapi.responses import JSONResponse
     from starlette.middleware.cors import CORSMiddleware
 except ModuleNotFoundError as exc:  # pragma: no cover - import guard
@@ -87,12 +87,48 @@ def slog(event: str, **kw):
     print(json.dumps(rec, ensure_ascii=False), flush=True)
 
 
-def _resolve_request_context(request: Request, recipe_id_hint: Optional[str] = None) -> Tuple[str, str]:
-    headers = request.headers
-    request_id = headers.get("x-request-id") or str(uuid.uuid4())
-    recipe_raw = headers.get("x-recipe-id") or recipe_id_hint or "default"
-    recipe_id = ModelStore._sanitize_recipe_id(recipe_raw)
-    return request_id, recipe_id
+def _resolve_request_context(request: Request, recipe_from_payload: str | None = None) -> tuple[str, str]:
+    # Resolve request_id and recipe_id for routing/storage.
+    # If recipe_id is invalid/reserved (e.g. 'last'), raise HTTPException(400).
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+
+    header_name = "X-Recipe-Id"
+    recipe_from_header = request.headers.get(header_name)
+
+    # Payload wins over header if provided
+    recipe_id = recipe_from_payload or recipe_from_header
+
+    try:
+        recipe_id_s = ModelStore._sanitize_recipe_id(recipe_id)
+    except ValueError as e:
+        # Important: this must be a 400, and must NOT fall back silently.
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": str(e),
+                "request_id": request_id,
+                "recipe_id": "default",
+            },
+        )
+
+    return request_id, recipe_id_s
+
+
+def _resolve_request_context_safe(request: Request, recipe_from_payload: str | None = None) -> tuple[str, str]:
+    # Safe variant for logging inside exception handlers.
+    # Never raises (returns recipe_id='default' if invalid).
+    request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
+
+    header_name = "X-Recipe-Id"
+    recipe_from_header = request.headers.get(header_name)
+    recipe_id = recipe_from_payload or recipe_from_header
+
+    try:
+        recipe_id_s = ModelStore._sanitize_recipe_id(recipe_id)
+    except Exception:
+        recipe_id_s = "default"
+
+    return request_id, recipe_id_s
 
 MODELS_DIR = Path(_env_var("BDI_MODELS_DIR", legacy="BRAKEDISC_MODELS_DIR", default="models"))
 
@@ -421,21 +457,12 @@ def fit_ok(
             coreset_size=int(mem.emb.shape[0]),
         )
         return response
+    except HTTPException:
+        raise
     except Exception as e:
-        slog(
-            "fit_ok.error",
-            role_id=role_id,
-            roi_id=roi_id,
-            recipe_id=_resolve_request_context(request, recipe_id)[1],
-            model_key=model_key or roi_id,
-            request_id=_resolve_request_context(request, recipe_id)[0],
-            error=str(e),
-        )
-        request_id_fallback, recipe_fallback = _resolve_request_context(request, recipe_id)
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc(), "request_id": request_id_fallback, "recipe_id": recipe_fallback},
-        )
+        request_id2, recipe_id2 = _resolve_request_context_safe(request, recipe_id)
+        slog("fit_ok.error", request_id=request_id2, recipe_id=recipe_id2, error=str(e), trace=traceback.format_exc())
+        return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
 @app.post("/calibrate_ng")
 async def calibrate_ng(payload: Dict[str, Any], request: Request):
@@ -509,32 +536,22 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
             threshold=float(t),
         )
         return calib
+    except HTTPException:
+        raise
     except (KeyError, ValueError) as e:
-        req_id, recipe_resolved = _resolve_request_context(request, payload.get("recipe_id") if isinstance(payload, dict) else None)
-        slog(
-            "calibrate_ng.bad_request",
-            error=str(e),
-            payload_keys=list(payload.keys()) if isinstance(payload, dict) else [],
-            request_id=req_id,
-            recipe_id=recipe_resolved,
+        request_id2, recipe_id2 = _resolve_request_context_safe(
+            request,
+            payload.get("recipe_id") if isinstance(payload, dict) else None,
         )
-        return JSONResponse(
-            status_code=400,
-            content={"error": str(e), "request_id": req_id, "recipe_id": recipe_resolved},
-        )
+        slog("calibrate_ng.bad_request", request_id=request_id2, recipe_id=recipe_id2, error=str(e))
+        return JSONResponse(status_code=400, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
     except Exception as e:
-        req_id, recipe_resolved = _resolve_request_context(request, payload.get("recipe_id") if isinstance(payload, dict) else None)
-        slog(
-            "calibrate_ng.error",
-            error=str(e),
-            payload_keys=list(payload.keys()),
-            request_id=req_id,
-            recipe_id=recipe_resolved,
+        request_id2, recipe_id2 = _resolve_request_context_safe(
+            request,
+            payload.get("recipe_id") if isinstance(payload, dict) else None,
         )
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc(), "request_id": req_id, "recipe_id": recipe_resolved},
-        )
+        slog("calibrate_ng.error", request_id=request_id2, recipe_id=recipe_id2, error=str(e), trace=traceback.format_exc())
+        return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
 
 @app.post("/infer")
@@ -674,21 +691,12 @@ def infer(
         )
         return response
 
+    except HTTPException:
+        raise
     except Exception as e:
-        req_id, recipe_resolved2 = _resolve_request_context(request, recipe_id)
-        slog(
-            "infer.error",
-            role_id=role_id,
-            roi_id=roi_id,
-            recipe_id=recipe_resolved2,
-            model_key=model_key or roi_id,
-            request_id=req_id,
-            error=str(e),
-        )
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e), "trace": traceback.format_exc(), "request_id": req_id, "recipe_id": recipe_resolved2},
-        )
+        request_id2, recipe_id2 = _resolve_request_context_safe(request, recipe_id)
+        slog("infer.error", request_id=request_id2, recipe_id=recipe_id2, error=str(e), trace=traceback.format_exc())
+        return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
 
 @app.post("/datasets/ok/upload")

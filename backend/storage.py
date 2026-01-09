@@ -11,7 +11,12 @@ import numpy as np
 
 from .utils import ensure_dir, load_json, save_json
 
+_RECIPE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
 class ModelStore:
+    # IDs reservados a nivel de API. No pueden ser usados por clientes como recipes válidos.
+    # "last" se usa en la GUI como layout efímero (p.ej. last.layout.json) y nunca debe mapear a un recipe real.
+    _RESERVED_RECIPE_IDS = {"last"}
     def __init__(self, root: Path):
         self.root = Path(root)
         ensure_dir(self.root)
@@ -19,12 +24,26 @@ class ModelStore:
     # --- Path helpers -------------------------------------------------
 
     @staticmethod
-    def _sanitize_recipe_id(recipe_id: Optional[str]) -> str:
-        if not recipe_id:
+    def _sanitize_recipe_id(recipe_id: str | None) -> str:
+        if recipe_id is None:
             return "default"
-        cleaned = re.sub(r"[^A-Za-z0-9._-]", "_", recipe_id).strip()
-        cleaned = cleaned[:80]
-        return cleaned or "default"
+
+        s = recipe_id.strip().lower()
+        if not s:
+            return "default"
+
+        # RECHAZAR IDs reservados (no hacer fallback silencioso)
+        if s in ModelStore._RESERVED_RECIPE_IDS:
+            raise ValueError(
+                f"Invalid recipe_id '{recipe_id}': value is reserved. "
+                f"Use an explicit recipe name (e.g. 'default' or a real recipe id)."
+            )
+
+        if not _RECIPE_ID_RE.match(s):
+            raise ValueError(
+                f"Invalid recipe_id '{recipe_id}'. Allowed: [a-z0-9][a-z0-9_-]{{0,63}}."
+            )
+        return s
 
     @staticmethod
     def _sanitize_model_key(model_key: Optional[str]) -> str:

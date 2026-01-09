@@ -1509,49 +1509,58 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Margin="8">
-                        <TextBox Width="315"
-                                 IsReadOnly="True"
-                                 TextWrapping="Wrap"
-                                 AcceptsReturn="True"
-                                 VerticalScrollBarVisibility="Auto"
-                                 Text="{Binding BatchFolder, UpdateSourceTrigger=PropertyChanged}"/>
-                        <ui:Button Margin="8,0,0,0"
-                                   Padding="12,4"
-                                   Command="{Binding BrowseBatchFolderCommand}">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0" FontSize="16"/>
-                                <TextBlock Text="Browse" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </ui:Button>
+                    <StackPanel Margin="8" Orientation="Vertical">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     IsReadOnly="True"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Margin="0,0,8,0"
+                                     Text="{Binding BatchFolder, UpdateSourceTrigger=PropertyChanged}"/>
+                            <ui:Button Grid.Column="1"
+                                       Padding="12,4"
+                                       Command="{Binding BrowseBatchFolderCommand}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0" FontSize="16"/>
+                                    <TextBlock Text="Browse" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ui:Button>
+                        </Grid>
 
-                        <!-- ▶ Play = Start/Resume -->
-                        <ui:Button Style="{StaticResource IconOnlyButton}"
-                                   ToolTip="Play / Start or Resume"
-                                   AutomationProperties.Name="Play"
-                                   Command="{Binding StartBatchCommand}">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Play24}" FontSize="16"/>
-                        </ui:Button>
+                        <WrapPanel Margin="0,8,0,0" VerticalAlignment="Center">
+                            <!-- ▶ Play = Start/Resume -->
+                            <ui:Button Style="{StaticResource IconOnlyButton}"
+                                       ToolTip="Play / Start or Resume"
+                                       AutomationProperties.Name="Play"
+                                       Command="{Binding StartBatchCommand}">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Play24}" FontSize="16"/>
+                            </ui:Button>
 
-                        <!-- ⏸ Pause -->
-                        <ui:Button Style="{StaticResource IconOnlyButton}"
-                                   ToolTip="Pause"
-                                   AutomationProperties.Name="Pause"
-                                   Command="{Binding PauseBatchCommand}">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pause24}" FontSize="16"/>
-                        </ui:Button>
+                            <!-- ⏸ Pause -->
+                            <ui:Button Style="{StaticResource IconOnlyButton}"
+                                       ToolTip="Pause"
+                                       AutomationProperties.Name="Pause"
+                                       Command="{Binding PauseBatchCommand}">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Pause24}" FontSize="16"/>
+                            </ui:Button>
 
-                        <!-- ■ Stop -->
-                        <ui:Button Style="{StaticResource IconOnlyButton}"
-                                   ToolTip="Stop"
-                                   AutomationProperties.Name="Stop"
-                                   Command="{Binding StopBatchCommand}">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Stop24}" FontSize="16"/>
-                        </ui:Button>
+                            <!-- ■ Stop -->
+                            <ui:Button Style="{StaticResource IconOnlyButton}"
+                                       ToolTip="Stop"
+                                       AutomationProperties.Name="Stop"
+                                       Command="{Binding StopBatchCommand}">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Stop24}" FontSize="16"/>
+                            </ui:Button>
 
-                        <TextBlock Margin="12,0,0,0"
-                                   VerticalAlignment="Center"
-                                   Text="{Binding BatchSummary}"/>
+                            <TextBlock Margin="12,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Text="{Binding BatchSummary}"/>
+                        </WrapPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1" Margin="8" Orientation="Vertical">

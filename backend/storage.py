@@ -81,21 +81,59 @@ class ModelStore:
     def _legacy_dir(self, role_id: str, roi_id: str) -> Path:
         return self.root / self._sanitize(role_id) / self._sanitize(roi_id)
 
-    def resolve_models_dir(self, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
+    def resolve_models_dir(self, recipe_id: Optional[str], model_key: Optional[str], *, create: bool = True) -> Path:
         recipe_safe = self._sanitize_recipe_id(recipe_id)
         key_safe = self._sanitize_model_key(model_key)
         base = self.root / "recipes" / recipe_safe / key_safe
-        ensure_dir(base)
+        if create:
+            ensure_dir(base)
         return base
 
-    def _memory_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
-        return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}.npz"
+    def _find_recipe_dir_case_insensitive(self, recipe_safe: str) -> Optional[str]:
+        """Return existing recipe directory name on disk matching recipe_safe ignoring case."""
+        recipes_root = self.root / "recipes"
+        if not recipes_root.exists():
+            return None
+        try:
+            for d in recipes_root.iterdir():
+                if d.is_dir() and d.name.lower() == recipe_safe:
+                    return d.name
+        except OSError:
+            return None
+        return None
 
-    def _index_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
-        return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}_index.faiss"
+    def _memory_path(
+        self,
+        role_id: str,
+        roi_id: str,
+        recipe_id: Optional[str],
+        model_key: Optional[str],
+        *,
+        create: bool = True,
+    ) -> Path:
+        return self.resolve_models_dir(recipe_id, model_key, create=create) / f"{self._base_name(role_id, roi_id)}.npz"
 
-    def _calib_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
-        return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}_calib.json"
+    def _index_path(
+        self,
+        role_id: str,
+        roi_id: str,
+        recipe_id: Optional[str],
+        model_key: Optional[str],
+        *,
+        create: bool = True,
+    ) -> Path:
+        return self.resolve_models_dir(recipe_id, model_key, create=create) / f"{self._base_name(role_id, roi_id)}_index.faiss"
+
+    def _calib_path(
+        self,
+        role_id: str,
+        roi_id: str,
+        recipe_id: Optional[str],
+        model_key: Optional[str],
+        *,
+        create: bool = True,
+    ) -> Path:
+        return self.resolve_models_dir(recipe_id, model_key, create=create) / f"{self._base_name(role_id, roi_id)}_calib.json"
     # --- Resolve existing artifact paths (recipe-aware with fallback) ---
 
     def resolve_memory_path_existing(
@@ -106,13 +144,25 @@ class ModelStore:
         recipe_id: Optional[str] = None,
         model_key: Optional[str] = None,
     ) -> Optional[Path]:
-        new_path = self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        model_key_effective = model_key or roi_id
+        new_path = self._memory_path(role_id, roi_id, recipe_id, model_key_effective, create=False)
         if new_path.exists():
             return new_path
 
+        # Backwards-compat: if recipe folder exists with different casing, try it before fallback.
+        if recipe_id:
+            recipe_safe = self._sanitize_recipe_id(recipe_id)
+            if recipe_safe != "default":
+                alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
+                if alt_recipe_dir and alt_recipe_dir != recipe_safe:
+                    alt_base = self.root / "recipes" / alt_recipe_dir / self._sanitize_model_key(model_key_effective)
+                    alt_path = alt_base / f"{self._base_name(role_id, roi_id)}.npz"
+                    if alt_path.exists():
+                        return alt_path
+
         # fallback: default recipe path
         if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
-            default_path = self._memory_path(role_id, roi_id, "default", model_key or roi_id)
+            default_path = self._memory_path(role_id, roi_id, "default", model_key_effective, create=False)
             if default_path.exists():
                 return default_path
 
@@ -134,12 +184,23 @@ class ModelStore:
         recipe_id: Optional[str] = None,
         model_key: Optional[str] = None,
     ) -> Optional[Path]:
-        new_path = self._index_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        model_key_effective = model_key or roi_id
+        new_path = self._index_path(role_id, roi_id, recipe_id, model_key_effective, create=False)
         if new_path.exists():
             return new_path
 
+        if recipe_id:
+            recipe_safe = self._sanitize_recipe_id(recipe_id)
+            if recipe_safe != "default":
+                alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
+                if alt_recipe_dir and alt_recipe_dir != recipe_safe:
+                    alt_base = self.root / "recipes" / alt_recipe_dir / self._sanitize_model_key(model_key_effective)
+                    alt_path = alt_base / f"{self._base_name(role_id, roi_id)}_index.faiss"
+                    if alt_path.exists():
+                        return alt_path
+
         if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
-            default_path = self._index_path(role_id, roi_id, "default", model_key or roi_id)
+            default_path = self._index_path(role_id, roi_id, "default", model_key_effective, create=False)
             if default_path.exists():
                 return default_path
 
@@ -161,12 +222,23 @@ class ModelStore:
         recipe_id: Optional[str] = None,
         model_key: Optional[str] = None,
     ) -> Optional[Path]:
-        new_path = self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        model_key_effective = model_key or roi_id
+        new_path = self._calib_path(role_id, roi_id, recipe_id, model_key_effective, create=False)
         if new_path.exists():
             return new_path
 
+        if recipe_id:
+            recipe_safe = self._sanitize_recipe_id(recipe_id)
+            if recipe_safe != "default":
+                alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
+                if alt_recipe_dir and alt_recipe_dir != recipe_safe:
+                    alt_base = self.root / "recipes" / alt_recipe_dir / self._sanitize_model_key(model_key_effective)
+                    alt_path = alt_base / f"{self._base_name(role_id, roi_id)}_calib.json"
+                    if alt_path.exists():
+                        return alt_path
+
         if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
-            default_path = self._calib_path(role_id, roi_id, "default", model_key or roi_id)
+            default_path = self._calib_path(role_id, roi_id, "default", model_key_effective, create=False)
             if default_path.exists():
                 return default_path
 
@@ -292,6 +364,16 @@ class ModelStore:
         p = self._datasets_root(recipe_id, create=False) / base_name
         if p.exists():
             return p
+
+        # Backwards-compat: locate mixed-case recipe directory on disk (datasets)
+        if recipe_id:
+            recipe_safe = self._sanitize_recipe_id(recipe_id)
+            if recipe_safe != "default":
+                alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
+                if alt_recipe_dir and alt_recipe_dir != recipe_safe:
+                    p_alt = self.root / "recipes" / alt_recipe_dir / "datasets" / base_name
+                    if p_alt.exists():
+                        return p_alt
 
         if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
             p2 = self._datasets_root("default", create=False) / base_name

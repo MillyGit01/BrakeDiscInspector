@@ -56,10 +56,13 @@ class PatchCoreMemory:
 
     def knn_min_dist(self, query: np.ndarray) -> np.ndarray:
         Q = l2_normalize(query.astype(np.float32, copy=False))
+        if self.index is None and self.nn is None:
+            raise RuntimeError("PatchCoreMemory not fitted: missing kNN index (FAISS/sklearn).")
         if self.index is not None:
             import faiss  # type: ignore
             D, I = self.index.search(Q, 1)
             return np.sqrt(np.maximum(D[:, 0], 0.0))
         else:
+            assert self.nn is not None
             d, i = self.nn.kneighbors(Q, n_neighbors=1, return_distance=True)
             return d[:, 0]

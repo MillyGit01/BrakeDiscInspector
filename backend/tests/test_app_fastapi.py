@@ -139,3 +139,27 @@ def test_calibrate_ng_accepts_null_ng_scores(tmp_path, monkeypatch):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert "threshold" in body and isinstance(body["threshold"], float)
+
+
+def test_reject_last_recipe_header_health():
+    client = TestClient(app_mod.app)
+    r = client.get("/health", headers={"X-Recipe-Id": "last"})
+    assert r.status_code == 400
+    body = r.json()
+    assert "detail" in body
+    assert "error" in body["detail"]
+    assert "reserved" in body["detail"]["error"].lower()
+
+
+def test_reject_last_recipe_payload_calibrate_ng():
+    client = TestClient(app_mod.app)
+    payload = {"recipe_id": "last", "reason": "test"}
+    r = client.post("/calibrate_ng", json=payload)
+    assert r.status_code == 400
+    body = r.json()
+    # calibrate_ng uses JSONResponse for bad_request path
+    # depending on whether exception is raised before entering try, it may be detail-based.
+    if "detail" in body:
+        assert "reserved" in body["detail"]["error"].lower()
+    else:
+        assert "reserved" in body["error"].lower()

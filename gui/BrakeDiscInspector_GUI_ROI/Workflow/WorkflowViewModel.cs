@@ -574,9 +574,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public void SetLayoutName(string layoutName)
         {
-            _currentLayoutName = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
-            _client.RecipeId = _currentLayoutName;
-            _datasetManager.SetLayoutName(_currentLayoutName);
+            var normalized = string.IsNullOrWhiteSpace(layoutName) ? "DefaultLayout" : layoutName;
+
+            // "last" es un layout efímero (last.layout.json). NO es un recipe válido y no se debe enviar al backend.
+            var isReservedLast = string.Equals(normalized, "last", StringComparison.OrdinalIgnoreCase);
+
+            _currentLayoutName = normalized;
+
+            // Si es "last", no mandamos header (backend resolverá 'default').
+            _client.RecipeId = isReservedLast ? null : _currentLayoutName;
+
+            // Evitar crear carpetas Recipes/last por error.
+            _datasetManager.SetLayoutName(isReservedLast ? "DefaultLayout" : _currentLayoutName);
         }
 
         public void AlignDatasetPathsWithCurrentLayout()
@@ -589,6 +598,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var layoutName = string.IsNullOrWhiteSpace(_currentLayoutName)
                 ? "DefaultLayout"
                 : _currentLayoutName;
+
+            if (string.Equals(layoutName, "last", StringComparison.OrdinalIgnoreCase))
+            {
+                layoutName = "DefaultLayout";
+            }
 
             string recipesRoot;
             string datasetRoot;

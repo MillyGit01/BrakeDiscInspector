@@ -564,10 +564,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             request.Headers.Remove("X-Request-Id");
             request.Headers.TryAddWithoutValidation("X-Request-Id", requestId);
 
-            if (!string.IsNullOrWhiteSpace(RecipeId))
+            if (!string.IsNullOrWhiteSpace(RecipeId) &&
+                !string.Equals(RecipeId, "last", StringComparison.OrdinalIgnoreCase))
             {
                 request.Headers.Remove("X-Recipe-Id");
                 request.Headers.TryAddWithoutValidation("X-Recipe-Id", RecipeId);
+            }
+            else
+            {
+                // No enviar recipe header si no hay recipe o si es reservado ("last")
+                request.Headers.Remove("X-Recipe-Id");
             }
         }
 

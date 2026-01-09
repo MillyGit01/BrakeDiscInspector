@@ -15,6 +15,12 @@ For endpoints that accept `recipe_id` in the payload/query/form:
 2. Header `X-Recipe-Id` (configurable via `BDI_RECIPE_HEADER`), else
 3. `"default"`.
 
+### Reserved recipe ids
+
+The following values are reserved and MUST NOT be used as recipes by clients:
+
+- `last` — reserved for GUI layout state (e.g., `last.layout.json`). If provided as `X-Recipe-Id` or `recipe_id`, the backend will return **HTTP 400**.
+
 ### Artifact fallback (recipe -> default)
 
 For recipe-aware artifacts (`memory`, `index`, `calib`, `datasets`), when `recipe_id != "default"` and the artifact does **not** exist for that recipe, the backend falls back to `"default"` (and finally to legacy layouts when applicable).

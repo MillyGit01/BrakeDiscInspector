@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import inspect
+import logging
+import threading
 from typing import Iterable, Optional, Tuple, Union
 
 import numpy as np
@@ -12,6 +14,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
+
+log = logging.getLogger(__name__)
 
 
 class DinoV2Features:
@@ -101,6 +105,9 @@ class DinoV2Features:
         # Guardar pos_embed "de fábrica" para poder resetearlo en cada extract()
         pe2 = getattr(self.model, "pos_embed", None)
         self._pos_embed_base: Optional[torch.Tensor] = pe2.detach().clone() if isinstance(pe2, torch.Tensor) else None
+        # Lock to make extract() thread-safe inside one uvicorn worker
+        self._lock = threading.RLock()
+
 
     # ---------------- imagen / preprocesado ----------------
     @staticmethod
@@ -338,7 +345,7 @@ class DinoV2Features:
                     return out[0]  # (N, C_out)
             except Exception as ex:
                 # Fallback limpio a forward_features
-                print(f"[features] fallback intermedias -> forward_features: {ex}")
+                log.debug("[features] fallback intermedias -> forward_features: %s", ex)
 
         # 3) forward_features (fallback o seleccionado)
         feats = self.model.forward_features(x)
@@ -385,23 +392,31 @@ class DinoV2Features:
     # ---------------- API pública ----------------
     @torch.inference_mode()
     def extract(self, img):
-        x = self._preprocess(img)
-        x, how = self._prepare_input_size(self.model, x)
-        H, W = x.shape[-2:]
-        h_tokens, w_tokens = H // self.patch, W // self.patch
+        with self._lock:
+            x = self._preprocess(img)
+            x, how = self._prepare_input_size(self.model, x)
+            H, W = x.shape[-2:]
+            h_tokens, w_tokens = H // self.patch, W // self.patch
 
-        # Debug útil
-        pe_n = getattr(self.model, "pos_embed", None)
-        pe_count = int(pe_n.shape[1]) if isinstance(pe_n, torch.Tensor) else -1
-        print(
-            f"[features] after-prep: {H}x{W} ({how}), patch={self.patch}, "
-            f"grid={h_tokens}x{w_tokens}, tokens(N+CLS)={h_tokens*w_tokens+1}, pos_embed_N={pe_count}"
-        )
+            # Debug útil
+            pe_n = getattr(self.model, "pos_embed", None)
+            pe_count = int(pe_n.shape[1]) if isinstance(pe_n, torch.Tensor) else -1
+            log.debug(
+                "[features] after-prep: %sx%s (%s), patch=%s, grid=%sx%s, tokens(N+CLS)=%s, pos_embed_N=%s",
+                H,
+                W,
+                how,
+                self.patch,
+                h_tokens,
+                w_tokens,
+                h_tokens * w_tokens + 1,
+                pe_count,
+            )
 
-        tokens = self._forward_tokens(x)  # (N, C)
+            tokens = self._forward_tokens(x)  # (N, C)
 
-        if self.pool == "mean":
-            tokens = tokens.mean(dim=0, keepdim=True)  # (1, C)
+            if self.pool == "mean":
+                tokens = tokens.mean(dim=0, keepdim=True)  # (1, C)
 
-        emb_np = tokens.float().detach().cpu().numpy()
-        return emb_np, (int(h_tokens), int(w_tokens))
+            emb_np = tokens.float().detach().cpu().numpy()
+            return emb_np, (int(h_tokens), int(w_tokens))

@@ -34,6 +34,13 @@ class ModelStore:
         cleaned = cleaned[:80]
         return cleaned or "default"
 
+    @staticmethod
+    def _sanitize_label(label: str) -> str:
+        v = (label or "").strip().lower()
+        if v not in ("ok", "ng"):
+            raise ValueError("label debe ser 'ok' o 'ng'")
+        return v
+
     def _sanitize(self, value: str) -> str:
         cleaned = "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in value.strip())
         return cleaned or "default"
@@ -70,6 +77,91 @@ class ModelStore:
 
     def _calib_path(self, role_id: str, roi_id: str, recipe_id: Optional[str], model_key: Optional[str]) -> Path:
         return self.resolve_models_dir(recipe_id, model_key) / f"{self._base_name(role_id, roi_id)}_calib.json"
+    # --- Resolve existing artifact paths (recipe-aware with fallback) ---
+
+    def resolve_memory_path_existing(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+    ) -> Optional[Path]:
+        new_path = self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        if new_path.exists():
+            return new_path
+
+        # fallback: default recipe path
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            default_path = self._memory_path(role_id, roi_id, "default", model_key or roi_id)
+            if default_path.exists():
+                return default_path
+
+        flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}.npz"
+        if flat_legacy_path.exists():
+            return flat_legacy_path
+
+        legacy_path = self._legacy_dir(role_id, roi_id) / "memory.npz"
+        if legacy_path.exists():
+            return legacy_path
+
+        return None
+
+    def resolve_index_path_existing(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+    ) -> Optional[Path]:
+        new_path = self._index_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        if new_path.exists():
+            return new_path
+
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            default_path = self._index_path(role_id, roi_id, "default", model_key or roi_id)
+            if default_path.exists():
+                return default_path
+
+        flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_index.faiss"
+        if flat_legacy_path.exists():
+            return flat_legacy_path
+
+        legacy_path = self._legacy_dir(role_id, roi_id) / "index.faiss"
+        if legacy_path.exists():
+            return legacy_path
+
+        return None
+
+    def resolve_calib_path_existing(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+    ) -> Optional[Path]:
+        new_path = self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        if new_path.exists():
+            return new_path
+
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            default_path = self._calib_path(role_id, roi_id, "default", model_key or roi_id)
+            if default_path.exists():
+                return default_path
+
+        flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_calib.json"
+        if flat_legacy_path.exists():
+            return flat_legacy_path
+
+        legacy_path = self._legacy_dir(role_id, roi_id) / "calib.json"
+        if legacy_path.exists():
+            return legacy_path
+
+        return None
+
+
 
     def _load_memory_from_path(self, path: Path):
         with np.load(path, allow_pickle=False) as z:
@@ -115,87 +207,113 @@ class ModelStore:
 
     def load_memory(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         """
-        Carga (embeddings, (Ht, Wt)) o None si no existe.
+        Carga (embeddings, (Ht, Wt), metadata) o None si no existe.
+
+        Nota: la resolución del fichero es recipe-aware con fallback a:
+          1) recipe actual,
+          2) recipe "default" (si recipe != default),
+          3) layout legacy (flat),
+          4) layout legacy por carpetas.
         """
-        new_path = self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id)
-        if new_path.exists():
-            return self._load_memory_from_path(new_path)
-
-        # fallback: default recipe path
-        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
-            default_path = self._memory_path(role_id, roi_id, "default", model_key or roi_id)
-            if default_path.exists():
-                return self._load_memory_from_path(default_path)
-
-        flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}.npz"
-        if flat_legacy_path.exists():
-            return self._load_memory_from_path(flat_legacy_path)
-
-        legacy_path = self._legacy_dir(role_id, roi_id) / "memory.npz"
-        if legacy_path.exists():
-            return self._load_memory_from_path(legacy_path)
-
-        return None
+        path = self.resolve_memory_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+        if path is None:
+            return None
+        return self._load_memory_from_path(path)
 
     def save_index_blob(self, role_id: str, roi_id: str, blob: bytes, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         ensure_dir(self.root)
         self._index_path(role_id, roi_id, recipe_id, model_key or roi_id).write_bytes(blob)
 
     def load_index_blob(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None) -> Optional[bytes]:
-        new_path = self._index_path(role_id, roi_id, recipe_id, model_key or roi_id)
-        if new_path.exists():
-            return new_path.read_bytes()
-
-        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
-            default_path = self._index_path(role_id, roi_id, "default", model_key or roi_id)
-            if default_path.exists():
-                return default_path.read_bytes()
-
-        flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_index.faiss"
-        if flat_legacy_path.exists():
-            return flat_legacy_path.read_bytes()
-
-        legacy_path = self._legacy_dir(role_id, roi_id) / "index.faiss"
-        if legacy_path.exists():
-            return legacy_path.read_bytes()
-        return None
+        path = self.resolve_index_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+        if path is None:
+            return None
+        return path.read_bytes()
 
     def save_calib(self, role_id: str, roi_id: str, data: dict, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         save_json(self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id), data)
 
     def load_calib(self, role_id: str, roi_id: str, default=None, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
-        new_path = self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id)
-        if new_path.exists():
-            return load_json(new_path, default=default)
+        path = self.resolve_calib_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
+        if path is None:
+            return default
+        return load_json(path, default=default)
 
-        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
-            default_path = self._calib_path(role_id, roi_id, "default", model_key or roi_id)
-            if default_path.exists():
-                return load_json(default_path, default=default)
+    # --- Dataset helpers (recipe-aware) -------------------------------------
 
-        flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_calib.json"
-        if flat_legacy_path.exists():
-            return load_json(flat_legacy_path, default=default)
+    def _datasets_root(self, recipe_id: Optional[str], *, create: bool) -> Path:
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        base = self.root / "recipes" / recipe_safe / "datasets"
+        if create:
+            ensure_dir(base)
+        return base
 
-        legacy_path = self._legacy_dir(role_id, roi_id) / "calib.json"
-        return load_json(legacy_path, default=default)
-
-    def _ds_dir(self, role_id: str, roi_id: str, label: str) -> Path:
-        p = self.root / "datasets" / role_id / roi_id / label
-        p.mkdir(parents=True, exist_ok=True)
+    def _ds_base_dir_new(self, role_id: str, roi_id: str, recipe_id: Optional[str], *, create: bool) -> Path:
+        base = self._datasets_root(recipe_id, create=create)
+        p = base / self._base_name(role_id, roi_id)
+        if create:
+            ensure_dir(p)
         return p
 
-    def save_dataset_image(self, role_id: str, roi_id: str, label: str, data: bytes, ext: str = ".png") -> Path:
+    def _ds_base_dir_legacy(self, role_id: str, roi_id: str) -> Path:
+        # Legacy layout (pre-recipe): models/datasets/<role>/<roi>/<ok|ng>/*
+        return self.root / "datasets" / role_id / roi_id
+
+    def resolve_dataset_base_existing(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None) -> Optional[Path]:
+        """
+        Devuelve el directorio base de dataset existente para (role, roi) siguiendo este orden:
+          1) recipe actual (nuevo layout),
+          2) recipe "default" (si recipe != default),
+          3) legacy layout (models/datasets/<role>/<roi>).
+
+        No crea carpetas.
+        """
+        base_name = self._base_name(role_id, roi_id)
+
+        p = self._datasets_root(recipe_id, create=False) / base_name
+        if p.exists():
+            return p
+
+        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+            p2 = self._datasets_root("default", create=False) / base_name
+            if p2.exists():
+                return p2
+
+        p3 = self._ds_base_dir_legacy(role_id, roi_id)
+        if p3.exists():
+            return p3
+
+        return None
+
+    def _ds_dir(self, role_id: str, roi_id: str, label: str, *, recipe_id: Optional[str] = None, create: bool = True) -> Path:
+        """Devuelve el directorio de clase (ok|ng) para guardar. Crea carpetas por defecto."""
+        lbl = self._sanitize_label(label)
+        base = self._ds_base_dir_new(role_id, roi_id, recipe_id, create=create)
+        p = base / lbl
+        if create:
+            ensure_dir(p)
+        return p
+
+    def save_dataset_image(
+        self,
+        role_id: str,
+        roi_id: str,
+        label: str,
+        data: bytes,
+        ext: str = ".png",
+        *,
+        recipe_id: Optional[str] = None,
+    ) -> Path:
         ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         ext = ext if ext.startswith(".") else "." + ext
-        path = self._ds_dir(role_id, roi_id, label) / f"{ts}{ext.lower()}"
+        path = self._ds_dir(role_id, roi_id, label, recipe_id=recipe_id, create=True) / f"{ts}{ext.lower()}"
         path.write_bytes(data)
         return path
 
-    def list_dataset(self, role_id: str, roi_id: str) -> Dict[str, Any]:
-        base = self.root / "datasets" / role_id / roi_id
+    def list_dataset(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None) -> Dict[str, Any]:
+        base = self.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)
         out: Dict[str, Any] = {"role_id": role_id, "roi_id": roi_id, "classes": {}}
-        if not base.exists():
+        if base is None or not base.exists():
             return out
         for cls in ["ok", "ng"]:
             d = base / cls
@@ -204,16 +322,26 @@ class ModelStore:
                 out["classes"][cls] = {"count": len(files), "files": files}
         return out
 
-    def delete_dataset_file(self, role_id: str, roi_id: str, label: str, filename: str) -> bool:
+    def delete_dataset_file(self, role_id: str, roi_id: str, label: str, filename: str, *, recipe_id: Optional[str] = None) -> bool:
+        base = self.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)
+        if base is None:
+            return False
+        lbl = self._sanitize_label(label)
         fn = Path(filename).name
-        p = self._ds_dir(role_id, roi_id, label) / fn
+        p = base / lbl / fn
         if p.exists() and p.is_file():
             p.unlink()
             return True
         return False
 
-    def clear_dataset_class(self, role_id: str, roi_id: str, label: str) -> int:
-        d = self._ds_dir(role_id, roi_id, label)
+    def clear_dataset_class(self, role_id: str, roi_id: str, label: str, *, recipe_id: Optional[str] = None) -> int:
+        base = self.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)
+        if base is None:
+            return 0
+        lbl = self._sanitize_label(label)
+        d = base / lbl
+        if not d.exists():
+            return 0
         count = 0
         for f in list(d.glob("*")):
             if f.is_file():
@@ -221,11 +349,21 @@ class ModelStore:
                 count += 1
         return count
 
-    def manifest(self, role_id: str, roi_id: str) -> Dict[str, Any]:
+    def manifest(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        model_key_effective = model_key or roi_id
         return {
             "role_id": role_id,
             "roi_id": roi_id,
-            "memory": self.load_memory(role_id, roi_id) is not None,
-            "calib": self.load_calib(role_id, roi_id, default=None),
-            "datasets": self.list_dataset(role_id, roi_id),
+            "recipe_id": self._sanitize_recipe_id(recipe_id),
+            "model_key": self._sanitize_model_key(model_key_effective),
+            "memory": self.load_memory(role_id, roi_id, recipe_id=recipe_id, model_key=model_key_effective) is not None,
+            "calib": self.load_calib(role_id, roi_id, default=None, recipe_id=recipe_id, model_key=model_key_effective),
+            "datasets": self.list_dataset(role_id, roi_id, recipe_id=recipe_id),
         }

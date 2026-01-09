@@ -1,0 +1,8 @@
+# Minimal dependencies for CI unit tests (heavy runtime deps like torch/timm are stubbed in tests)
+fastapi
+uvicorn
+numpy
+pillow
+python-multipart
+pytest
+ruff

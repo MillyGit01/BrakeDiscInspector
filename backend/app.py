@@ -10,7 +10,7 @@ import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import cv2
@@ -58,6 +58,23 @@ def _env_var(name: str, *, legacy: str | None = None, default: str | None = None
     if value is None or value == "":
         return default
     return value
+
+
+def _env_str(name: str, default: str, legacy_names: Sequence[str] = ()) -> str:
+    """Return env var as a non-empty string, never None.
+    - Checks `name` first, then any `legacy_names`.
+    - Falls back to `default` if missing/empty.
+    """
+    v = os.getenv(name)
+    if v is None or v.strip() == "":
+        for ln in legacy_names:
+            lv = os.getenv(ln)
+            if lv is not None and lv.strip() != "":
+                v = lv
+                break
+    if v is None or v.strip() == "":
+        v = default
+    return v
 
 app = FastAPI(title="Anomaly Backend (PatchCore + DINOv2)")
 
@@ -130,7 +147,9 @@ def _resolve_request_context_safe(request: Request, recipe_from_payload: str | N
 
     return request_id, recipe_id_s
 
-MODELS_DIR = Path(_env_var("BDI_MODELS_DIR", legacy="BRAKEDISC_MODELS_DIR", default="models"))
+MODELS_DIR = Path(
+    _env_str("BDI_MODELS_DIR", default="models", legacy_names=("BRAKEDISC_MODELS_DIR",))
+)
 
 # Optional config (YAML + env) for default parameters.
 try:
@@ -382,19 +401,19 @@ def fit_ok(
             )
 
         all_emb: List[np.ndarray] = []
-        token_hw: Optional[tuple[int, int]] = None
+        token_hw: tuple[int, int] | None = None
 
         for uf in images:
             img = _read_image_file(uf)
-            emb, hw = _extractor.extract(img)
+            emb, token_hw_local = _extractor.extract(img)
             if token_hw is None:
-                token_hw = (int(hw[0]), int(hw[1]))
-            else:
-                if (int(hw[0]), int(hw[1])) != token_hw:
-                    return JSONResponse(
-                        status_code=400,
-                        content={"error": f"Token grid mismatch: got {hw}, expected {token_hw}", "request_id": request_id},
-                    )
+                token_hw = token_hw_local
+            elif (int(token_hw_local[0]), int(token_hw_local[1])) != (int(token_hw[0]), int(token_hw[1])):
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"Token grid mismatch: got {token_hw_local}, expected {token_hw}", "request_id": request_id},
+                )
+            token_hw = token_hw_local
             all_emb.append(emb)
 
         if not all_emb:
@@ -410,6 +429,9 @@ def fit_ok(
 
         # Persistir memoria + token grid
         applied_rate = float(mem.emb.shape[0]) / float(E.shape[0]) if E.shape[0] > 0 else 0.0
+        if token_hw is None:
+            raise ValueError("No valid OK images received; token grid (token_hw) is undefined.")
+
         store.save_memory(
             role_id,
             roi_id,
@@ -472,11 +494,18 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
     Devuelve siempre 'threshold' como float (nunca null).
     """
     try:
+        _raw_recipe = payload.get("recipe_id")
+        recipe_from_payload = _raw_recipe if isinstance(_raw_recipe, str) else None
+
+        request_id, recipe_resolved = _resolve_request_context(request, recipe_from_payload)
+
         role_id = payload["role_id"]
         roi_id = payload["roi_id"]
-        model_key = payload.get("model_key") or roi_id
-        payload_recipe = payload.get("recipe_id")
-        request_id, recipe_resolved = _resolve_request_context(request, payload_recipe)
+
+        _raw_model_key = payload.get("model_key")
+        model_key_from_payload = _raw_model_key if isinstance(_raw_model_key, str) else None
+
+        model_key = model_key_from_payload or roi_id
         mm_per_px = float(payload.get("mm_per_px", 0.2))
         ok_scores = _scores_1d_finite(payload.get("ok_scores"))
         ng_scores = _scores_1d_finite(payload.get("ng_scores")) if "ng_scores" in payload else None
@@ -614,10 +643,15 @@ def infer(
             memory_metadata=metadata,
         )
 
+        token_shape_expected: tuple[int, int] | None = None
+        token_hw_source = getattr(mem, "token_hw", None) or token_hw_mem
+        if token_hw_source is not None:
+            token_shape_expected = (int(token_hw_source[0]), int(token_hw_source[1]))
+
         try:
             res = engine.run(
                 img,
-                token_shape_expected=tuple(map(int, token_hw_mem)),
+                token_shape_expected=token_shape_expected,
                 shape=shape_obj,
                 threshold=thr,
                 area_mm2_thr=float(area_mm2_thr),

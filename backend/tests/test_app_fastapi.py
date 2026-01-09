@@ -2,6 +2,7 @@ import io
 import sys
 import types
 from types import SimpleNamespace
+from typing import Any, cast
 
 import numpy as np
 from fastapi.testclient import TestClient
@@ -22,9 +23,10 @@ if "cv2" not in sys.modules:  # pragma: no cover
         Image.fromarray(img).save(out, format="PNG")
         return True, np.frombuffer(out.getvalue(), dtype=np.uint8)
 
-    cv2_stub.IMREAD_COLOR = 1
-    cv2_stub.imdecode = _imdecode
-    cv2_stub.imencode = _imencode
+    cv2_any = cast(Any, cv2_stub)
+    cv2_any.IMREAD_COLOR = 1
+    cv2_any.imdecode = _imdecode
+    cv2_any.imencode = _imencode
     sys.modules["cv2"] = cv2_stub
 
 # Lightweight stub for DinoV2 (avoid torch/timm in unit tests)
@@ -45,7 +47,8 @@ if "backend.features" not in sys.modules:  # pragma: no cover
         def get_metadata(self):
             return {"model_name": "stub"}
 
-    features_stub.DinoV2Features = _StubFeatures
+    features_any = cast(Any, features_stub)
+    features_any.DinoV2Features = _StubFeatures
     sys.modules["backend.features"] = features_stub
 
 from backend import app as app_mod

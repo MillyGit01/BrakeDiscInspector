@@ -5,7 +5,7 @@ import io
 import inspect
 import logging
 import threading
-from typing import Iterable, Optional, Tuple, Union
+from typing import Any, Iterable, Optional, Tuple, Union, cast
 
 import numpy as np
 from PIL import Image
@@ -16,6 +16,9 @@ import torch.nn.functional as F
 import timm
 
 log = logging.getLogger(__name__)
+
+# Pillow compatibility: Image.Resampling exists in newer versions.
+_BICUBIC = getattr(getattr(Image, "Resampling", Image), "BICUBIC")
 
 
 class DinoV2Features:
@@ -104,7 +107,11 @@ class DinoV2Features:
 
         # Guardar pos_embed "de fábrica" para poder resetearlo en cada extract()
         pe2 = getattr(self.model, "pos_embed", None)
-        self._pos_embed_base: Optional[torch.Tensor] = pe2.detach().clone() if isinstance(pe2, torch.Tensor) else None
+        if isinstance(pe2, torch.Tensor):
+            pe2_tensor = cast(torch.Tensor, pe2)
+            self._pos_embed_base = pe2_tensor.detach().clone()
+        else:
+            self._pos_embed_base = None
         # Lock to make extract() thread-safe inside one uvicorn worker
         self._lock = threading.RLock()
 
@@ -142,7 +149,7 @@ class DinoV2Features:
             w, h = pil.size
             scale = min(target / w, target / h)
             nw, nh = int(round(w * scale)), int(round(h * scale))
-            pil_resized = pil.resize((nw, nh), Image.BICUBIC)
+            pil_resized = pil.resize((nw, nh), _BICUBIC)
             canvas = Image.new("RGB", (target, target), (0, 0, 0))
             left = (target - nw) // 2
             top = (target - nh) // 2
@@ -348,16 +355,18 @@ class DinoV2Features:
                 log.debug("[features] fallback intermedias -> forward_features: %s", ex)
 
         # 3) forward_features (fallback o seleccionado)
-        feats = self.model.forward_features(x)
-        if isinstance(feats, dict):
-            t = feats.get("x") or feats.get("tokens")
-            if t is None:
+        feats_any = self.model.forward_features(x)
+        if isinstance(feats_any, dict):
+            feats = cast(dict[str, Any], feats_any)
+            tokens_any = feats.get("x_norm_patchtokens") or feats.get("x") or feats.get("tokens")
+            if tokens_any is None:
                 cands = [v for v in feats.values() if isinstance(v, torch.Tensor)]
                 if not cands:
                     raise RuntimeError("forward_features devolvió un dict sin tensores utilizables")
-                t = max(cands, key=lambda u: u.numel())
+                tokens_any = max(cands, key=lambda u: u.numel())
+            t = cast(torch.Tensor, tokens_any)
         else:
-            t = feats
+            t = cast(torch.Tensor, feats_any)
 
         if t.ndim == 3:          # (B,N,C) posiblemente con CLS
             t = _as_BxNC(t, expected_N)
@@ -400,7 +409,10 @@ class DinoV2Features:
 
             # Debug útil
             pe_n = getattr(self.model, "pos_embed", None)
-            pe_count = int(pe_n.shape[1]) if isinstance(pe_n, torch.Tensor) else -1
+            pe_count = -1
+            if isinstance(pe_n, torch.Tensor):
+                pe_n_tensor = cast(torch.Tensor, pe_n)
+                pe_count = int(pe_n_tensor.shape[1])
             log.debug(
                 "[features] after-prep: %sx%s (%s), patch=%s, grid=%sx%s, tokens(N+CLS)=%s, pos_embed_N=%s",
                 H,

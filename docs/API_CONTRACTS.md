@@ -128,7 +128,7 @@ Unknown kinds fall back to a full mask.
 
 ## File-based contracts
 ### Dataset samples (GUI side)
-`DatasetManager.SaveSampleAsync` stores each ROI crop as `PNG` plus a JSON file under `Recipes/<LayoutName>/Dataset/datasets/<roi_id>/<ok|ng>/` with the following schema:
+`DatasetManager.SaveSampleAsync` stores each ROI crop as `PNG` plus a JSON file under the recipe dataset folder. Inspection ROI ids map to `Recipes/<LayoutName>/Dataset/Inspection_<n>/<ok|ng>/`, while non-inspection ROIs use `Recipes/<LayoutName>/Dataset/<roi_id>/<ok|ng>/`. The metadata schema is:
 ```json
 {
   "role_id": "Inspection",

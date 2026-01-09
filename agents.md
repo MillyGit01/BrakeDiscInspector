@@ -78,8 +78,8 @@ If any folder names differ, agents must **detect** and **adapt** paths without c
 
 ### Agent C — **Data Curator**
 - Organize datasets per `(role_id, roi_id)`:
-  - `datasets/<role>/<roi>/ok/*.png` (+ metadata JSON)
-  - `datasets/<role>/<roi>/ng/*.png` (+ metadata JSON)
+  - GUI recipes: `Recipes/<LayoutName>/Dataset/Inspection_<n>/ok|ng` for inspection slots (`inspection-1..4`) or `Recipes/<LayoutName>/Dataset/<roi_id>/ok|ng` for other ROIs.
+  - Backend helpers (`/datasets/*`): `BDI_MODELS_DIR/datasets/<role>/<roi>/ok|ng`.
 
 ### Agent D — **QA/Validation**
 - Build & run tests to verify no regressions in ROI placement, scaling, or overlay alignment.
@@ -131,7 +131,7 @@ If any folder names differ, agents must **detect** and **adapt** paths without c
     - “Remove Selected”, “Open Dataset Folder”
 - On add:
   1. **Canonicalize** ROI via existing pipeline (crop + rotation).
-  2. Save PNG → `datasets/<role>/<roi>/<ok|ng>/SAMPLE_yyyyMMdd_HHmmssfff.png`
+  2. Save PNG → `Recipes/<LayoutName>/Dataset/Inspection_<n>/<ok|ng>/SAMPLE_yyyyMMdd_HHmmssfff.png` for inspection slots (or `Recipes/<LayoutName>/Dataset/<roi_id>/<ok|ng>/` for other ROIs).
   3. Save metadata JSON (same base name):
      ```json
      {
@@ -282,7 +282,7 @@ uvicorn backend.app:app --reload
   - `POST /calibrate_ng` → JSON con `ok_scores`, `ng_scores?`, `score_percentile`, `area_mm2_thr`, opcional `recipe_id`.
   - `POST /infer` → multipart con `image`, `shape` (`rect|circle|annulus`), `mm_per_px`, opcional `recipe_id`, `model_key`.
   - Todas las respuestas incluyen `request_id` y `recipe_id` en el JSON (no headers).
-- **Persistencia**: `datasets/<role>/<roi>/ok|ng` (ModelStore datasets) y `<role>__<roi>.npz` + `<role>__<roi>_calib.json` bajo `BDI_MODELS_DIR`.
+- **Persistencia**: `datasets/<role>/<roi>/ok|ng` (ModelStore datasets) y `recipes/<recipe_id>/<model_key>/<role>__<roi>.npz` + `<role>__<roi>_calib.json` bajo `BDI_MODELS_DIR` (con compatibilidad legacy para rutas antiguas).
 - **Escala física**: `mm_per_px` obligatorio en todas las operaciones.
 - **Shape JSON**: siempre en coordenadas de ROI canónica (post-rotación).
 - **Logging**: correlacionar `request_id` entre GUI y backend.

@@ -25,12 +25,13 @@ The backend located in `backend/` exposes the same endpoints implemented in `bac
 ## Persistence layout (`ModelStore`)
 ```
 <BDI_MODELS_DIR>/
-  <role>__<roi>.npz            # embeddings + token grid (+metadata JSON string)
-  <role>__<roi>_index.faiss    # optional FAISS index (if faiss is installed)
-  <role>__<roi>_calib.json     # stored output of /calibrate_ng
+  recipes/<recipe_id>/<model_key>/
+    <role>__<roi>.npz          # embeddings + token grid (+metadata JSON string)
+    <role>__<roi>_index.faiss  # optional FAISS index (if faiss is installed)
+    <role>__<roi>_calib.json   # stored output of /calibrate_ng
   datasets/<role>/<roi>/ok|ng  # if scripts choose to reuse ModelStore for datasets
 ```
-File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_name`), so the exact ids sent by the GUI remain round-trippable even if they contain dashes. Legacy layouts (`models/<role>/<roi>/memory.npz`, etc.) are still read for backward compatibility.
+File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_name`), so the exact ids sent by the GUI remain round-trippable even if they contain dashes. `recipe_id` and `model_key` (defaults to `roi_id`) are sanitized and used to namespace artefacts under `recipes/`. Legacy layouts (`models/<role>/<roi>/memory.npz`, or flat `<role>_<roi>.npz`) are still read for backward compatibility.
 
 ## Endpoint behaviour
 - `GET /health`: returns `{status, device, model, version, request_id, recipe_id}`; device is `cuda` when `torch.cuda.is_available()`. Includes `reason: cuda_not_available` on CPU-only hosts.

@@ -2468,6 +2468,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private RoiShape _currentShape = RoiShape.Rectangle;
 
         private DispatcherTimer? _trainTimer;
+        private DispatcherTimer? _healthTimer;
 
         // ==== Drag de ROI (mover) ====
         private Shape? _dragShape;
@@ -4278,6 +4279,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             try
             {
+                _healthTimer?.Stop();
                 _guiSetupSaveTimer?.Stop();
                 PersistGuiSetupNow("WindowClosing");
             }
@@ -9158,17 +9160,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
-                GuiLog.Info($"[BOOT] MainWindow_Loaded → RefreshDatasetCommand"); // CODEX: string interpolation compatibility.
-                _workflowViewModel?.RefreshDatasetCommand.Execute(null);
-                GuiLog.Info($"[BOOT] MainWindow_Loaded → RefreshDatasetCommand DONE"); // CODEX: string interpolation compatibility.
-            }
-            catch (Exception ex)
-            {
-                GuiLog.Error($"[BOOT] MainWindow_Loaded: RefreshDatasetCommand FAILED", ex); // CODEX: string interpolation compatibility.
-            }
-
-            try
-            {
                 GuiLog.Info($"[BOOT] MainWindow_Loaded → RefreshHealthCommand"); // CODEX: string interpolation compatibility.
                 _workflowViewModel?.RefreshHealthCommand.Execute(null);
                 GuiLog.Info($"[BOOT] MainWindow_Loaded → RefreshHealthCommand DONE"); // CODEX: string interpolation compatibility.
@@ -9176,6 +9167,20 @@ namespace BrakeDiscInspector_GUI_ROI
             catch (Exception ex)
             {
                 GuiLog.Error($"[BOOT] MainWindow_Loaded: RefreshHealthCommand FAILED", ex); // CODEX: string interpolation compatibility.
+            }
+
+            // Start periodic polling so the indicator updates even if backend becomes ready later.
+            EnsureHealthPollingStarted();
+
+            try
+            {
+                GuiLog.Info($"[BOOT] MainWindow_Loaded → RefreshDatasetCommand"); // CODEX: string interpolation compatibility.
+                _workflowViewModel?.RefreshDatasetCommand.Execute(null);
+                GuiLog.Info($"[BOOT] MainWindow_Loaded → RefreshDatasetCommand DONE"); // CODEX: string interpolation compatibility.
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error($"[BOOT] MainWindow_Loaded: RefreshDatasetCommand FAILED", ex); // CODEX: string interpolation compatibility.
             }
 
             InitComms();
@@ -13829,6 +13834,30 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             };
             // _trainTimer.Start(); // opcional
+        }
+
+        private void EnsureHealthPollingStarted()
+        {
+            if (_healthTimer == null)
+            {
+                _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                _healthTimer.Tick += (_, _) =>
+                {
+                    try
+                    {
+                        _workflowViewModel?.RefreshHealthCommand.Execute(null);
+                    }
+                    catch
+                    {
+                        // ignore health polling errors
+                    }
+                };
+            }
+
+            if (!_healthTimer.IsEnabled)
+            {
+                _healthTimer.Start();
+            }
         }
 
         private void Snack(string message)

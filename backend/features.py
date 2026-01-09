@@ -358,7 +358,14 @@ class DinoV2Features:
         feats_any = self.model.forward_features(x)
         if isinstance(feats_any, dict):
             feats = cast(dict[str, Any], feats_any)
-            tokens_any = feats.get("x_norm_patchtokens") or feats.get("x") or feats.get("tokens")
+            tokens_any: Any = None
+            # IMPORTANT: do NOT use `or` on torch.Tensor.
+            # `bool(tensor)` raises: RuntimeError: Boolean value of Tensor with more than one value is ambiguous
+            for k in ("x_norm_patchtokens", "x", "tokens"):
+                v = feats.get(k)
+                if torch.is_tensor(v):
+                    tokens_any = v
+                    break
             if tokens_any is None:
                 cands = [v for v in feats.values() if isinstance(v, torch.Tensor)]
                 if not cands:

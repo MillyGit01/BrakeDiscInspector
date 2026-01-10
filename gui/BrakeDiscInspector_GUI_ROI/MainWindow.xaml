@@ -291,10 +291,30 @@
                 Background="{DynamicResource BrushAppBackground}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
                 BorderThickness="0,0,0,1">
-            <DockPanel Margin="0,0,0,-1">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left"/>
-                <StackPanel Orientation="Horizontal"
-                            DockPanel.Dock="Right"
+            <Grid Margin="0,0,0,-1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Title (left) -->
+                <!-- Viewbox DownOnly keeps the title from overflowing into the button area on narrow widths -->
+                <Viewbox Grid.Column="0"
+                         Stretch="Uniform"
+                         StretchDirection="DownOnly"
+                         HorizontalAlignment="Left"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0">
+                    <TextBlock Text="Part Inspector"
+                               FontFamily="Candara Light"
+                               FontSize="65"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource UI.Brush.Foreground}"/>
+                </Viewbox>
+
+                <!-- Buttons (right) -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
                             VerticalAlignment="Top"
                             HorizontalAlignment="Right"
                             Margin="0,6,8,0">
@@ -331,7 +351,7 @@
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.WeatherMoon24}" FontSize="18"/>
                     </ui:Button>
                 </StackPanel>
-            </DockPanel>
+            </Grid>
         </Border>
 
         <Popup x:Name="GuiSetupPopup"

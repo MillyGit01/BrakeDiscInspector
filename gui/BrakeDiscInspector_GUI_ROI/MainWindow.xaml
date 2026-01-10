@@ -287,7 +287,7 @@
                 Grid.Row="0"
                 Grid.Column="1"
                 Grid.ColumnSpan="3"
-                Padding="16,10"
+                Padding="0,0,16,0"
                 Background="{DynamicResource BrushAppBackground}"
                 BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
                 BorderThickness="0,0,0,1">
@@ -309,7 +309,7 @@
                                FontFamily="Candara Light"
                                FontSize="65"
                                FontWeight="Bold"
-                               Foreground="{DynamicResource UI.Brush.Foreground}"/>
+                               Foreground="{DynamicResource UI.Brush.Foreground}" Height="78" Width="408" Margin="0,0,0,-20"/>
                 </Viewbox>
 
                 <!-- Buttons (right) -->

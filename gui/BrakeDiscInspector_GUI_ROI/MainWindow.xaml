@@ -245,7 +245,7 @@
             <ColumnDefinition x:Name="NavColumn" Width="220" MinWidth="180" />
             <ColumnDefinition x:Name="SidePanelColumn" Width="520" MinWidth="420" />
             <ColumnDefinition Width="Auto" />
-            <ColumnDefinition />
+            <ColumnDefinition Width="*" MinWidth="1220" />
         </Grid.ColumnDefinitions>
 
         <!-- ===== Top bar ===== -->

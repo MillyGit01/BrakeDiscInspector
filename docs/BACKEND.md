@@ -54,3 +54,12 @@ File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_
 
 ## Running tests
 `pytest` is configured under `backend/tests/`. The suite expects a working Python environment with NumPy, Torch, etc. If you only need to validate HTTP contracts, use the real FastAPI server plus the curl snippets from `docs/API_CONTRACTS.md`.
+
+## Recipe ids and normalization
+- Recipe ids are sanitized for filesystem safety and normalized to lowercase for storage.
+- Treat recipe ids as case-insensitive identifiers; do not rely on casing differences.
+- `last` is reserved and MUST be rejected with HTTP 400.
+
+## Concurrency and multi-worker deployments
+- The backend can be deployed with multiple Uvicorn workers (`--workers N`).
+- Each worker has its own process memory; avoid relying on in-process caches for correctness. All durable state must be persisted under `BDI_MODELS_DIR`.

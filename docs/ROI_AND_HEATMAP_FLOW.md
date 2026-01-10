@@ -43,3 +43,7 @@ Values are expressed in pixels of the *canonical crop* (after rotation). Backend
 - `PresetManager.SaveInspection` clones the selected ROI into `Preset.Inspection1/2` with ids `Inspection_<slot>` to keep dataset and backend IDs consistent.
 - Layouts are saved through `MasterLayoutManager.Save` into `Layouts/<timestamp>.layout.json`. When reloading, `EnsureInspectionRoiDefaults` reinstates the four inspection slots even if they were missing in older files.
 - `SyncModelFromShape` keeps `X/Y` aligned with `CX/CY` for circle/annulus ROIs so canvas geometry and persisted layouts stay consistent after edits.
+
+## Note on recipes (GUI vs backend)
+- The GUI recipe folder (`<exe>/Recipes/<LayoutName>/...`) is for local layout/dataset persistence.
+- Backend recipe ids are independent and normalized for storage under `BDI_MODELS_DIR/recipes/<recipe_id>/...`.

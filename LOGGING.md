@@ -29,3 +29,6 @@ The repository already contains concrete logging utilities. This page summarises
 2. Look at backend stdout for the matching `event`/`role_id` combination. If `fit_ok` failed you will see the exception in `fit_ok.error`.
 3. If heatmaps look misaligned or blank, inspect `gui_heatmap.log` to verify the calculated transform (`sx`, `sy`, `offX`, `offY`) matches the current canvas size.
 4. For dataset issues, `DatasetManager` logs every file it writes plus the reason when validation fails (e.g. missing `/ok` directory).
+
+## Correlation fields
+Backend JSON responses include `request_id` and `recipe_id` in the response body. Use these fields (and the backend’s structured logs) to correlate GUI actions to backend operations.

@@ -67,3 +67,7 @@ The GUI only calls the four routes implemented in `backend/app.py`. Every reques
 - Dataset management: `Workflow/DatasetManager.cs`, `Workflow/DatasetSample.cs`.
 - Batch orchestration: `Workflow/WorkflowViewModel.cs` (`RunBatchAsync`, `UpdateBatchHeatmapIndex`, etc.).
 - Backend communications: `Workflow/BackendClient.cs`.
+
+## Backend online indicator behavior
+- The status dot/text is driven by the workflow DataContext (`IsBackendOnline`, `HealthSummary`) and refreshed via the `RefreshHealthCommand` (`GET /health`).
+- If the backend is started after the GUI, a single refresh at startup can leave the indicator offline. Add polling or expose a manual refresh action if operators need live status.

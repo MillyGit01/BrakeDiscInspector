@@ -23,3 +23,14 @@ This checklist is derived from the current GUI/Backend code.
 2. Backend stdout (or Docker logs) – `slog("infer.response", ...)` includes `elapsed_ms`, `score`, `threshold`.
 3. `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` – overlay placement details.
 4. `%LocalAppData%/BrakeDiscInspector/logs/roi_analyze_master.log` – master anchor detection status when batch alignment fails.
+
+## GitHub remote moved
+If `git` reports “This repository moved”, update your remote URL:
+```bash
+git remote set-url origin https://github.com/MillyGit01/BrakeDiscInspector.git
+git fetch --prune origin
+```
+Then re-run your `pull`/`push`.
+
+## VS Code .NET SDK error
+If VS Code logs “No installed .NET SDK was found”, install the .NET SDK (or use Visual Studio, which installs it). The runtime alone is not sufficient to restore/build the WPF solution.

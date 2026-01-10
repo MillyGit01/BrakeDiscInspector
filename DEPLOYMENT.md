@@ -34,3 +34,12 @@ There is no API-key enforcement or TLS termination inside the app; use a reverse
 2. From the GUI, open **Tools → Health** (or whichever control is bound to `RefreshHealthCommand`). The status bar shows the backend model and device.
 3. Run a manual inference on a known OK sample and confirm `gui.log` contains `[eval] done ... OK`.
 4. Optional: run a small batch folder to confirm anchor alignment and dataset counters behave as expected.
+
+## Running with multiple workers
+Example (Linux):
+```bash
+uvicorn backend.app:app --host 0.0.0.0 --port 8000 --workers 2
+```
+Notes:
+- Each worker is a separate process (its own in-memory caches).
+- Persisted artifacts (memory/index/calibration/datasets) are stored under `BDI_MODELS_DIR`. If you use `--workers` or multiple containers, `BDI_MODELS_DIR` must point to a shared, writable volume.

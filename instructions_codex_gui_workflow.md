@@ -35,3 +35,7 @@ Este documento está orientado a asistentes IA que colaboran en tareas GUI/back-
 - [ ] Validación manual GUI (fit/calibrate/infer en dataset demo).
 - [ ] Documentación actualizada (este archivo + relevantes).
 - [ ] Capturas/heatmaps si hay cambios visuales.
+
+## Backend readiness + recipe notes
+- The GUI health indicator uses `GET /health`. If the backend is not ready at app start, the indicator may remain offline until a refresh is executed.
+- The GUI must never send `X-Recipe-Id: last` (reserved). Use the active layout name; when the active layout name is `last`, the GUI must send no recipe header (fallback to `default`).

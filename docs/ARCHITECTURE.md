@@ -38,3 +38,8 @@ This document summarises how the current codebase is wired: which processes exis
 ## Logging overview
 - GUI logs go to `%LocalAppData%/BrakeDiscInspector/logs/`: `gui.log` (general), `gui_heatmap.log`, `roi_load_coords.log`, `roi_analyze_master.log`. They are plain text with `yyyy-MM-dd HH:mm:ss.fff [LEVEL] message` format (see `Util/GuiLog.cs`).
 - Backend logs are emitted through `slog` in `app.py` and printed to stdout as JSON lines containing `ts`, `event`, `role_id`, `roi_id`, `request_id`, `recipe_id`, etc.
+
+## Recipe-aware backend artifacts
+- Backend artifacts are stored per recipe under `BDI_MODELS_DIR/recipes/<recipe_id>/...`.
+- Recipe context is resolved from an explicit `recipe_id` field (when present) or the `X-Recipe-Id` header.
+- `last` is reserved and invalid as a backend recipe id (400).

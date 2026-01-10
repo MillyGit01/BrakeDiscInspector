@@ -287,3 +287,8 @@ uvicorn backend.app:app --reload
 - **Shape JSON**: siempre en coordenadas de ROI canónica (post-rotación).
 - **Logging**: correlacionar `request_id` entre GUI y backend.
 - **Pruebas**: ejecutar `pytest` (backend) + validación manual GUI tras cambios en contrato.
+
+## Recipe guardrails (backend)
+- `last` is a **reserved** recipe id and MUST NOT be used for backend artifacts. Any backend change must keep this invariant (400 on `last`).
+- The backend uses the `X-Recipe-Id` header for recipe context. Treat recipe ids as case-insensitive; backend storage normalizes/sanitizes them.
+- When documenting or testing, prefer using `default` or a simple lowercase id like `layout_a`.

@@ -65,3 +65,8 @@ backend/
 - Ejecutar `pytest` antes de PR.
 - Usar `docs/API_CONTRACTS.md` para validar manualmente.
 - Revisar `docs/BACKEND.md` para detalles extendidos.
+
+## Notas sobre recipes (enero 2026)
+- El backend es *recipe-aware*: persiste memoria/índice/calibración/datasets bajo `BDI_MODELS_DIR/recipes/<recipe_id>/...`.
+- `last` está **reservado** y NO puede usarse como `recipe_id` en el backend (debe responder 400 si se envía por header o payload).
+- El backend normaliza `recipe_id` (sanitizado + lowercase) antes de usarlo como clave en disco. Los clientes deben tratarlo como identificador *case-insensitive*.

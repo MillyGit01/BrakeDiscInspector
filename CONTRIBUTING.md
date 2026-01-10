@@ -29,3 +29,6 @@ Every PR must include:
 ## 6. Communication
 - Report issues with steps to reproduce, relevant log excerpts (`gui.log`, backend stdout) and screenshots if heatmaps are involved.
 - When in doubt about ROI geometry or backend payloads, consult the owner listed in `agents.md`.
+
+## Tooling notes
+- The GUI targets `.NET 8 (net8.0-windows)`. Building from VS Code requires a **.NET SDK** installed on the machine; Visual Studio installs it automatically. The VS Code Dev Kit logs “No installed .NET SDK was found” when only the runtime is present.

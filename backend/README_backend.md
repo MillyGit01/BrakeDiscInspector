@@ -14,3 +14,9 @@ Environment variables such as `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT`, `BDI_MODEL
 
 ## Endpoints
 `/health`, `/fit_ok`, `/calibrate_ng`, `/infer`, `/manifest` and the dataset helper routes — payloads and responses exactly match [`docs/API_CONTRACTS.md`](../docs/API_CONTRACTS.md). The GUI always supplies `role_id`, `roi_id`, `mm_per_px` and the ROI `shape` mask so `roi_mask.py` can apply the same crop geometry used on the WPF side.
+
+## Recipes and reserved ids
+- The backend is recipe-aware for artifacts stored under `BDI_MODELS_DIR/recipes/<recipe_id>/...`.
+- Recipe context comes from `recipe_id` (when provided) or `X-Recipe-Id`.
+- `last` is reserved and invalid as a backend recipe id (HTTP 400).
+- Recipe ids are normalized (sanitized + lowercase) for storage; treat them as case-insensitive.

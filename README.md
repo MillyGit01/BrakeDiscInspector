@@ -10,7 +10,7 @@ BrakeDiscInspector is a two-part inspection cell: a WPF front-end (`gui/BrakeDis
 
 ## Quick start
 ### Prerequisites
-- **GUI:** Windows 10/11 x64, Visual Studio 2022 with *Desktop development with C#*. The project targets .NET 8 and references OpenCvSharp (see `gui/BrakeDiscInspector_GUI_ROI.csproj`).
+- **GUI:** Windows 10/11 x64, Visual Studio 2022 or newer (VS 2026 is fine) with *Desktop development with C#* and the .NET 8 SDK.
 - **Backend:** Python 3.11+, CUDA 12.1 if you want GPU acceleration (the provided Dockerfile already targets `pytorch/pytorch:2.2.2-cuda12.1-cudnn8-runtime`).
 
 ### Launch the backend
@@ -45,3 +45,18 @@ Environment variables such as `BDI_BACKEND_HOST`, `BDI_BACKEND_PORT`, `BDI_MODEL
 - [`DEPLOYMENT.md`](DEPLOYMENT.md) & [`docker/README.md`](docker/README.md): how to run the backend outside of Visual Studio.
 
 When working on this repository remember the guardrails in `agents.md`: do not modify adorners, keep HTTP contracts intact and reuse the canonical ROI export pipeline.
+
+## Recipes, request context, and reserved ids (backend)
+- The backend is **recipe-aware**: models/memory/calibration and dataset helpers are stored per recipe under `BDI_MODELS_DIR/recipes/<recipe_id>/...`.
+- The GUI’s on-disk “recipe” folder is **separate**: it uses `<exe>/Recipes/<LayoutName>/...` for local datasets and layout persistence.
+- The backend accepts recipe context in two ways:
+  - Explicit `recipe_id` field (form/query/JSON depending on endpoint), or
+  - `X-Recipe-Id` request header (case-insensitive header match).
+- Reserved recipe ids:
+  - `last` is **reserved** (used by the GUI for layout state like `last.layout.json`) and MUST NOT be used as a backend recipe id. If sent, the backend returns **HTTP 400**.
+- Normalization and compatibility:
+  - The backend normalizes recipe ids for storage (sanitization and lowercase). Treat recipe ids as **case-insensitive**; do not create two recipes that differ only by casing.
+
+## Deployment note: multiple Uvicorn workers
+- The backend supports `uvicorn --workers N` (multiple processes).
+- Important: in-memory caches are per-worker; persisted artifacts live in `BDI_MODELS_DIR`. Use a **shared volume** for `BDI_MODELS_DIR` if you run multiple workers/containers.

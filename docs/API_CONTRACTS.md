@@ -12,7 +12,7 @@ This document describes the backend HTTP contracts used by the GUI, and the reci
 For endpoints that accept `recipe_id` in the payload/query/form:
 
 1. Explicit `recipe_id` field/query parameter (if provided), else
-2. Header `X-Recipe-Id` (configurable via `BDI_RECIPE_HEADER`), else
+2. Header `X-Recipe-Id` (standard HTTP header; case-insensitive match), else
 3. `"default"`.
 
 ### Reserved recipe ids
@@ -260,3 +260,8 @@ When present, the GUI sends the ROI mask to the backend in canonical ROI coordin
 ```
 
 Unknown kinds fall back to a full mask.
+
+## Recipe id normalization (implementation note)
+- The backend normalizes recipe ids (sanitization and lowercase) before using them as on-disk keys under `BDI_MODELS_DIR/recipes/<recipe_id>/...`.
+- Clients should treat recipe ids as case-insensitive; do not create two recipes that differ only by casing.
+- `last` is reserved and invalid (HTTP 400) when provided via header or payload.

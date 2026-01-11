@@ -12,7 +12,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </UserControl.Resources>
-    <Grid Margin="0,8,0,0">
+    <Grid Margin="0,8,0,0" x:Name="RuntimeLayout" d:Visibility="Collapsed">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -251,6 +251,112 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
+        </StackPanel>
+    </Grid>
+    <Grid x:Name="DesignLayout" Margin="0,8,0,0" Visibility="Collapsed" d:Visibility="Visible">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
+            <TextBox Width="200" Text="ROI 1" Margin="0,0,12,0"/>
+            <CheckBox Content="Enabled" IsChecked="True" VerticalAlignment="Center"/>
+            <Button Content="Edit" Width="80" Margin="8,0,0,0" Padding="12,4"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
+            <TextBox Width="220" Text="role_1_roi_1" Margin="0,0,12,0"/>
+            <CheckBox Content="Memory fit" IsChecked="True" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <ComboBox Width="90" SelectedIndex="0">
+                <ComboBoxItem Content="Master1"/>
+                <ComboBoxItem Content="Master2"/>
+                <ComboBoxItem Content="Mid"/>
+            </ComboBox>
+        </StackPanel>
+
+        <Grid Grid.Row="3" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Dataset" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBox Grid.Column="1" Height="26" Text="C:\\Recipes\\LayoutX\\Dataset\\Inspection_1" Margin="0,0,8,0" VerticalAlignment="Center"/>
+            <Button Grid.Column="2" Padding="12,4" Content="Browse..."/>
+            <Button Grid.Column="3" Padding="12,4" Content="Open Folder"/>
+        </Grid>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="Dataset ready (mock)" FontWeight="SemiBold" Foreground="ForestGreen"/>
+            <TextBlock Text="  "/>
+            <TextBlock Text="OK: 12  NG: 3"/>
+        </StackPanel>
+
+        <ProgressBar Grid.Row="5" Height="4" Margin="0,4,0,0" IsIndeterminate="True"/>
+
+        <StackPanel Grid.Row="6" Margin="0,8,0,0">
+            <TextBlock Text="OK dataset" FontWeight="SemiBold" Margin="0,6,0,4"/>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          Height="110">
+                <WrapPanel>
+                    <Border BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0" Padding="2">
+                        <Rectangle Width="120" Height="90"/>
+                    </Border>
+                    <Border BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0" Padding="2">
+                        <Rectangle Width="120" Height="90"/>
+                    </Border>
+                    <Border BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0" Padding="2">
+                        <Rectangle Width="120" Height="90"/>
+                    </Border>
+                </WrapPanel>
+            </ScrollViewer>
+
+            <TextBlock Text="NG dataset" FontWeight="SemiBold" Margin="0,8,0,4"/>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          Height="110">
+                <WrapPanel>
+                    <Border BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0" Padding="2">
+                        <Rectangle Width="120" Height="90"/>
+                    </Border>
+                    <Border BorderBrush="Gray" BorderThickness="1" Margin="0,0,8,0" Padding="2">
+                        <Rectangle Width="120" Height="90"/>
+                    </Border>
+                </WrapPanel>
+            </ScrollViewer>
+        </StackPanel>
+
+        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="Load model" Margin="0,0,8,0" Padding="12,4"/>
+            <Button Content="Delete Selected" Margin="0,0,8,0" Padding="12,4"/>
+            <Button Content="Train" Margin="0,0,8,0" Padding="12,4"/>
+            <Button Content="Calibrate" Margin="0,0,8,0" Padding="12,4"/>
+            <Button Content="Evaluate ROI" Padding="12,4"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="Score:"/>
+            <TextBlock Text="0.123" Margin="4,0,12,0"/>
+            <TextBlock Text="Threshold:"/>
+            <TextBlock Text="0.456" Margin="4,0,12,0"/>
+            <TextBlock Text="Result:"/>
+            <TextBlock Text="OK" Margin="4,0,0,0" Foreground="ForestGreen"/>
         </StackPanel>
     </Grid>
 </UserControl>

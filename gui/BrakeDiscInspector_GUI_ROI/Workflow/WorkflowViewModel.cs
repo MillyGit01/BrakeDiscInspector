@@ -242,6 +242,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private MasterDetection? _m1Detection;
         private MasterDetection? _m2Detection;
         private readonly RoiModel?[] _batchBaselineRois = new RoiModel?[4];
+        private Mat? _cachedM1Pattern;
+        private Mat? _cachedM2Pattern;
+        private string? _cachedM1PatternPath;
+        private string? _cachedM2PatternPath;
+        private bool _warnedMissingM1PatternPath;
+        private bool _warnedMissingM2PatternPath;
 
         // CODEX: batch reposition flags
         private CancellationToken _currentBatchCt = CancellationToken.None;
@@ -339,6 +345,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private BatchSimilarity _batchXform = new();
 
+        private sealed class BatchImageContext : IDisposable
+        {
+            public BatchImageContext(string path, byte[] bytes, Mat src, Mat gray)
+            {
+                Path = path;
+                Bytes = bytes;
+                Src = src;
+                Gray = gray;
+            }
+
+            public string Path { get; }
+            public byte[] Bytes { get; }
+            public Mat Src { get; }
+            public Mat Gray { get; }
+
+            public void Dispose()
+            {
+                Src.Dispose();
+                Gray.Dispose();
+            }
+        }
+
         private Point? _batchDetectedM1;
         private Point? _batchDetectedM2;
         private Point? _batchBaselineM1;
@@ -431,10 +459,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             RefreshDatasetCommand = CreateCommand(_ => RefreshDatasetAsync(), _ => !IsBusy);
             RefreshHealthCommand = new AsyncCommand(_ => RefreshHealthAsync());
 
-            BrowseBatchFolderCommand = new AsyncCommand(_ =>
+            BrowseBatchFolderCommand = new AsyncCommand(async _ =>
             {
-                DoBrowseBatchFolder();
-                return Task.CompletedTask;
+                await DoBrowseBatchFolderAsync().ConfigureAwait(false);
             }, _ => !IsBusy);
             StartBatchCommand = new AsyncCommand(_ =>
             {
@@ -587,6 +614,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             // Evitar crear carpetas Recipes/last por error.
             _datasetManager.SetLayoutName(isReservedLast ? "DefaultLayout" : _currentLayoutName);
+            InvalidateMasterPatternCache();
         }
 
         public void AlignDatasetPathsWithCurrentLayout()
@@ -1555,6 +1583,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             _layout = layout;
             _layoutOriginal = layout?.DeepClone();
+            InvalidateMasterPatternCache();
 
             if (_layoutOriginal != null)
             {
@@ -5069,6 +5098,61 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private async Task<BatchImageContext?> LoadBatchImageContextAsync(string path, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            byte[] bytes;
+            try
+            {
+                bytes = await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] read failed: {ex.Message}");
+                return null;
+            }
+
+            Mat src = null!;
+            Mat gray = null!;
+            bool success = false;
+            try
+            {
+                src = Cv2.ImDecode(bytes, ImreadModes.Unchanged);
+                if (src.Empty())
+                {
+                    _log($"[batch] decode failed (src) for '{Path.GetFileName(path)}'");
+                    return null;
+                }
+
+                gray = Cv2.ImDecode(bytes, ImreadModes.Grayscale);
+                if (gray.Empty())
+                {
+                    _log($"[batch] decode failed (gray) for '{Path.GetFileName(path)}'");
+                    return null;
+                }
+
+                success = true;
+                return new BatchImageContext(path, bytes, src, gray);
+            }
+            catch (Exception ex)
+            {
+                _log($"[batch] decode failed: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                if (!success)
+                {
+                    src?.Dispose();
+                    gray?.Dispose();
+                }
+            }
+        }
+
         private async Task RunBatchAsync(CancellationToken ct)
         {
             EnsureRoleRoi();
@@ -5117,7 +5201,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     {
                         rowIndex++;
                         row.IndexOneBased = rowIndex;
-                        BeginBatchStep(rowIndex, row.FullPath);
+                        InvokeOnUi(() => BeginBatchStep(rowIndex, row.FullPath));
                         processed = rowIndex;
                         SetBatchStatusSafe($"[{processed}/{total}] {row.FileName}");
 
@@ -5133,9 +5217,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             continue;
                         }
 
-                        SetBatchBaseImage(row.FullPath);
+                        using var ctx = await LoadBatchImageContextAsync(row.FullPath, ct).ConfigureAwait(false);
+                        if (ctx == null)
+                        {
+                            _log($"[batch] skip: unable to decode '{row.FileName}'");
+                            for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
+                            {
+                                UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
+                            }
+                            BatchRowOk = false;
+                            UpdateBatchProgress(processed, total);
+                            continue;
+                        }
 
-                        await RepositionInspectionRoisForImageAsync(row.FullPath, ct).ConfigureAwait(false);
+                        SetBatchBaseImage(ctx.Bytes, row.FullPath);
+
+                        await RepositionInspectionRoisForImageAsync(ctx.Gray, row.FullPath, ct).ConfigureAwait(false);
 
                         for (int roiIndex = 1; roiIndex <= 4; roiIndex++)
                         {
@@ -5185,7 +5282,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                             try
                             {
-                                var export = await ExportRoiFromFileAsync(config, row.FullPath).ConfigureAwait(false);
+                                var export = await ExportRoiFromMatAsync(config, ctx.Src, row.FullPath, ct).ConfigureAwait(false);
 
                                 var resolvedRoiId = NormalizeInspectionKey(config.ModelKey, config.Index);
                                 if (!string.Equals(config.ModelKey, resolvedRoiId, StringComparison.Ordinal))
@@ -5537,14 +5634,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
-        private Task RepositionInspectionRoisForImageAsync(string imagePath, CancellationToken ct)
+        private Task RepositionInspectionRoisForImageAsync(Mat imageGray, string imagePath, CancellationToken ct)
         {
-            if (string.IsNullOrWhiteSpace(imagePath))
+            if (string.IsNullOrWhiteSpace(imagePath) || imageGray == null || imageGray.Empty())
             {
                 return Task.CompletedTask;
             }
 
-            return RepositionInspectionRoisForImageCoreAsync(imagePath, ct);
+            return RepositionInspectionRoisForImageCoreAsync(imageGray, imagePath, ct);
         }
 
         private void RepositionInspectionRois(RoiPlacementInput input)
@@ -5679,9 +5776,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return null;
         }
 
-        private async Task RepositionInspectionRoisForImageCoreAsync(string imagePath, CancellationToken ct)
+        private async Task RepositionInspectionRoisForImageCoreAsync(Mat imageGray, string imagePath, CancellationToken ct)
         {
-            _batchAnchorsOk = await TryUpdateBatchAnchorsForImageAsync(imagePath, ct).ConfigureAwait(false);
+            _batchAnchorsOk = await TryUpdateBatchAnchorsForImageAsync(imageGray, imagePath, ct).ConfigureAwait(false);
             await EnsureBatchRepositionAsync(imagePath, ct, "row-start").ConfigureAwait(false);
         }
 
@@ -5702,10 +5799,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            await TryUpdateBatchAnchorsForImageAsync(imagePath, ct).ConfigureAwait(false);
+            using var mat = new Mat(imagePath, ImreadModes.Grayscale);
+            if (mat.Empty())
+            {
+                TraceBatch($"[match] SKIP: image '{Path.GetFileName(imagePath)}' could not be loaded");
+                _batchAnchorsOk = false;
+                return;
+            }
+
+            await TryUpdateBatchAnchorsForImageAsync(mat, imagePath, ct).ConfigureAwait(false);
         }
 
-        private async Task<bool> TryUpdateBatchAnchorsForImageAsync(string imagePath, CancellationToken ct)
+        private Task<bool> TryUpdateBatchAnchorsForImageAsync(Mat imageGray, string imagePath, CancellationToken ct)
         {
             _batchAnchorsOk = false;
             _batchAnchorM1Ready = false;
@@ -5726,20 +5831,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (string.IsNullOrWhiteSpace(imagePath))
             {
                 GuiLog.Warn("[batch] match: missing image path");
-                return false;
+                return Task.FromResult(false);
             }
 
             if (_layoutOriginal == null)
             {
                 GuiLog.Warn("[batch] match: no layout loaded; anchors cannot be computed");
-                return false;
+                return Task.FromResult(false);
             }
 
             if (_layoutOriginal.Master1Pattern == null || _layoutOriginal.Master2Pattern == null
                 || _layoutOriginal.Master1Search == null || _layoutOriginal.Master2Search == null)
             {
                 GuiLog.Warn("[batch] match: master ROIs are missing (pattern/search)");
-                return false;
+                return Task.FromResult(false);
             }
 
             var analyze = _layoutOriginal.Analyze ?? new AnalyzeOptions();
@@ -5751,107 +5856,169 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 feature={featureM1} thr={thrM1}"));
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 feature={featureM2} thr={thrM2}"));
 
-            using var mat = new Mat(imagePath, ImreadModes.Grayscale);
-            if (mat.Empty())
+            if (imageGray == null || imageGray.Empty())
             {
                 GuiLog.Warn($"[batch] match: image '{fileName}' could not be loaded for anchors");
-                return false;
+                return Task.FromResult(false);
             }
 
-            var pattern1 = LoadMasterPatternTemplate(_layoutOriginal.Master1PatternImagePath, "M1");
-            var pattern2 = LoadMasterPatternTemplate(_layoutOriginal.Master2PatternImagePath, "M2");
+            var pattern1 = GetOrLoadPatternCached(_layoutOriginal.Master1PatternImagePath, "M1");
+            var pattern2 = GetOrLoadPatternCached(_layoutOriginal.Master2PatternImagePath, "M2");
 
             if (pattern1 == null || pattern2 == null)
             {
-                pattern1?.Dispose();
-                pattern2?.Dispose();
-                GuiLog.Warn("[batch] match: missing reference patterns for M1/M2");
-                return false;
-            }
-
-            using (pattern1)
-            using (pattern2)
-            {
-                var m1Result = LocalMatcher.MatchInSearchROIWithDetails(
-                    mat,
-                    _layoutOriginal.Master1Pattern,
-                    _layoutOriginal.Master1Search,
-                    featureM1,
-                    thrM1,
-                    analyze.RotRange,
-                    analyze.ScaleMin,
-                    analyze.ScaleMax,
-                    pattern1,
-                    _trace);
-
-                var m2Result = LocalMatcher.MatchInSearchROIWithDetails(
-                    mat,
-                    _layoutOriginal.Master2Pattern,
-                    _layoutOriginal.Master2Search,
-                    featureM2,
-                    thrM2,
-                    analyze.RotRange,
-                    analyze.ScaleMin,
-                    analyze.ScaleMax,
-                    pattern2,
-                    _trace);
-
-                _m1Detection = new MasterDetection
+                if ((pattern1 == null && !_warnedMissingM1PatternPath)
+                    || (pattern2 == null && !_warnedMissingM2PatternPath))
                 {
-                    Center = m1Result.Center,
-                    AngleDeg = m1Result.AngleDeg,
-                    Score = m1Result.Score
-                };
-
-                _m2Detection = new MasterDetection
-                {
-                    Center = m2Result.Center,
-                    AngleDeg = m2Result.AngleDeg,
-                    Score = m2Result.Score
-                };
-
-                _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 center={_m1Detection.Center} angle={_m1Detection.AngleDeg:F1} score={_m1Detection.Score}"));
-                _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 center={_m2Detection.Center} angle={_m2Detection.AngleDeg:F1} score={_m2Detection.Score}"));
-
-                if (_m1Detection.Center == null || _m2Detection.Center == null)
-                {
-                    TraceBatch(FormattableString.Invariant(
-                        $"[batch] match: failed M1={_m1Detection.IsOk} M2={_m2Detection.IsOk} scores(M1={_m1Detection.Score:0.00}, M2={_m2Detection.Score:0.00})"));
-                    GuiLog.Warn(FormattableString.Invariant(
-                        $"[batch] match: anchors not found for file='{fileName}' (M1={_m1Detection.IsOk} M2={_m2Detection.IsOk})"));
-                    _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
-                    return false;
+                    GuiLog.Warn("[batch] match: missing reference patterns for M1/M2");
                 }
-
-                TraceBatch(FormattableString.Invariant(
-                    $"[batch] match: M1=({_m1Detection.Center.Value.X:0.0},{_m1Detection.Center.Value.Y:0.0}) score={_m1Detection.Score:0.00}  M2=({_m2Detection.Center.Value.X:0.0},{_m2Detection.Center.Value.Y:0.0}) score={_m2Detection.Score:0.00}"));
-
-                var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
-                var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
-
-                RegisterBatchAnchors(
-                    new Point(m1Base.cx, m1Base.cy),
-                    new Point(m2Base.cx, m2Base.cy),
-                    new Point(_m1Detection.Center.Value.X, _m1Detection.Center.Value.Y),
-                    new Point(_m2Detection.Center.Value.X, _m2Detection.Center.Value.Y),
-                    _m1Detection.Score,
-                    _m2Detection.Score);
-
-                _batchAnchorsOk = AnchorsMeetThreshold();
-                GuiLog.Info(FormattableString.Invariant(
-                    $"[batch] match: M1 score={_m1Detection.Score:0.0} M2 score={_m2Detection.Score:0.0} anchorsOk={_batchAnchorsOk}"));
-                return _batchAnchorsOk;
+                return Task.FromResult(false);
             }
+
+            var m1Result = LocalMatcher.MatchInSearchROIWithDetailsGray(
+                imageGray,
+                _layoutOriginal.Master1Pattern,
+                _layoutOriginal.Master1Search,
+                featureM1,
+                thrM1,
+                analyze.RotRange,
+                analyze.ScaleMin,
+                analyze.ScaleMax,
+                pattern1,
+                _trace);
+
+            var m2Result = LocalMatcher.MatchInSearchROIWithDetailsGray(
+                imageGray,
+                _layoutOriginal.Master2Pattern,
+                _layoutOriginal.Master2Search,
+                featureM2,
+                thrM2,
+                analyze.RotRange,
+                analyze.ScaleMin,
+                analyze.ScaleMax,
+                pattern2,
+                _trace);
+
+            _m1Detection = new MasterDetection
+            {
+                Center = m1Result.Center,
+                AngleDeg = m1Result.AngleDeg,
+                Score = m1Result.Score
+            };
+
+            _m2Detection = new MasterDetection
+            {
+                Center = m2Result.Center,
+                AngleDeg = m2Result.AngleDeg,
+                Score = m2Result.Score
+            };
+
+            _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 center={_m1Detection.Center} angle={_m1Detection.AngleDeg:F1} score={_m1Detection.Score}"));
+            _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 center={_m2Detection.Center} angle={_m2Detection.AngleDeg:F1} score={_m2Detection.Score}"));
+
+            if (_m1Detection.Center == null || _m2Detection.Center == null)
+            {
+                TraceBatch(FormattableString.Invariant(
+                    $"[batch] match: failed M1={_m1Detection.IsOk} M2={_m2Detection.IsOk} scores(M1={_m1Detection.Score:0.00}, M2={_m2Detection.Score:0.00})"));
+                GuiLog.Warn(FormattableString.Invariant(
+                    $"[batch] match: anchors not found for file='{fileName}' (M1={_m1Detection.IsOk} M2={_m2Detection.IsOk})"));
+                _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
+                return Task.FromResult(false);
+            }
+
+            TraceBatch(FormattableString.Invariant(
+                $"[batch] match: M1=({_m1Detection.Center.Value.X:0.0},{_m1Detection.Center.Value.Y:0.0}) score={_m1Detection.Score:0.00}  M2=({_m2Detection.Center.Value.X:0.0},{_m2Detection.Center.Value.Y:0.0}) score={_m2Detection.Score:0.00}"));
+
+            var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
+            var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
+
+            RegisterBatchAnchors(
+                new Point(m1Base.cx, m1Base.cy),
+                new Point(m2Base.cx, m2Base.cy),
+                new Point(_m1Detection.Center.Value.X, _m1Detection.Center.Value.Y),
+                new Point(_m2Detection.Center.Value.X, _m2Detection.Center.Value.Y),
+                _m1Detection.Score,
+                _m2Detection.Score);
+
+            _batchAnchorsOk = AnchorsMeetThreshold();
+            GuiLog.Info(FormattableString.Invariant(
+                $"[batch] match: M1 score={_m1Detection.Score:0.0} M2 score={_m2Detection.Score:0.0} anchorsOk={_batchAnchorsOk}"));
+            return Task.FromResult(_batchAnchorsOk);
         }
 
-        private Mat? LoadMasterPatternTemplate(string? path, string tag)
+        private void InvalidateMasterPatternCache()
         {
+            _cachedM1Pattern?.Dispose();
+            _cachedM2Pattern?.Dispose();
+            _cachedM1Pattern = null;
+            _cachedM2Pattern = null;
+            _cachedM1PatternPath = null;
+            _cachedM2PatternPath = null;
+            _warnedMissingM1PatternPath = false;
+            _warnedMissingM2PatternPath = false;
+        }
+
+        private Mat? GetOrLoadPatternCached(string? path, string tag)
+        {
+            bool isM1 = string.Equals(tag, "M1", StringComparison.OrdinalIgnoreCase);
             if (string.IsNullOrWhiteSpace(path))
             {
-                TraceBatch(FormattableString.Invariant($"[match] Missing {tag} pattern path"));
+                WarnMissingPatternOnce(tag, "missing pattern path");
                 return null;
             }
 
+            var effectivePath = ResolvePatternPath(path, tag);
+            if (!File.Exists(effectivePath))
+            {
+                WarnMissingPatternOnce(tag, $"pattern not found at '{effectivePath}'");
+                return null;
+            }
+
+            var cachedPath = isM1 ? _cachedM1PatternPath : _cachedM2PatternPath;
+            var cachedMat = isM1 ? _cachedM1Pattern : _cachedM2Pattern;
+
+            if (cachedMat != null && !cachedMat.Empty() &&
+                string.Equals(cachedPath, effectivePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return cachedMat;
+            }
+
+            cachedMat?.Dispose();
+
+            try
+            {
+                var mat = Cv2.ImRead(effectivePath, ImreadModes.Grayscale);
+                if (mat.Empty())
+                {
+                    mat.Dispose();
+                    WarnMissingPatternOnce(tag, $"pattern empty at '{effectivePath}'");
+                    return null;
+                }
+
+                if (isM1)
+                {
+                    _cachedM1Pattern = mat;
+                    _cachedM1PatternPath = effectivePath;
+                    _warnedMissingM1PatternPath = false;
+                }
+                else
+                {
+                    _cachedM2Pattern = mat;
+                    _cachedM2PatternPath = effectivePath;
+                    _warnedMissingM2PatternPath = false;
+                }
+
+                return mat;
+            }
+            catch (Exception ex)
+            {
+                WarnMissingPatternOnce(tag, $"failed to load pattern: {ex.Message}");
+                return null;
+            }
+        }
+
+        private string ResolvePatternPath(string path, string tag)
+        {
             var effectivePath = path;
 
             if (!string.IsNullOrWhiteSpace(_currentLayoutName))
@@ -5868,36 +6035,34 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             $"[match] Redirecting {tag} pattern template from 'last' to '{_currentLayoutName}': '{candidate}'"));
                         effectivePath = candidate;
                     }
-                    else
-                    {
-                        TraceBatch(FormattableString.Invariant(
-                            $"[match] Redirect candidate for {tag} missing: '{candidate}'"));
-                    }
                 }
             }
 
-            try
+            return effectivePath;
+        }
+
+        private void WarnMissingPatternOnce(string tag, string message)
+        {
+            bool isM1 = string.Equals(tag, "M1", StringComparison.OrdinalIgnoreCase);
+            if (isM1 && _warnedMissingM1PatternPath)
             {
-                if (!File.Exists(effectivePath))
-                {
-                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} not found at '{effectivePath}'"));
-                    return null;
-                }
-
-                var mat = Cv2.ImRead(effectivePath, ImreadModes.Grayscale);
-                if (mat.Empty())
-                {
-                    mat.Dispose();
-                    TraceBatch(FormattableString.Invariant($"[match] Pattern {tag} empty at '{effectivePath}'"));
-                    return null;
-                }
-
-                return mat;
+                return;
             }
-            catch (Exception ex)
+
+            if (!isM1 && _warnedMissingM2PatternPath)
             {
-                TraceBatch(FormattableString.Invariant($"[match] Failed to load pattern {tag}: {ex.Message}"));
-                return null;
+                return;
+            }
+
+            TraceBatch(FormattableString.Invariant($"[match] {tag} {message}"));
+
+            if (isM1)
+            {
+                _warnedMissingM1PatternPath = true;
+            }
+            else
+            {
+                _warnedMissingM2PatternPath = true;
             }
         }
 
@@ -5924,7 +6089,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 if (_layoutOriginal != null)
                 {
-                    await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
+                    if (_batchAnchorReadyForStep != _batchStepId)
+                    {
+                        await _repositionInspectionRoisAsync(imagePath, ct).ConfigureAwait(false);
+                    }
                     if (!TryBuildPlacementInput(out var placementInput, logError: true))
                     {
                         TraceBatch("[batch-repos] skip: anchors unavailable for reposition");
@@ -6009,45 +6177,64 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             CanStartBatch = canStart;
         }
 
-        private void DoBrowseBatchFolder()
+        private async Task DoBrowseBatchFolderAsync()
         {
+            string? dir = null;
+
             try
             {
-                using var dlg = new Forms.FolderBrowserDialog
+                InvokeOnUi(() =>
                 {
-                    Description = "Select image folder",
-                    UseDescriptionForTitle = true
-                };
-                var result = dlg.ShowDialog();
-                if (result == Forms.DialogResult.OK)
-                {
-                    BatchFolder = dlg.SelectedPath;
-                    LoadBatchListFromFolder(dlg.SelectedPath);
-                }
+                    using var dlg = new Forms.FolderBrowserDialog
+                    {
+                        Description = "Select image folder",
+                        UseDescriptionForTitle = true
+                    };
+                    var result = dlg.ShowDialog();
+                    if (result == Forms.DialogResult.OK)
+                    {
+                        dir = dlg.SelectedPath;
+                    }
+                });
             }
             catch (Exception ex)
             {
                 _log($"[batch] browse failed: {ex.Message}");
+                return;
             }
+
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            {
+                return;
+            }
+
+            BatchFolder = dir;
+            await LoadBatchListFromFolderAsync(dir, CancellationToken.None).ConfigureAwait(false);
         }
 
-        private void LoadBatchListFromFolder(string dir)
+        private async Task LoadBatchListFromFolderAsync(string dir, CancellationToken ct)
         {
-            List<string> files;
+            List<BatchRow> rows;
             try
             {
-                _log($"[batch] dir={dir} exists={Directory.Exists(dir)}");
-                files = Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
-                    .Where(p => BatchImageExtensions.Contains(Path.GetExtension(p)))
-                    .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                _log($"[batch] {files.Count} image files found in '{dir}' (including subfolders)");
-
-                for (int i = 0; i < Math.Min(12, files.Count); i++)
+                rows = await Task.Run(() =>
                 {
-                    _log($"[batch] file[{i}] {files[i]}");
-                }
+                    ct.ThrowIfCancellationRequested();
+                    _log($"[batch] dir={dir} exists={Directory.Exists(dir)}");
+                    var files = Directory.EnumerateFiles(dir, "*.*", SearchOption.AllDirectories)
+                        .Where(p => BatchImageExtensions.Contains(Path.GetExtension(p)))
+                        .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    _log($"[batch] {files.Count} image files found in '{dir}' (including subfolders)");
+
+                    for (int i = 0; i < Math.Min(12, files.Count); i++)
+                    {
+                        _log($"[batch] file[{i}] {files[i]}");
+                    }
+
+                    return files.Select(f => new BatchRow(f)).ToList();
+                }, ct).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -6068,17 +6255,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 _batchRows.Clear();
                 int index = 0;
-                foreach (var file in files)
+                foreach (var row in rows)
                 {
                     index++;
-                    _batchRows.Add(new BatchRow(file) { IndexOneBased = index });
+                    row.IndexOneBased = index;
+                    row.ROI1 = BatchCellStatus.Unknown;
+                    row.ROI2 = BatchCellStatus.Unknown;
+                    row.ROI3 = BatchCellStatus.Unknown;
+                    row.ROI4 = BatchCellStatus.Unknown;
+                    _batchRows.Add(row);
                 }
 
-                BatchSummary = files.Count == 0 ? $"no images in {dir}" : $"{files.Count} images found in {dir}";
+                BatchSummary = rows.Count == 0 ? $"no images in {dir}" : $"{rows.Count} images found in {dir}";
                 BatchStatus = string.Empty;
                 BatchImageSource = null;
                 ClearBatchHeatmap();
                 UpdateCanStart();
+                OnPropertyChanged(nameof(BatchRows));
             });
         }
 
@@ -6436,6 +6629,27 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private void SetBatchBaseImage(byte[] imageBytes, string imagePathForLog)
+        {
+            InvokeOnUi(() =>
+            {
+                try
+                {
+                    var bmp = DecodeImageTo96Dpi(imageBytes);
+                    BatchImageSource = bmp;
+                    LogImg("base:set", BatchImageSource);
+                }
+                catch (Exception ex)
+                {
+                    _log($"[batch] image load failed: {ex.Message} ({Path.GetFileName(imagePathForLog)})");
+                    BatchImageSource = null;
+                }
+
+                ClearBatchHeatmap();
+                ClearBaselines();
+            });
+        }
+
         private void SetBatchBaseImage(string path)
         {
             InvokeOnUi(() =>
@@ -6651,12 +6865,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchHeatmapPngByRoi.Clear();
         }
 
-        private async Task<(byte[] Bytes, string FileName, string ShapeJson)> ExportRoiFromFileAsync(InspectionRoiConfig roiConfig, string fullPath)
+        private Task<(byte[] Bytes, string FileName, string ShapeJson)> ExportRoiFromMatAsync(
+            InspectionRoiConfig roiConfig,
+            Mat src,
+            string imagePath,
+            CancellationToken ct)
         {
             if (roiConfig == null)
             {
                 throw new ArgumentNullException(nameof(roiConfig));
             }
+
+            ct.ThrowIfCancellationRequested();
 
             var roiModel = GetInspectionModelByIndex(roiConfig.Index);
             if (roiModel == null)
@@ -6666,16 +6886,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var roiForExport = GetBatchTransformedRoi(roiModel);
 
-            return await Task.Run(() =>
+            if (!BackendAPI.TryPrepareCanonicalRoi(src, roiForExport, out var payload, out var fileName, _log) || payload == null)
             {
-                if (!BackendAPI.TryPrepareCanonicalRoi(fullPath, roiForExport, out var payload, out var fileName, _log) || payload == null)
-                {
-                    throw new InvalidOperationException($"ROI export failed for '{fullPath}'.");
-                }
+                throw new InvalidOperationException($"ROI export failed for '{imagePath}'.");
+            }
 
-                var shapeJson = payload.ShapeJson ?? string.Empty;
-                return (payload.PngBytes, fileName, shapeJson);
-            }).ConfigureAwait(false);
+            var shapeJson = payload.ShapeJson ?? string.Empty;
+            return Task.FromResult((payload.PngBytes, fileName, shapeJson));
         }
 
         private static void InvokeOnUi(Action action)

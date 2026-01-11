@@ -401,6 +401,89 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         public static bool TryPrepareCanonicalRoi(
+            Mat src,
+            RoiModel roi,
+            out CanonicalRoiPayload? payload,
+            out string fileName,
+            Action<string>? log = null)
+        {
+            payload = null;
+            fileName = $"roi_{DateTime.Now:yyyyMMdd_HHmmssfff}.png";
+
+            try
+            {
+                if (roi == null)
+                {
+                    log?.Invoke("[infer] ROI null");
+                    return false;
+                }
+
+                if (src == null || src.Empty())
+                {
+                    log?.Invoke("[infer] src empty");
+                    return false;
+                }
+
+                if (!RoiCropUtils.TryBuildRoiCropInfo(roi, out var info))
+                {
+                    log?.Invoke("[infer] unsupported ROI shape");
+                    return false;
+                }
+
+                if (!RoiCropUtils.TryGetRotatedCrop(src, info, roi.AngleDeg, out var cropMat, out var cropRect))
+                {
+                    log?.Invoke("[infer] failed to get rotated crop");
+                    return false;
+                }
+
+                Mat? maskMat = null;
+                Mat? encodeMat = null;
+                try
+                {
+                    bool needsMask = roi.Shape == RoiShape.Circle || roi.Shape == RoiShape.Annulus;
+                    if (needsMask)
+                    {
+                        maskMat = RoiCropUtils.BuildRoiMask(info, cropRect);
+                    }
+
+                    encodeMat = RoiCropUtils.ConvertCropToBgra(cropMat, maskMat);
+
+                    if (!Cv2.ImEncode(".png", encodeMat, out var pngBytes) || pngBytes == null || pngBytes.Length == 0)
+                    {
+                        log?.Invoke("[infer] failed to encode PNG");
+                        return false;
+                    }
+
+                    byte[]? maskBytes = null;
+                    if (maskMat != null && Cv2.ImEncode(".png", maskMat, out var maskPng) && maskPng != null && maskPng.Length > 0)
+                    {
+                        maskBytes = maskPng;
+                    }
+
+                    var shapeJson = BuildShapeJson(roi, info, cropRect);
+                    payload = new CanonicalRoiPayload(pngBytes, maskBytes, shapeJson, cropRect.Width, cropRect.Height);
+
+                    log?.Invoke($"[infer] ROI={roi.Shape} rect=({info.Left:0.##},{info.Top:0.##},{info.Width:0.##},{info.Height:0.##}) pivot=({info.PivotX:0.##},{info.PivotY:0.##}) crop=({cropRect.X},{cropRect.Y},{cropRect.Width},{cropRect.Height}) angle={roi.AngleDeg:0.##}");
+                    return true;
+                }
+                finally
+                {
+                    if (encodeMat != null && !ReferenceEquals(encodeMat, cropMat))
+                    {
+                        encodeMat.Dispose();
+                    }
+                    maskMat?.Dispose();
+                    cropMat.Dispose();
+                }
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke("[infer] " + ex.Message);
+                return false;
+            }
+        }
+
+        public static bool TryPrepareCanonicalRoi(
             string imagePathWin,
             RoiModel roi,
             out CanonicalRoiPayload? payload,

@@ -3639,6 +3639,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        // NOTE: NO llamar a ShowSidePanel desde acciones operativas; solo desde handlers de navegación (botones izquierda).
         private void ShowSidePanel(SidePanelMode mode)
         {
             if (LayoutSetupPanel == null || RoiManagementPanel == null || BatchInspectionPanel == null || CommsPanel == null)
@@ -5093,9 +5094,6 @@ namespace BrakeDiscInspector_GUI_ROI
             // Habilitación de tabs por etapas
             EnablePresetsTab(mastersReady || _hasLoadedImage);     // permite la pestaña de inspección tras cargar imagen o completar masters
 
-            // Selección de panel acorde a estado
-            ShowSidePanel(SidePanelMode.RoiManagement);
-
             if (_analysisViewActive && _state != MasterState.Ready)
             {
                 ResetAnalysisMarks();
@@ -5374,8 +5372,6 @@ namespace BrakeDiscInspector_GUI_ROI
             SetInspectionEditingFlag(inspectionIndex, true);
             UpdateEditableConfigState();
             UpdateInspectionEditButtons();
-
-            GoToInspectionTab();
             SetActiveInspectionIndex(inspectionIndex);
 
             RemoveAllRoiAdorners();
@@ -7771,7 +7767,6 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             _analysisViewActive = true;
-            ShowSidePanel(SidePanelMode.RoiManagement);
         }
 
         private string? ResolveRoiLabelText(RoiModel roi)
@@ -9048,13 +9043,11 @@ namespace BrakeDiscInspector_GUI_ROI
         private void OnPresetLoaded()
         {
             TryCollapseMasterEditors();
-            GoToInspectionTab();
         }
 
         private void OnLayoutLoaded()
         {
             TryCollapseMasterEditors();
-            GoToInspectionTab();
         }
 
         private void TryCollapseMasterEditors()
@@ -9064,11 +9057,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 MasterRoiGroup.Visibility = Visibility.Collapsed;
             }
 
-        }
-
-        private void GoToInspectionTab()
-        {
-            ShowSidePanel(SidePanelMode.RoiManagement);
         }
 
         private void RedrawAllRois()

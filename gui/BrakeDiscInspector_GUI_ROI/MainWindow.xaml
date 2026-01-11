@@ -1520,7 +1520,7 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <ScrollViewer x:Name="BatchInspectionPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Collapsed" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
+            <Grid x:Name="BatchInspectionPanel" Grid.Row="1" Visibility="Collapsed" d:Visibility="Collapsed" DataContext="{Binding DataContext, ElementName=WorkflowHost}">
                 <Grid Margin="0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -1641,7 +1641,13 @@
                               HeadersVisibility="Column"
                               IsReadOnly="True"
                               CanUserAddRows="False"
-                              RowHeaderWidth="0">
+                              RowHeaderWidth="0"
+                              EnableRowVirtualization="True"
+                              EnableColumnVirtualization="True"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True"
+                              ScrollViewer.IsDeferredScrollingEnabled="True">
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="File" Width="*">
                                 <DataGridTemplateColumn.CellTemplate>
@@ -1692,7 +1698,7 @@
                                Margin="8"
                                Text="{Binding BatchStatus}"/>
                 </Grid>
-            </ScrollViewer>
+            </Grid>
 
             <ScrollViewer x:Name="CommsPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" d:Visibility="Collapsed">
                 <Grid Margin="8" x:Name="CommsRoot">

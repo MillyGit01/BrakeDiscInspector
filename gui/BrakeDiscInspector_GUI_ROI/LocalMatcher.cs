@@ -275,182 +275,253 @@ namespace BrakeDiscInspector_GUI_ROI
             Action<string>? log = null)
         {
             if (fullImageBgr == null) throw new ArgumentNullException(nameof(fullImageBgr));
+
+            using var fullGray = ToGray(fullImageBgr);
+            return MatchInSearchROIWithDetailsGray(
+                fullGray,
+                patternRoi,
+                searchRoi,
+                feature,
+                threshold,
+                rotRange,
+                scaleMin,
+                scaleMax,
+                patternOverride,
+                log);
+        }
+
+        public static LocalMatchResult MatchInSearchROIWithDetailsGray(
+            Mat fullImageGray,
+            RoiModel patternRoi,
+            RoiModel searchRoi,
+            string feature,
+            int threshold,
+            int rotRange,
+            double scaleMin,
+            double scaleMax,
+            Mat? patternOverride = null,
+            Action<string>? log = null)
+        {
+            if (fullImageGray == null) throw new ArgumentNullException(nameof(fullImageGray));
             if (searchRoi == null) throw new ArgumentNullException(nameof(searchRoi));
 
-            // --- DBG: rects reales ---
-            var searchRect = RectFromRoi(fullImageBgr, searchRoi);
-            var patternRect = patternOverride == null ? RectFromRoi(fullImageBgr, patternRoi) : new Rect(0,0,patternOverride.Width, patternOverride.Height);
-
-            // --- DBG: “misma imagen” => ¿pattern dentro de search? ---
-            bool contained = patternOverride == null &&
-                             patternRect.X >= searchRect.X &&
-                             patternRect.Y >= searchRect.Y &&
-                             patternRect.Right <= searchRect.Right &&
-                             patternRect.Bottom <= searchRect.Bottom;
-
-            Log(log, $"[DBG] searchRect={searchRect.X},{searchRect.Y},{searchRect.Width},{searchRect.Height} patternRect={patternRect.X},{patternRect.Y},{patternRect.Width},{patternRect.Height} contained={contained}");
-
-            using var fullGrayBase = ToGray(fullImageBgr);
-            using var searchGrayBase = new Mat(fullGrayBase, searchRect);
-            if (contained)
-            {
-                var expectedLocalRect = new Rect(patternRect.X - searchRect.X, patternRect.Y - searchRect.Y, patternRect.Width, patternRect.Height);
-                using var expectedPatch = new Mat(searchGrayBase, expectedLocalRect);
-                using var patFromFull = new Mat(fullGrayBase, patternRect);
-
-                using var diff = new Mat();
-                Cv2.Absdiff(patFromFull, expectedPatch, diff);
-                Scalar sum = Cv2.Sum(diff);
-                double mad = (sum.Val0 + sum.Val1 + sum.Val2 + sum.Val3) / (patternRect.Width * patternRect.Height);
-                Log(log, $"[DBG] GT offset=({expectedLocalRect.X},{expectedLocalRect.Y}) MAD={mad:F4}");
-
-                using var resp = new Mat();
-                Cv2.MatchTemplate(searchGrayBase, patFromFull, resp, TemplateMatchModes.CCoeffNormed);
-                Cv2.MinMaxLoc(resp, out _, out double maxVal, out _, out Point maxLoc);
-                Log(log, $"[DBG] TM@0deg scale=1: max={maxVal:F4} loc=({maxLoc.X},{maxLoc.Y}) vs expected=({expectedLocalRect.X},{expectedLocalRect.Y})");
-            }
-
-            if (searchRect.Width < 5 || searchRect.Height < 5)
-            {
-                Log(log, "[INPUT] search ROI demasiado pequeño");
-                return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
-            }
-
-            using var searchRegion = new Mat(fullImageBgr, searchRect);
-            using var searchGray = ToGray(searchRegion);
-
-            Mat? patternRegion = null;
-            Mat? patternGray = null;
+            Mat? fullGrayBase = null;
+            bool disposeFullGray = false;
 
             try
             {
-                if (patternOverride != null)
+                if (fullImageGray.Channels() == 1)
                 {
-                    if (patternOverride.Empty() || patternOverride.Width < 3 || patternOverride.Height < 3)
-                    {
-                        Log(log, "[INPUT] patrón override vacío/pequeño");
-                        return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
-                    }
-                    patternGray = ToGray(patternOverride);
+                    fullGrayBase = fullImageGray;
                 }
                 else
                 {
-                    var pr = patternRect;
-                    if (pr.Width < 3 || pr.Height < 3)
-                    {
-                        Log(log, "[INPUT] patrón demasiado pequeño]");
-                        return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
-                    }
-                    patternRegion = new Mat(fullImageBgr, pr);
-                    patternGray = ToGray(patternRegion);
+                    fullGrayBase = ToGray(fullImageGray);
+                    disposeFullGray = true;
                 }
 
-                if (patternGray == null || patternGray.Empty())
+                if (fullGrayBase.Empty())
                 {
-                    Log(log, "[INPUT] patrón vacío/pequeño");
+                    Log(log, "[INPUT] imagen gris vacía");
                     return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
                 }
 
-                Log(log, $"[INPUT] feature={feature} thr={threshold} search={searchRect.Width}x{searchRect.Height} pattern={patternGray.Width}x{patternGray.Height}");
+                var searchRect = RectFromRoi(fullGrayBase, searchRoi);
+                var patternRect = patternOverride == null
+                    ? RectFromRoi(fullGrayBase, patternRoi)
+                    : new Rect(0, 0, patternOverride.Width, patternOverride.Height);
 
-                var mode = (feature ?? "").Trim().ToLowerInvariant();
-
-                Log(log,
-                    $"[MATCH] mode={mode} thr={threshold} " +
-                    $"searchRect=({searchRect.X},{searchRect.Y},{searchRect.Width},{searchRect.Height}) " +
-                    $"patternRect=({patternRect.X},{patternRect.Y},{patternRect.Width},{patternRect.Height})");
-
-                if (mode == "edges")
+                if (log != null && System.Diagnostics.Debugger.IsAttached)
                 {
-                    using var searchEdges = new Mat();
-                    using var patternEdges = new Mat();
+                    bool contained = patternOverride == null &&
+                                     patternRect.X >= searchRect.X &&
+                                     patternRect.Y >= searchRect.Y &&
+                                     patternRect.Right <= searchRect.Right &&
+                                     patternRect.Bottom <= searchRect.Bottom;
 
-                    Cv2.Canny(searchGray, searchEdges, 50, 150);
-                    Cv2.Canny(patternGray, patternEdges, 50, 150);
+                    Log(log, $"[DBG] searchRect={searchRect.X},{searchRect.Y},{searchRect.Width},{searchRect.Height} patternRect={patternRect.X},{patternRect.Y},{patternRect.Width},{patternRect.Height} contained={contained}");
 
-                    int nzSearch = Cv2.CountNonZero(searchEdges);
-                    int nzPattern = Cv2.CountNonZero(patternEdges);
-
-                    Log(log, $"[EDGES] nz(search,pattern)=({nzSearch},{nzPattern}) thr={threshold}");
-                    Log(log, "[EDGES] using Canny + MatchTemplateRot");
-
-                    var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log);
-
-                    if (tm.center is null || tm.score < threshold)
+                    if (contained)
                     {
-                        Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
-                        return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        var expectedLocalRect = new Rect(patternRect.X - searchRect.X, patternRect.Y - searchRect.Y, patternRect.Width, patternRect.Height);
+                        using var searchGrayBase = new Mat(fullGrayBase, searchRect);
+                        using var expectedPatch = new Mat(searchGrayBase, expectedLocalRect);
+                        using var patFromFull = new Mat(fullGrayBase, patternRect);
+
+                        using var diff = new Mat();
+                        Cv2.Absdiff(patFromFull, expectedPatch, diff);
+                        Scalar sum = Cv2.Sum(diff);
+                        double mad = (sum.Val0 + sum.Val1 + sum.Val2 + sum.Val3) / (patternRect.Width * patternRect.Height);
+                        Log(log, $"[DBG] GT offset=({expectedLocalRect.X},{expectedLocalRect.Y}) MAD={mad:F4}");
+
+                        using var resp = new Mat();
+                        Cv2.MatchTemplate(searchGrayBase, patFromFull, resp, TemplateMatchModes.CCoeffNormed);
+                        Cv2.MinMaxLoc(resp, out _, out double maxVal, out _, out Point maxLoc);
+                        Log(log, $"[DBG] TM@0deg scale=1: max={maxVal:F4} loc=({maxLoc.X},{maxLoc.Y}) vs expected=({expectedLocalRect.X},{expectedLocalRect.Y})");
+                    }
+                }
+
+                if (searchRect.Width < 5 || searchRect.Height < 5)
+                {
+                    Log(log, "[INPUT] search ROI demasiado pequeño");
+                    return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
+                }
+
+                using var searchGray = new Mat(fullGrayBase, searchRect);
+
+                Mat? patternRegion = null;
+                Mat? patternGray = null;
+                bool disposePatternGray = false;
+
+                try
+                {
+                    if (patternOverride != null)
+                    {
+                        if (patternOverride.Empty() || patternOverride.Width < 3 || patternOverride.Height < 3)
+                        {
+                            Log(log, "[INPUT] patrón override vacío/pequeño");
+                            return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
+                        }
+
+                        if (patternOverride.Channels() == 1)
+                        {
+                            patternGray = patternOverride;
+                        }
+                        else
+                        {
+                            patternGray = ToGray(patternOverride);
+                            disposePatternGray = true;
+                        }
+                    }
+                    else
+                    {
+                        var pr = patternRect;
+                        if (pr.Width < 3 || pr.Height < 3)
+                        {
+                            Log(log, "[INPUT] patrón demasiado pequeño]");
+                            return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
+                        }
+                        patternRegion = new Mat(fullGrayBase, pr);
+                        patternGray = patternRegion;
                     }
 
-                    var globalEdges = new Point2d(
-                        searchRect.X + tm.center.Value.X,
-                        searchRect.Y + tm.center.Value.Y);
-
-                    Log(log,
-                        FormattableString.Invariant(
-                            $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
-
-                    return new LocalMatchResult { Center = globalEdges, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
-                }
-
-                if (mode == "tm_rot")
-                {
-                    var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
-
-                    if (tm.center is null || tm.score < threshold)
+                    if (patternGray == null || patternGray.Empty())
                     {
-                        Log(log, $"[TM] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
-                        return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        Log(log, "[INPUT] patrón vacío/pequeño");
+                        return new LocalMatchResult { Center = null, Score = 0, AngleDeg = 0, UsedFeatures = false };
                     }
 
-                    var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
+                    Log(log, $"[INPUT] feature={feature} thr={threshold} search={searchRect.Width}x{searchRect.Height} pattern={patternGray.Width}x{patternGray.Height}");
+
+                    var mode = (feature ?? "").Trim().ToLowerInvariant();
+
                     Log(log,
-                        FormattableString.Invariant(
-                            $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
-                    return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
-                }
+                        $"[MATCH] mode={mode} thr={threshold} " +
+                        $"searchRect=({searchRect.X},{searchRect.Y},{searchRect.Width},{searchRect.Height}) " +
+                        $"patternRect=({patternRect.X},{patternRect.Y},{patternRect.Width},{patternRect.Height})");
 
-                // 1) FEATURES
-                var feat = MatchFeatures(searchGray, patternGray, log);
-
-                // 2) AUTO: fallback a TM si fallan features
-                if (mode == "auto" && (feat.center is null || feat.score < threshold))
-                {
-                    Log(log, $"[AUTO] fallback TM: causeFeat={feat.failure} kpsImg={feat.imgKps} kpsPat={feat.patKps} good={feat.goodCount} inliers={feat.inliers} avgDist={feat.avgDist:F1}");
-                    var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
-
-                    if (tm.center is null || tm.score < threshold)
+                    if (mode == "edges")
                     {
-                        Log(log, $"[RESULT] no-hit scoreFeat={feat.score} scoreTM={tm.score} (<{threshold}) causeFeat={feat.failure} causeTM={tm.failure}");
-                        var maxScore = Math.Max(feat.score, tm.score);
-                        var angleDeg = tm.score >= feat.score ? tm.bestAngleDeg : feat.rotDegApprox;
-                        return new LocalMatchResult { Center = null, Score = maxScore, AngleDeg = angleDeg, UsedFeatures = tm.score < feat.score };
+                        using var searchEdges = new Mat();
+                        using var patternEdges = new Mat();
+
+                        Cv2.Canny(searchGray, searchEdges, 50, 150);
+                        Cv2.Canny(patternGray, patternEdges, 50, 150);
+
+                        int nzSearch = Cv2.CountNonZero(searchEdges);
+                        int nzPattern = Cv2.CountNonZero(patternEdges);
+
+                        Log(log, $"[EDGES] nz(search,pattern)=({nzSearch},{nzPattern}) thr={threshold}");
+                        Log(log, "[EDGES] using Canny + MatchTemplateRot");
+
+                        var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log);
+
+                        if (tm.center is null || tm.score < threshold)
+                        {
+                            Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
+                            return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        }
+
+                        var globalEdges = new Point2d(
+                            searchRect.X + tm.center.Value.X,
+                            searchRect.Y + tm.center.Value.Y);
+
+                        Log(log,
+                            FormattableString.Invariant(
+                                $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
+
+                        return new LocalMatchResult { Center = globalEdges, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
                     }
 
-                    var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
+                    if (mode == "tm_rot")
+                    {
+                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
+
+                        if (tm.center is null || tm.score < threshold)
+                        {
+                            Log(log, $"[TM] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
+                            return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        }
+
+                        var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
+                        Log(log,
+                            FormattableString.Invariant(
+                                $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
+                        return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                    }
+
+                    // 1) FEATURES
+                    var feat = MatchFeatures(searchGray, patternGray, log);
+
+                    // 2) AUTO: fallback a TM si fallan features
+                    if (mode == "auto" && (feat.center is null || feat.score < threshold))
+                    {
+                        Log(log, $"[AUTO] fallback TM: causeFeat={feat.failure} kpsImg={feat.imgKps} kpsPat={feat.patKps} good={feat.goodCount} inliers={feat.inliers} avgDist={feat.avgDist:F1}");
+                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
+
+                        if (tm.center is null || tm.score < threshold)
+                        {
+                            Log(log, $"[RESULT] no-hit scoreFeat={feat.score} scoreTM={tm.score} (<{threshold}) causeFeat={feat.failure} causeTM={tm.failure}");
+                            var maxScore = Math.Max(feat.score, tm.score);
+                            var angleDeg = tm.score >= feat.score ? tm.bestAngleDeg : feat.rotDegApprox;
+                            return new LocalMatchResult { Center = null, Score = maxScore, AngleDeg = angleDeg, UsedFeatures = tm.score < feat.score };
+                        }
+
+                        var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
+                        Log(log,
+                            FormattableString.Invariant(
+                                $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
+                        return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                    }
+
+                    if (feat.center is null || feat.score < threshold)
+                    {
+                        var reason = feat.failure ?? (feat.center is null ? "sin coincidencias" : $"score={feat.score}");
+                        Log(log, $"[RESULT] no-hit score={feat.score} (<{threshold}) cause={reason}");
+                        return new LocalMatchResult { Center = null, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
+                    }
+
+                    var global = new Point2d(searchRect.X + feat.center.Value.X, searchRect.Y + feat.center.Value.Y);
                     Log(log,
                         FormattableString.Invariant(
-                            $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
-                    return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                            $"[RESULT] HIT (FEATURES) center=({global.X:F1},{global.Y:F1}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount, 1)}"));
+                    return new LocalMatchResult { Center = global, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
                 }
-
-                if (feat.center is null || feat.score < threshold)
+                finally
                 {
-                    var reason = feat.failure ?? (feat.center is null ? "sin coincidencias" : $"score={feat.score}");
-                    Log(log, $"[RESULT] no-hit score={feat.score} (<{threshold}) cause={reason}");
-                    return new LocalMatchResult { Center = null, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
+                    if (disposePatternGray)
+                    {
+                        patternGray?.Dispose();
+                    }
+                    patternRegion?.Dispose();
                 }
-
-                var global = new Point2d(searchRect.X + feat.center.Value.X, searchRect.Y + feat.center.Value.Y);
-                Log(log,
-                    FormattableString.Invariant(
-                        $"[RESULT] HIT (FEATURES) center=({global.X:F1},{global.Y:F1}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount, 1)}"));
-                return new LocalMatchResult { Center = global, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
             }
             finally
             {
-                patternGray?.Dispose();
-                patternRegion?.Dispose();
+                if (disposeFullGray)
+                {
+                    fullGrayBase?.Dispose();
+                }
             }
         }
 

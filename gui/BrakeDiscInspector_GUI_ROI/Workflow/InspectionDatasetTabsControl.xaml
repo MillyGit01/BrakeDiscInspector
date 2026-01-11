@@ -4,9 +4,11 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:m="clr-namespace:BrakeDiscInspector_GUI_ROI.Models"
+             xmlns:dt="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow.DesignTime"
              xmlns:w="clr-namespace:BrakeDiscInspector_GUI_ROI.Workflow"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=dt:DesignWorkflowViewModel, IsDesignTimeCreatable=True}"
              d:DesignHeight="300"
              d:DesignWidth="480">
     <UserControl.Resources>

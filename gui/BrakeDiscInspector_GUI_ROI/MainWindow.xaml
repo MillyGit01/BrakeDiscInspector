@@ -767,7 +767,8 @@
                           d:Visibility="Visible">
                 <StackPanel Margin="8" Orientation="Vertical">
                     <StackPanel x:Name="RoiManagementSelector"
-                                Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Selector}">
+                                Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Selector}"
+                                d:Visibility="Collapsed">
                         <TextBlock Text="Selecciona 'Master ROIs' o 'Inspection ROIs' desde el menú de la izquierda."
                                    TextWrapping="Wrap"
                                    Opacity="0.7"
@@ -775,7 +776,8 @@
                     </StackPanel>
 
                     <StackPanel x:Name="MasterRoisPanel"
-                                Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Master}">
+                                Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Master}"
+                                d:Visibility="Collapsed">
                         <StackPanel x:Name="MasterDefaultPanel" Visibility="Visible">
                             <GroupBox x:Name="MasterRoiGroup"
                                       Header="Master ROI"
@@ -1029,7 +1031,8 @@
                     </StackPanel>
 
                     <StackPanel x:Name="InspectionRoisPanel"
-                                Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Inspection}">
+                                Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Inspection}"
+                                d:Visibility="Visible">
                         <StackPanel x:Name="InspectionDefaultPanel">
                             <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
                                 <StackPanel Margin="8,4,0,0">

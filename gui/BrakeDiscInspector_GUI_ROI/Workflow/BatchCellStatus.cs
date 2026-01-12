@@ -4,6 +4,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
     {
         Unknown = 0,
         Ok = 1,
-        Nok = 2
+        Nok = 2,
+        AnchorFail = 3,
+        Skipped = 4
     }
 }

@@ -11,6 +11,12 @@ import numpy as np
 
 from .utils import ensure_dir, load_json, save_json
 
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
+
+
+def _is_image_file(p: Path) -> bool:
+    return p.is_file() and p.suffix.lower() in IMAGE_EXTS
+
 _RECIPE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 class ModelStore:
@@ -411,6 +417,73 @@ class ModelStore:
         path.write_bytes(data)
         return path
 
+    def save_dataset_meta(
+        self,
+        role_id: str,
+        roi_id: str,
+        label: str,
+        image_filename: str,
+        meta: dict,
+        *,
+        recipe_id: str | None = None,
+    ) -> Path:
+        base = self._ds_dir(role_id, roi_id, label, recipe_id=recipe_id, create=True)
+        fn = Path(image_filename).name
+        meta_path = (base / fn).with_suffix(".json")
+        save_json(meta_path, meta)
+        return meta_path
+
+    def resolve_dataset_file_existing(
+        self,
+        role_id: str,
+        roi_id: str,
+        label: str,
+        filename: str,
+        *,
+        recipe_id: str | None = None,
+    ) -> Path | None:
+        base = self.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)
+        if base is None:
+            return None
+        lbl = self._sanitize_label(label)
+        fn = Path(filename).name
+        p = base / lbl / fn
+        if p.exists() and p.is_file():
+            return p
+        return None
+
+    def resolve_dataset_meta_existing(
+        self,
+        role_id: str,
+        roi_id: str,
+        label: str,
+        filename: str,
+        *,
+        recipe_id: str | None = None,
+    ) -> Path | None:
+        img = self.resolve_dataset_file_existing(role_id, roi_id, label, filename, recipe_id=recipe_id)
+        if img is None:
+            return None
+        mp = img.with_suffix(".json")
+        if mp.exists() and mp.is_file():
+            return mp
+        return None
+
+    def load_dataset_meta(
+        self,
+        role_id: str,
+        roi_id: str,
+        label: str,
+        filename: str,
+        *,
+        recipe_id: str | None = None,
+        default: dict | None = None,
+    ) -> dict | None:
+        mp = self.resolve_dataset_meta_existing(role_id, roi_id, label, filename, recipe_id=recipe_id)
+        if mp is None:
+            return default
+        return load_json(mp, default=default)
+
     def list_dataset(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None) -> Dict[str, Any]:
         base = self.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)
         out: Dict[str, Any] = {"role_id": role_id, "roi_id": roi_id, "classes": {}}
@@ -419,8 +492,9 @@ class ModelStore:
         for cls in ["ok", "ng"]:
             d = base / cls
             if d.exists():
-                files = sorted([f.name for f in d.iterdir() if f.is_file()])
-                out["classes"][cls] = {"count": len(files), "files": files}
+                imgs = sorted([f.name for f in d.iterdir() if _is_image_file(f)])
+                meta_map = {fn: (d / Path(fn).with_suffix(".json").name).exists() for fn in imgs}
+                out["classes"][cls] = {"count": len(imgs), "files": imgs, "meta": meta_map}
         return out
 
     def delete_dataset_file(self, role_id: str, roi_id: str, label: str, filename: str, *, recipe_id: Optional[str] = None) -> bool:
@@ -430,10 +504,14 @@ class ModelStore:
         lbl = self._sanitize_label(label)
         fn = Path(filename).name
         p = base / lbl / fn
+        deleted = False
         if p.exists() and p.is_file():
             p.unlink()
-            return True
-        return False
+            deleted = True
+        mp = p.with_suffix(".json")
+        if mp.exists() and mp.is_file():
+            mp.unlink()
+        return deleted
 
     def clear_dataset_class(self, role_id: str, roi_id: str, label: str, *, recipe_id: Optional[str] = None) -> int:
         base = self.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)

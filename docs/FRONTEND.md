@@ -27,13 +27,13 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
 - **Alignment:** `InspectionAlignmentHelper.MoveInspectionTo` applies translation/rotation/scale from the saved Master anchors (`Master1Pattern`/`Master2Pattern`) to the currently detected anchors before batch inspection. Every inspection slot stores its preferred anchor in `InspectionRoiConfig.AnchorMaster`, and the transform derives scale and rotation from the vector between the detected master centers. If anchors are missing the ROI keeps its saved position; inner/outer radii stay clamped when annulus shapes are scaled.
 - **Canvas reset:** The **Clear canvas** button now clears adorners/overlays, removes persisted inspection ROIs from the canvas, empties cached inspection baselines and disables every inspection slot inside the current `MasterLayout` before reinitialising the wizard in `MainWindow`. Use it to avoid mixing new masters with stale inspection geometry.
 
-## Dataset layout
-- Root per layout: `RecipePathHelper` creates `<AppContext.BaseDirectory>/Recipes/<LayoutName or DefaultLayout>/` with `Dataset/`, `Model/` and `Master/` subfolders. `WorkflowViewModel.SetLayoutName` propagates the layout name to `DatasetManager` so every command reads/writes inside that recipe tree.
-- For every inspection slot (1–4) the GUI creates `Dataset/Inspection_<n>/{ok,ng}` for the on-disk dataset plus a `Dataset/Inspection_<n>/Model/` directory for backend artefacts. Samples shown in the UI come from the recipe dataset folder; `inspection-1..4` ROI ids map to `Inspection_1..4` on disk, while non-inspection ROIs use their `roi_id` as the folder name.
-- `DatasetManager.SaveSampleAsync` writes:
-  - PNG file: `SAMPLE_<roleId>_<roiId>_<UTC timestamp>.png` under `Dataset/Inspection_<n>/ok` or `Dataset/<roi_id>/ok` (folder created on demand; same for `ng`).
-  - Metadata JSON (same basename) containing `{role_id, roi_id, mm_per_px, shape_json, source_path, angle, timestamp}`.
-- Dataset validation performed by `RefreshDatasetCommand` walks the current recipe tree; CSV imports remain available but the canonical layout is the recipe folder. Older `<data root>/rois/Inspection_<n>` locations are only kept for backward compatibility paths already present in the layout files.
+## Dataset workflow (backend source of truth)
+- The dataset is stored in the backend under `BDI_MODELS_DIR/recipes/<recipe_id>/datasets/...` with image + JSON sidecar metadata per sample.
+- The GUI **does not** write dataset images to the recipe folder. Instead:
+  - When the operator adds OK/NG samples, the GUI posts the ROI PNG + metadata JSON to `/datasets/{ok|ng}/upload`.
+  - The dataset tab refreshes counts via `/datasets/list`.
+  - Thumbnails are cached locally under `%LOCALAPPDATA%\BrakeDiscInspector\cache\datasets\<recipe>\<role>_<roi>\<ok|ng>\` (cache only, not source of truth).
+- CSV import/legacy dataset browsing is intentionally disabled; the backend dataset is authoritative.
 
 ## Manual vs batch inspection
 ### Manual
@@ -50,16 +50,16 @@ The GUI is implemented in `gui/BrakeDiscInspector_GUI_ROI`. This guide describes
 4. Batch commands support pause/stop; they use `_pauseGate` plus a cancellation token to stop the loop gracefully.
 
 ## Backend contract from the GUI
-The GUI only calls the four routes implemented in `backend/app.py`. Every request includes:
+The GUI calls `/datasets/*` for dataset management, `/fit_ok` (with `use_dataset=true`) for training, `/calibrate_dataset` for calibration, and `/infer` for single-image inference. Every request includes:
 - `role_id`: derived from the ROI role (`Master1`, `Master2`, `Inspection`) or the inspection slot (e.g. `inspection-1`).
 - `roi_id`: inspection slot key (default `inspection-<n>`).
 - `mm_per_px`: resolved from `Preset` or the override UI field.
 - `shape`: JSON string describing the ROI in canonical coordinates (rectangles use `{kind:"rect", x, y, w, h}`, circles `{kind:"circle", cx, cy, r}`, annulus `{kind:"annulus", cx, cy, r, r_inner}`).
-`BackendClient` serialises these fields into multipart (`/fit_ok`, `/infer`) or JSON (`/calibrate_ng`) using `HttpClient`. Batch mode builds a separate payload per enabled inspection ROI, honouring each slot’s anchor-based transform, and always sends the mask so backend heatmaps/regions align with the GUI overlay.
+`BackendClient` serialises these fields into multipart (`/fit_ok`, `/infer`) or JSON (`/calibrate_dataset`) using `HttpClient`. Batch mode builds a separate payload per enabled inspection ROI, honouring each slot’s anchor-based transform, and always sends the mask so backend heatmaps/regions align with the GUI overlay.
 
 ## Error handling
 - All HTTP calls run on background threads (`AsyncCommand`, `await`). Failure paths call `ShowMessageAsync` and clear heatmap/region state via `ResetAfterFailureAsync`.
-- Dataset errors mark `InspectionRoiConfig.DatasetStatus` with human-readable messages such as `Folder must contain /ok and /ko subfolders` or `CSV needs both OK and KO samples`.
+- Dataset errors mark `InspectionRoiConfig.DatasetStatus` with human-readable messages such as `Dataset missing OK samples` or `Dataset error: ...`.
 - Heatmap rendering issues are logged to `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log`; the UI falls back to hiding the overlay when a PNG fails to decode.
 
 ## Useful files

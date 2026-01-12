@@ -452,7 +452,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             AddOkFromCurrentRoiCommand = CreateCommand(_ => AddSampleAsync(isNg: false));
             AddNgFromCurrentRoiCommand = CreateCommand(_ => AddSampleAsync(isNg: true));
             RemoveSelectedCommand = CreateCommand(_ => RemoveSelectedAsync(), _ => !IsBusy && (SelectedOkSample != null || SelectedNgSample != null));
-            OpenDatasetFolderCommand = CreateCommand(_ => OpenDatasetFolderAsync(), _ => !IsBusy && SelectedInspectionRoi?.HasDatasetPath == true);
+            OpenDatasetFolderCommand = CreateCommand(_ => OpenDatasetFolderAsync(), _ => !IsBusy);
             TrainFitCommand = CreateCommand(_ => TrainAsync(), _ => !IsBusy && OkSamples.Count > 0);
             CalibrateCommand = CreateCommand(_ => CalibrateAsync(), _ => !IsBusy && OkSamples.Count > 0);
             InferFromCurrentRoiCommand = CreateCommand(_ => InferCurrentAsync(), _ => !IsBusy);
@@ -612,87 +612,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             // Si es "last", no mandamos header (backend resolverá 'default').
             _client.RecipeId = isReservedLast ? null : _currentLayoutName;
 
-            // Evitar crear carpetas Recipes/last por error.
-            _datasetManager.SetLayoutName(isReservedLast ? "DefaultLayout" : _currentLayoutName);
             InvalidateMasterPatternCache();
         }
 
         public void AlignDatasetPathsWithCurrentLayout()
         {
-            if (InspectionRois == null || InspectionRois.Count == 0)
-            {
-                return;
-            }
-
-            var layoutName = string.IsNullOrWhiteSpace(_currentLayoutName)
-                ? "DefaultLayout"
-                : _currentLayoutName;
-
-            if (string.Equals(layoutName, "last", StringComparison.OrdinalIgnoreCase))
-            {
-                layoutName = "DefaultLayout";
-            }
-
-            string recipesRoot;
-            string datasetRoot;
-
-            try
-            {
-                recipesRoot = RecipePathHelper.RecipesRoot;
-                datasetRoot = RecipePathHelper.GetDatasetFolder(layoutName);
-            }
-            catch (Exception ex)
-            {
-                _log($"[dataset] align: failed to resolve recipe paths for layout '{layoutName}': {ex.Message}");
-                return;
-            }
-
-            foreach (var roi in InspectionRois)
-            {
-                if (roi == null || string.IsNullOrWhiteSpace(roi.Id))
-                {
-                    continue;
-                }
-
-                var current = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
-                var roiFolder = MapRoiIdToFolder(roi.ModelKey);
-                var newPath = Path.Combine(datasetRoot, roiFolder);
-
-                if (string.Equals(current, newPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var shouldOverride =
-                    string.IsNullOrWhiteSpace(current) ||
-                    (!string.IsNullOrWhiteSpace(current) &&
-                     current.StartsWith(recipesRoot, StringComparison.OrdinalIgnoreCase));
-
-                if (!shouldOverride)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(current) &&
-                    current.StartsWith(recipesRoot, StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        if (Directory.Exists(current) &&
-                            !Directory.EnumerateFileSystemEntries(current).Any())
-                        {
-                            Directory.Delete(current);
-                        }
-                    }
-                    catch (Exception cleanupEx)
-                    {
-                        _log($"[dataset] align: cleanup of '{current}' failed: {cleanupEx.Message}");
-                    }
-                }
-
-                roi.DatasetPath = newPath;
-                _log($"[dataset:align] layout='{layoutName}' roi='{roi.DisplayName}' path='{roi.DatasetPath}'");
-            }
+            _log("[dataset] align skipped: dataset source of truth is backend");
         }
 
         public ObservableCollection<DatasetSample> OkSamples { get; }
@@ -1431,24 +1356,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     roi.PropertyChanged += InspectionRoiPropertyChanged;
                     if (string.IsNullOrWhiteSpace(roi.DatasetStatus))
                     {
-                        roi.DatasetStatus = roi.HasDatasetPath ? "Validating dataset..." : "Select a dataset";
+                        roi.DatasetStatus = "Syncing dataset...";
                     }
-                    if (roi.HasDatasetPath)
+                    roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
+                    roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
+                    if (_initialized && !_isInitializing)
                     {
-                        roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                        roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
-                        if (_initialized && !_isInitializing)
-                        {
-                            _ = RefreshRoiDatasetStateAsync(roi);
-                        }
-                    }
-                    else
-                    {
-                        roi.DatasetReady = false;
-                        roi.DatasetOkCount = 0;
-                        roi.DatasetKoCount = 0;
-                        roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                        roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
+                        _ = RefreshRoiDatasetStateAsync(roi);
                     }
                 }
                 if (_inspectionRois.Count > 0)
@@ -1507,14 +1421,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         continue;
                     }
 
-                    var initPath = string.IsNullOrWhiteSpace(roi.DatasetPath) ? "<none>" : roi.DatasetPath;
-                    GuiLog.Info($"[dataset:init] ROI='{roi.DisplayName}' path='{initPath}'");
-
-                    if (!roi.HasDatasetPath)
-                    {
-                        continue;
-                    }
-
+                    GuiLog.Info($"[dataset:init] ROI='{roi.DisplayName}' backend refresh");
                     await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
                 }
 
@@ -2496,24 +2403,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (e.PropertyName == nameof(InspectionRoiConfig.DatasetPath) && sender is InspectionRoiConfig roiChanged)
             {
                 _roiDatasetCache.Remove(roiChanged);
-                if (!roiChanged.HasDatasetPath)
-                {
-                    roiChanged.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                    roiChanged.NgPreview = new ObservableCollection<DatasetPreviewItem>();
-                    roiChanged.DatasetReady = false;
-                    roiChanged.DatasetOkCount = 0;
-                    roiChanged.DatasetKoCount = 0;
-                    roiChanged.DatasetStatus = "Select a dataset";
-                    _ = RefreshDatasetPreviewsForRoiAsync(roiChanged);
-                }
-                else
-                {
-                    roiChanged.DatasetStatus = "Validating dataset...";
-                    roiChanged.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                    roiChanged.NgPreview = new ObservableCollection<DatasetPreviewItem>();
-                    _ = RefreshDatasetPreviewsForRoiAsync(roiChanged);
-                    _ = RefreshRoiDatasetStateAsync(roiChanged);
-                }
+                roiChanged.DatasetStatus = "Syncing dataset...";
+                roiChanged.OkPreview = new ObservableCollection<DatasetPreviewItem>();
+                roiChanged.NgPreview = new ObservableCollection<DatasetPreviewItem>();
+                _ = RefreshDatasetPreviewsForRoiAsync(roiChanged);
+                _ = RefreshRoiDatasetStateAsync(roiChanged);
 
                 CalibrateSelectedRoiCommand.RaiseCanExecuteChanged();
                 OpenDatasetFolderCommand.RaiseCanExecuteChanged();
@@ -2805,7 +2699,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return false;
             }
 
-            if (!roi.HasDatasetPath || roi.IsDatasetLoading)
+            if (roi.IsDatasetLoading)
             {
                 return false;
             }
@@ -2988,23 +2882,110 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            var source = _getSourceImagePath() ?? string.Empty;
-            var sample = await _datasetManager.SaveSampleAsync(RoleId, RoiId, isNg, export.PngBytes, export.ShapeJson, MmPerPx, source, export.RoiImage.AngleDeg).ConfigureAwait(false);
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            var fileName = $"sample_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.png";
+            var label = isNg ? "ng" : "ok";
+            var meta = new SampleMetadata
             {
-                if (isNg)
-                {
-                    NgSamples.Add(sample);
-                }
-                else
-                {
-                    OkSamples.Add(sample);
-                }
-            });
+                role_id = RoleId,
+                roi_id = RoiId,
+                label = label,
+                filename = fileName,
+                mm_per_px = MmPerPx,
+                shape_json = export.ShapeJson,
+                created_at_utc = DateTime.UtcNow.ToString("o"),
+                source_path = _getSourceImagePath()
+            };
 
-            _log($"[dataset] saved {(isNg ? "NG" : "OK")} sample -> {sample.ImagePath}");
-            TrainFitCommand.RaiseCanExecuteChanged();
-            CalibrateCommand.RaiseCanExecuteChanged();
+            await _client.UploadDatasetSampleAsync(RoleId, RoiId, isNg, export.PngBytes, fileName, meta).ConfigureAwait(false);
+
+            _log($"[dataset] uploaded {(isNg ? "NG" : "OK")} sample -> {fileName}");
+            await RefreshDatasetAsync().ConfigureAwait(false);
+        }
+
+        private static string SanitizePathComponent(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "default";
+            }
+
+            foreach (var c in Path.GetInvalidFileNameChars())
+            {
+                value = value.Replace(c, '_');
+            }
+
+            return string.IsNullOrWhiteSpace(value) ? "default" : value.Trim();
+        }
+
+        private string ResolveDatasetCachePath(string roleId, string roiId, string label, string filename)
+        {
+            var recipe = string.IsNullOrWhiteSpace(_client.RecipeId) ? "default" : _client.RecipeId!.Trim();
+            var root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BrakeDiscInspector",
+                "cache",
+                "datasets",
+                SanitizePathComponent(recipe));
+            var dir = Path.Combine(root, $"{SanitizePathComponent(roleId)}_{SanitizePathComponent(roiId)}", label);
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, Path.GetFileName(filename));
+        }
+
+        private async Task<DatasetSample?> CacheDatasetSampleAsync(
+            string roleId,
+            string roiId,
+            bool isNg,
+            string filename,
+            bool hasMeta,
+            CancellationToken ct)
+        {
+            try
+            {
+                var label = isNg ? "ng" : "ok";
+                var cachePath = ResolveDatasetCachePath(roleId, roiId, label, filename);
+                if (!File.Exists(cachePath))
+                {
+                    var bytes = await _client.DownloadDatasetFileAsync(roleId, roiId, isNg, filename, ct).ConfigureAwait(false);
+                    await File.WriteAllBytesAsync(cachePath, bytes, ct).ConfigureAwait(false);
+                }
+
+                var metaPath = Path.ChangeExtension(cachePath, ".json");
+                SampleMetadata meta = new SampleMetadata
+                {
+                    role_id = roleId,
+                    roi_id = roiId,
+                    label = label,
+                    filename = filename,
+                    mm_per_px = MmPerPx,
+                    created_at_utc = DateTime.UtcNow.ToString("o")
+                };
+
+                if (hasMeta)
+                {
+                    try
+                    {
+                        meta = await _client.GetDatasetMetaAsync(roleId, roiId, isNg, filename, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log($"[dataset] meta download failed for '{filename}': {ex.Message}");
+                    }
+                }
+
+                var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                {
+                    WriteIndented = true
+                };
+                var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(meta, options);
+                await File.WriteAllBytesAsync(metaPath, jsonBytes, ct).ConfigureAwait(false);
+
+                return new DatasetSample(cachePath, metaPath, isNg, meta);
+            }
+            catch (Exception ex)
+            {
+                _log($"[dataset] cache failed for '{filename}': {ex.Message}");
+                return null;
+            }
         }
 
 
@@ -3017,14 +2998,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             _activateInspectionIndex?.Invoke(roi.Index);
-
-            if (string.IsNullOrWhiteSpace(roi.DatasetPath))
-            {
-                await ShowMessageAsync($"Dataset path not set for '{roi.DisplayName}'.", "Dataset");
-                return;
-            }
-
-            GuiLog.Info($"AddToDataset (config) roi='{roi.DisplayName}' label={(isOk ? "OK" : "NG")} dataset='{roi.DatasetPath}' source='{_getSourceImagePath()}'");
+            GuiLog.Info($"AddToDataset (config) roi='{roi.DisplayName}' label={(isOk ? "OK" : "NG")} source='{_getSourceImagePath()}'");
 
             var export = await _exportRoiAsync().ConfigureAwait(false);
             if (export == null)
@@ -3034,35 +3008,35 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            var cropped = ExtractRoiBitmapWithShapeMask(export);
-            if (cropped == null)
-            {
-                await ShowMessageAsync($"Could not crop ROI '{roi.DisplayName}'.", "Dataset");
-                GuiLog.Warn($"AddToDataset aborted: crop failed for roi='{roi.DisplayName}'");
-                return;
-            }
-
-            string labelDir = isOk ? "ok" : DetermineNegLabelDir(roi.DatasetPath!);
-            string saveDir = Path.Combine(roi.DatasetPath!, labelDir);
-            Directory.CreateDirectory(saveDir);
-            string fileName = $"{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}.png";
-            string fullPath = Path.Combine(saveDir, fileName);
-
             try
             {
-                SavePng(fullPath, cropped);
-                GuiLog.Info($"AddToDataset saved roi='{roi.DisplayName}' -> '{fullPath}'");
+                var fileName = $"sample_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.png";
+                var label = isOk ? "ok" : "ng";
+                var meta = new SampleMetadata
+                {
+                    role_id = RoleId,
+                    roi_id = roi.ModelKey,
+                    label = label,
+                    filename = fileName,
+                    mm_per_px = MmPerPx,
+                    shape_json = export.ShapeJson,
+                    created_at_utc = DateTime.UtcNow.ToString("o"),
+                    source_path = _getSourceImagePath()
+                };
+
+                await _client.UploadDatasetSampleAsync(RoleId, roi.ModelKey, !isOk, export.PngBytes, fileName, meta).ConfigureAwait(false);
+                GuiLog.Info($"AddToDataset uploaded roi='{roi.DisplayName}' -> '{fileName}'");
 
                 await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
                 await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
 
-                await ShowDatasetSavedAsync(roi.DisplayName, fullPath, isOk).ConfigureAwait(false);
+                await ShowDatasetSavedAsync(roi.DisplayName, fileName, isOk).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                GuiLog.Error($"AddToDataset save failed roi='{roi.DisplayName}' dest='{fullPath}'", ex);
+                GuiLog.Error($"AddToDataset upload failed roi='{roi.DisplayName}'", ex);
                 await ShowMessageAsync(
-                    $"Could not save dataset image. Revisa la carpeta y los permisos. (Ver logs)",
+                    $"Could not upload dataset image. Revisa la conexión y los logs.",
                     "Dataset",
                     MessageBoxImage.Error);
             }
@@ -3100,18 +3074,31 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                var sample = await _datasetManager.SaveSampleAsync(role, roiId, isNg: !positive, export.PngBytes, export.ShapeJson, MmPerPx,
-                    _getSourceImagePath() ?? string.Empty, export.RoiImage.AngleDeg).ConfigureAwait(false);
+                var fileName = $"sample_{DateTime.UtcNow:yyyyMMdd_HHmmssfff}.png";
+                var label = positive ? "ok" : "ng";
+                var meta = new SampleMetadata
+                {
+                    role_id = role,
+                    roi_id = roiId,
+                    label = label,
+                    filename = fileName,
+                    mm_per_px = MmPerPx,
+                    shape_json = export.ShapeJson,
+                    created_at_utc = DateTime.UtcNow.ToString("o"),
+                    source_path = _getSourceImagePath()
+                };
+
+                await _client.UploadDatasetSampleAsync(role, roiId, !positive, export.PngBytes, fileName, meta).ConfigureAwait(false);
 
                 await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
-                GuiLog.Info($"AddToDataset (direct) saved {(positive ? "OK" : "NG")} -> '{sample.ImagePath}'");
-                await ShowDatasetSavedAsync(roi.Label ?? roi.Role.ToString(), sample.ImagePath, positive).ConfigureAwait(false);
+                GuiLog.Info($"AddToDataset (direct) uploaded {(positive ? "OK" : "NG")} -> '{fileName}'");
+                await ShowDatasetSavedAsync(roi.Label ?? roi.Role.ToString(), fileName, positive).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 GuiLog.Error($"AddToDataset legacy failed roi='{roi.Label ?? roi.Id}'", ex);
                 await ShowMessageAsync(
-                    "No se pudo guardar el ROI en el dataset. Revisa los logs para más detalles.",
+                    "No se pudo subir el ROI al dataset. Revisa los logs para más detalles.",
                     "Dataset",
                     MessageBoxImage.Error);
             }
@@ -3242,8 +3229,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             foreach (var sample in toRemove)
             {
+                try
+                {
+                    await _client.DeleteDatasetFileAsync(RoleId, RoiId, sample.IsNg, sample.Metadata.filename).ConfigureAwait(false);
+                    _log($"[dataset] removed sample {sample.Metadata.filename}");
+                }
+                catch (Exception ex)
+                {
+                    _log($"[dataset] failed to delete remote sample {sample.Metadata.filename}: {ex.Message}");
+                }
                 _datasetManager.DeleteSample(sample);
-                _log($"[dataset] removed sample {sample.ImagePath}");
             }
 
             await RefreshDatasetAsync().ConfigureAwait(false);
@@ -3251,20 +3246,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task OpenDatasetFolderAsync()
         {
-            var roi = SelectedInspectionRoi;
-            if (roi == null)
-            {
-                await ShowMessageAsync("Select an Inspection ROI first.", "Dataset");
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(roi.DatasetPath))
-            {
-                await ShowMessageAsync($"Dataset path not set for '{roi.DisplayName}'.", "Dataset");
-                return;
-            }
-
-            var datasetPath = roi.DatasetPath!;
+            var datasetPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "BrakeDiscInspector",
+                "cache",
+                "datasets");
 
             try
             {
@@ -3297,19 +3283,50 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             EnsureRoleRoi();
             _log("[dataset] refreshing lists");
-            var ok = await _datasetManager.LoadSamplesAsync(RoleId, RoiId, isNg: false).ConfigureAwait(false);
-            var ng = await _datasetManager.LoadSamplesAsync(RoleId, RoiId, isNg: true).ConfigureAwait(false);
-
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            try
             {
-                OkSamples.Clear();
-                foreach (var sample in ok)
-                    OkSamples.Add(sample);
+                var list = await _client.GetDatasetListAsync(RoleId, RoiId).ConfigureAwait(false);
+                var okSamples = new List<DatasetSample>();
+                foreach (var file in list.ok.files)
+                {
+                    var sample = await CacheDatasetSampleAsync(RoleId, RoiId, isNg: false, file, list.ok.meta.ContainsKey(file) && list.ok.meta[file], CancellationToken.None)
+                        .ConfigureAwait(false);
+                    if (sample != null)
+                    {
+                        okSamples.Add(sample);
+                    }
+                }
 
-                NgSamples.Clear();
-                foreach (var sample in ng)
-                    NgSamples.Add(sample);
-            });
+                var ngSamples = new List<DatasetSample>();
+                foreach (var file in list.ng.files)
+                {
+                    var sample = await CacheDatasetSampleAsync(RoleId, RoiId, isNg: true, file, list.ng.meta.ContainsKey(file) && list.ng.meta[file], CancellationToken.None)
+                        .ConfigureAwait(false);
+                    if (sample != null)
+                    {
+                        ngSamples.Add(sample);
+                    }
+                }
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    OkSamples.Clear();
+                    foreach (var sample in okSamples)
+                    {
+                        OkSamples.Add(sample);
+                    }
+
+                    NgSamples.Clear();
+                    foreach (var sample in ngSamples)
+                    {
+                        NgSamples.Add(sample);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _log($"[dataset] refresh failed: {ex.Message}");
+            }
 
             TrainFitCommand.RaiseCanExecuteChanged();
             CalibrateCommand.RaiseCanExecuteChanged();
@@ -3318,19 +3335,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private async Task TrainAsync()
         {
             EnsureRoleRoi();
-            var images = OkSamples.Select(s => s.ImagePath).ToList();
-            if (images.Count == 0)
-            {
-                FitSummary = "No OK samples";
-                return;
-            }
-
-            _log($"[fit] sending {images.Count} samples to fit_ok");
+            _log("[fit] training from backend dataset");
             _showBusyDialog?.Invoke("Training...");
             _updateBusyProgress?.Invoke(null);
             try
             {
-                var result = await _client.FitOkAsync(RoleId, RoiId, MmPerPx, images).ConfigureAwait(false);
+                var result = await _client.FitOkFromDatasetAsync(RoleId, RoiId, MmPerPx).ConfigureAwait(false);
                 FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]";
                 _log("[fit] completed " + FitSummary);
             }
@@ -3356,53 +3366,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private async Task CalibrateAsync()
         {
             EnsureRoleRoi();
-            var ok = OkSamples.ToList();
-            if (ok.Count == 0)
-            {
-                CalibrationSummary = "Need OK samples";
-                return;
-            }
-
-            var okScores = new List<double>();
-            var ngScores = new List<double>();
-
-            var totalCalibSamples = ok.Count + NgSamples.Count;
             _showBusyDialog?.Invoke("Calibrating...");
             _updateBusyProgress?.Invoke(null);
 
             try
             {
-                _log($"[calibrate] evaluating {ok.Count} OK samples");
-                for (var i = 0; i < ok.Count; i++)
-                {
-                    var sample = ok[i];
-                    var infer = await _client.InferAsync(RoleId, RoiId, MmPerPx, sample.ImagePath, sample.Metadata.shape_json).ConfigureAwait(false);
-                    okScores.Add(infer.score);
-                    if (totalCalibSamples > 0)
-                    {
-                        _updateBusyProgress?.Invoke(100.0 * (i + 1) / totalCalibSamples);
-                    }
-                }
-
-                var ngList = NgSamples.ToList();
-                if (ngList.Count > 0)
-                {
-                    _log($"[calibrate] evaluating {ngList.Count} NG samples");
-                    for (var i = 0; i < ngList.Count; i++)
-                    {
-                        var sample = ngList[i];
-                        var infer = await _client.InferAsync(RoleId, RoiId, MmPerPx, sample.ImagePath, sample.Metadata.shape_json).ConfigureAwait(false);
-                        ngScores.Add(infer.score);
-                        if (totalCalibSamples > 0)
-                        {
-                            _updateBusyProgress?.Invoke(100.0 * (ok.Count + i + 1) / totalCalibSamples);
-                        }
-                    }
-                }
-
-                var calib = await _client.CalibrateAsync(RoleId, RoiId, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null).ConfigureAwait(false);
-                CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile}";
+                _log("[calibrate] backend dataset calibration");
+                var calib = await _client.CalibrateDatasetAsync(RoleId, RoiId, MmPerPx).ConfigureAwait(false);
+                CalibrationSummary = $"Threshold={calib.threshold:0.###} OK={calib.n_ok} NG={calib.n_ng} Percentile={calib.score_percentile}";
                 _log("[calibrate] " + CalibrationSummary);
+                LocalThreshold = calib.threshold;
                 _updateBusyProgress?.Invoke(100);
             }
             finally
@@ -3506,99 +3479,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 return;
             }
-
-            int datasetIndex = Math.Max(1, Math.Min(4, roi.Index));
-            string datasetKey = $"LastDatasetPathROI{datasetIndex}";
-            var settings = Settings.Default;
-            string? lastDatasetPath = settings[datasetKey] as string;
-
-            var choice = await Application.Current.Dispatcher.InvokeAsync(() =>
-                MessageBox.Show(
-                    "Choose Yes to browse a dataset folder (requires ok/ko).\nChoose No to load a CSV (filename,label).",
-                    "Dataset source",
-                    MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Question,
-                    MessageBoxResult.Yes));
-
-            if (choice == MessageBoxResult.Cancel)
-            {
-                return;
-            }
-
-            if (choice == MessageBoxResult.Yes)
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    using var dialog = new Forms.FolderBrowserDialog
-                    {
-                        Description = "Select dataset folder",
-                        UseDescriptionForTitle = true,
-                    };
-
-                    if (!string.IsNullOrWhiteSpace(roi.DatasetPath) && Directory.Exists(roi.DatasetPath))
-                    {
-                        dialog.SelectedPath = roi.DatasetPath;
-                    }
-                    else if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
-                    {
-                        dialog.SelectedPath = lastDatasetPath;
-                    }
-                    else
-                    {
-                        dialog.SelectedPath = RecipePathHelper.GetDatasetFolder(_currentLayoutName);
-                    }
-
-                    if (dialog.ShowDialog() == Forms.DialogResult.OK)
-                    {
-                        roi.DatasetPath = DatasetPathHelper.NormalizeDatasetPath(dialog.SelectedPath);
-                        settings[datasetKey] = dialog.SelectedPath;
-                        settings.Save();
-                    }
-                });
-                return;
-            }
-
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                var dialog = new Microsoft.Win32.OpenFileDialog
-                {
-                    Title = "Select dataset CSV",
-                    Filter = "Dataset CSV (*.csv)|*.csv|All files (*.*)|*.*",
-                    CheckFileExists = true,
-                    Multiselect = false
-                };
-
-                var normalizedRoiDataset = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
-
-                if (!string.IsNullOrWhiteSpace(normalizedRoiDataset) && File.Exists(normalizedRoiDataset))
-                {
-                    dialog.InitialDirectory = Path.GetDirectoryName(normalizedRoiDataset);
-                    dialog.FileName = Path.GetFileName(normalizedRoiDataset);
-                }
-                else if (!string.IsNullOrWhiteSpace(normalizedRoiDataset) && Directory.Exists(normalizedRoiDataset))
-                {
-                    dialog.InitialDirectory = normalizedRoiDataset;
-                }
-                else if (!string.IsNullOrWhiteSpace(lastDatasetPath) && Directory.Exists(lastDatasetPath))
-                {
-                    dialog.InitialDirectory = lastDatasetPath;
-                }
-                else
-                {
-                    dialog.InitialDirectory = RecipePathHelper.GetDatasetFolder(_currentLayoutName);
-                }
-
-                if (dialog.ShowDialog() == true)
-                {
-                    roi.DatasetPath = DatasetPathHelper.NormalizeDatasetPath(dialog.FileName);
-                    var selectedDir = Path.GetDirectoryName(dialog.FileName);
-                    if (!string.IsNullOrWhiteSpace(selectedDir))
-                    {
-                        settings[datasetKey] = selectedDir;
-                        settings.Save();
-                    }
-                }
-            });
+            await ShowMessageAsync(
+                "El dataset se gestiona en el backend. Usa agregar muestras y refrescar para sincronizar.",
+                "Dataset",
+                MessageBoxImage.Information);
         }
 
 
@@ -3760,42 +3644,54 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            if (string.IsNullOrEmpty(roi.DatasetPath))
-            {
-                await Application.Current.Dispatcher.InvokeAsync(() =>
-                {
-                    roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                    roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
-                });
-                return;
-            }
-
             var okItems = new ObservableCollection<DatasetPreviewItem>();
-            foreach (var path in EnumerateDatasetFiles(roi.DatasetPath!, "ok", roi.DisplayName, take))
+            var ngItems = new ObservableCollection<DatasetPreviewItem>();
+            try
             {
-                var bmp = LoadBitmapSource(path);
-                if (bmp != null)
+                var list = await _client.GetDatasetListAsync(RoleId, roi.ModelKey).ConfigureAwait(false);
+                var okFiles = list.ok.files;
+                var ngFiles = list.ng.files;
+
+                foreach (var file in okFiles.Skip(Math.Max(0, okFiles.Count - take)))
                 {
-                    okItems.Add(new DatasetPreviewItem { Path = path, Thumbnail = bmp });
+                    var cachePath = ResolveDatasetCachePath(RoleId, roi.ModelKey, "ok", file);
+                    if (!File.Exists(cachePath))
+                    {
+                        var bytes = await _client.DownloadDatasetFileAsync(RoleId, roi.ModelKey, isNg: false, file, CancellationToken.None).ConfigureAwait(false);
+                        await File.WriteAllBytesAsync(cachePath, bytes).ConfigureAwait(false);
+                    }
+                    var bmp = LoadBitmapSource(cachePath);
+                    if (bmp != null)
+                    {
+                        okItems.Add(new DatasetPreviewItem { Path = cachePath, Thumbnail = bmp });
+                    }
+                }
+
+                foreach (var file in ngFiles.Skip(Math.Max(0, ngFiles.Count - take)))
+                {
+                    var cachePath = ResolveDatasetCachePath(RoleId, roi.ModelKey, "ng", file);
+                    if (!File.Exists(cachePath))
+                    {
+                        var bytes = await _client.DownloadDatasetFileAsync(RoleId, roi.ModelKey, isNg: true, file, CancellationToken.None).ConfigureAwait(false);
+                        await File.WriteAllBytesAsync(cachePath, bytes).ConfigureAwait(false);
+                    }
+                    var bmp = LoadBitmapSource(cachePath);
+                    if (bmp != null)
+                    {
+                        ngItems.Add(new DatasetPreviewItem { Path = cachePath, Thumbnail = bmp });
+                    }
                 }
             }
-
-            var negLabel = DetermineNegLabelDir(roi.DatasetPath!);
-            var ngItems = new ObservableCollection<DatasetPreviewItem>();
-            foreach (var path in EnumerateDatasetFiles(roi.DatasetPath!, negLabel, roi.DisplayName, take))
+            catch (Exception ex)
             {
-                var bmp = LoadBitmapSource(path);
-                if (bmp != null)
-                {
-                    ngItems.Add(new DatasetPreviewItem { Path = path, Thumbnail = bmp });
-                }
+                _log($"[dataset] preview refresh failed: {ex.Message}");
             }
 
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
                 roi.OkPreview = okItems;
                 roi.NgPreview = ngItems;
-                Debug.WriteLine($"[thumbs] {roi.DisplayName} ok={okItems.Count} {negLabel}={ngItems.Count}");
+                Debug.WriteLine($"[thumbs] {roi.DisplayName} ok={okItems.Count} ng={ngItems.Count}");
             });
         }
 
@@ -3834,32 +3730,44 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private async Task<RoiDatasetAnalysis> RefreshRoiDatasetStateAsync(InspectionRoiConfig roi)
         {
-            var datasetPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
             roi.IsDatasetLoading = true;
             roi.DatasetReady = false;
-            roi.DatasetStatus = roi.HasDatasetPath ? "Validating dataset..." : "Select a dataset";
+            roi.DatasetStatus = "Syncing dataset...";
 
-            var refreshPath = string.IsNullOrWhiteSpace(datasetPath) ? "<none>" : datasetPath;
-            var loadingMessage = $"Loading dataset from path: {refreshPath}";
-            _log(loadingMessage);
-            GuiLog.Info(loadingMessage);
-            GuiLog.Info($"[dataset] Refresh START roi='{roi.DisplayName}' path='{refreshPath}'");
-
-            var analysis = await Task.Run(() => AnalyzeDatasetPath(datasetPath)).ConfigureAwait(false);
-            _roiDatasetCache[roi] = analysis;
-
-            await Application.Current.Dispatcher.InvokeAsync(() =>
+            RoiDatasetAnalysis analysis;
+            try
             {
-                roi.IsDatasetLoading = false;
-                roi.DatasetOkCount = analysis.OkCount;
-                roi.DatasetKoCount = analysis.KoCount;
-                roi.DatasetReady = analysis.IsValid;
-                roi.DatasetStatus = analysis.StatusMessage;
-            });
+                var list = await _client.GetDatasetListAsync(RoleId, roi.ModelKey).ConfigureAwait(false);
+                var okCount = list.ok.count;
+                var ngCount = list.ng.count;
+                var ready = okCount > 0;
+                var status = ready ? "Dataset Ready ✅" : "Dataset missing OK samples";
+                analysis = new RoiDatasetAnalysis(string.Empty, new List<DatasetEntry>(), okCount, ngCount, ready, status, new List<(string, bool)>());
 
-            GuiLog.Info($"[dataset] Refresh END roi='{roi.DisplayName}' ok={analysis.OkCount} ng={analysis.KoCount} ready={analysis.IsValid} status='{analysis.StatusMessage}'");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    roi.IsDatasetLoading = false;
+                    roi.DatasetOkCount = okCount;
+                    roi.DatasetKoCount = ngCount;
+                    roi.DatasetReady = ready;
+                    roi.DatasetStatus = status;
+                });
+            }
+            catch (Exception ex)
+            {
+                analysis = RoiDatasetAnalysis.Empty($"Dataset error: {ex.Message}");
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    roi.IsDatasetLoading = false;
+                    roi.DatasetOkCount = 0;
+                    roi.DatasetKoCount = 0;
+                    roi.DatasetReady = false;
+                    roi.DatasetStatus = analysis.StatusMessage;
+                });
+            }
 
             await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
+            _roiDatasetCache[roi] = analysis;
 
             return analysis;
         }
@@ -4072,52 +3980,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 return false;
             }
-
-            if (!roi.HasDatasetPath)
-            {
-                await ShowMessageAsync("Select a dataset path before training.");
-                return false;
-            }
-
-            var roiPath = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
-            GuiLog.Info($"[train] START roi='{roi.DisplayName}' datasetPath='{roiPath}'");
+            GuiLog.Info($"[train] START roi='{roi.DisplayName}' (backend dataset)");
 
             _showBusyDialog?.Invoke("Training...");
             _updateBusyProgress?.Invoke(null);
 
             try
             {
-                var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
-                if (analysis.OkCount == 0)
-                {
-                    var message = string.IsNullOrWhiteSpace(analysis.StatusMessage)
-                        ? "Dataset has no OK samples for training."
-                        : analysis.StatusMessage;
-                    await ShowMessageAsync(message, caption: "Dataset not ready");
-                    return false;
-                }
-
-                if (!analysis.IsValid && !string.IsNullOrWhiteSpace(analysis.StatusMessage))
-                {
-                    _log($"[train] dataset warning: {analysis.StatusMessage}");
-                }
-
-                var okImages = analysis.Entries.Where(e => e.IsOk).Select(e => e.Path).Where(File.Exists).ToList();
-                if (okImages.Count == 0)
-                {
-                    await ShowMessageAsync($"No OK images found in dataset for ROI '{roi.Name}'.");
-                    return false;
-                }
-
-                if (!await EnsureFitEndpointAsync().ConfigureAwait(false))
-                {
-                    await ShowMessageAsync("Backend /fit_ok endpoint is not available.");
-                    return false;
-                }
-
                 try
                 {
-                    var result = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okImages, roi.TrainMemoryFit, roiPath, ct).ConfigureAwait(false);
+                    var result = await _client.FitOkFromDatasetAsync(RoleId, roi.ModelKey, MmPerPx, roi.TrainMemoryFit, ct).ConfigureAwait(false);
                     var memoryHint = roi.TrainMemoryFit ? " (memory-fit)" : string.Empty;
                     FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]" + memoryHint;
                     roi.HasFitOk = true;
@@ -4182,85 +4054,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                var analysis = await EnsureDatasetAnalysisAsync(roi).ConfigureAwait(false);
-                if (!analysis.IsValid && analysis.OkCount == 0)
-                {
-                    await ShowMessageAsync(analysis.StatusMessage, caption: "Dataset not ready");
-                    return;
-                }
-
-                var okEntries = analysis.Entries.Where(e => e.IsOk).ToList();
-                if (okEntries.Count == 0)
-                {
-                    await ShowMessageAsync("Dataset has no OK samples for calibration.", "Calibrate");
-                    return;
-                }
-
-                var koEntries = analysis.Entries.Where(e => !e.IsOk).ToList();
-
-                var okScores = new List<double>();
-                foreach (var entry in okEntries)
-                {
-                    var score = await InferScoreForCalibrationAsync(roi, entry.Path, ct).ConfigureAwait(false);
-                    if (!score.HasValue)
-                    {
-                        return;
-                    }
-
-                    okScores.Add(score.Value);
-                }
-
-                var ngScores = new List<double>();
-                foreach (var entry in koEntries)
-                {
-                    var score = await InferScoreForCalibrationAsync(roi, entry.Path, ct).ConfigureAwait(false);
-                    if (!score.HasValue)
-                    {
-                        return;
-                    }
-
-                    ngScores.Add(score.Value);
-                }
-
-                double? threshold = null;
-                CalibResult? calibResult = null;
-                if (await EnsureCalibrateEndpointAsync().ConfigureAwait(false))
-                {
-                    try
-                    {
-                        var calib = await _client.CalibrateAsync(RoleId, roi.ModelKey, MmPerPx, okScores, ngScores.Count > 0 ? ngScores : null, ct: ct).ConfigureAwait(false);
-                        threshold = calib.threshold;
-                        calibResult = calib;
-                        CalibrationSummary = $"Threshold={calib.threshold:0.###} OKµ={calib.ok_mean:0.###} NGµ={calib.ng_mean:0.###} Percentile={calib.score_percentile:0.###}";
-                    }
-                    catch (HttpRequestException ex)
-                    {
-                        _log("[calibrate] backend error: " + ex.Message);
-                    }
-                }
-
-                if (threshold == null)
-                {
-                    threshold = ComputeYoudenThreshold(okScores, ngScores, roi.ThresholdDefault);
-                    CalibrationSummary = $"Threshold={threshold:0.###} (local)";
-                    calibResult = new CalibResult
-                    {
-                        threshold = threshold,
-                        ok_mean = okScores.Count > 0 ? okScores.Average() : 0.0,
-                        ng_mean = ngScores.Count > 0 ? ngScores.Average() : 0.0,
-                        score_percentile = 0.0,
-                        area_mm2_thr = 0.0
-                    };
-                }
-
-                roi.CalibratedThreshold = threshold;
+                var calib = await _client.CalibrateDatasetAsync(RoleId, roi.ModelKey, MmPerPx, ct).ConfigureAwait(false);
+                CalibrationSummary = $"Threshold={calib.threshold:0.###} OK={calib.n_ok} NG={calib.n_ng} Percentile={calib.score_percentile:0.###}";
+                roi.CalibratedThreshold = calib.threshold;
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
                 UpdateGlobalBadge();
 
-                if (calibResult != null)
+                var calibResult = new CalibResult
                 {
-                    _lastCalibResultsByRoi[roi] = calibResult;
-                }
+                    threshold = calib.threshold,
+                    ok_mean = 0.0,
+                    ng_mean = 0.0,
+                    score_percentile = calib.score_percentile,
+                    area_mm2_thr = calib.area_mm2_thr
+                };
+                _lastCalibResultsByRoi[roi] = calibResult;
 
                 await SaveModelManifestAsync(roi, GetLastFitResult(roi), calibResult, ct).ConfigureAwait(false);
                 CopyModelArtifactsToRecipe(roi);
@@ -4622,12 +4430,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (roi == null)
             {
                 await ShowMessageAsync("No ROI selected.", "Calibrate");
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(roi.DatasetPath))
-            {
-                await ShowMessageAsync($"Dataset path is empty for ROI '{roi.Name}'. Select a dataset first.", "Calibrate");
                 return false;
             }
 
@@ -7004,7 +6806,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 RoleId = "DefaultRole";
             if (string.IsNullOrWhiteSpace(RoiId))
                 RoiId = "DefaultRoi";
-            _datasetManager.EnsureRoleRoiDirectories(RoleId, RoiId);
         }
 
         private async Task<bool> EnsureFitEndpointAsync()

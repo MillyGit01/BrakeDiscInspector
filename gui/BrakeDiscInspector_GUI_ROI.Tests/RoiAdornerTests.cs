@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Windows.Controls;
+using System.Windows.Shapes;
 using BrakeDiscInspector_GUI_ROI;
 using Xunit;
 
@@ -47,6 +48,37 @@ public class RoiAdornerTests
         Assert.True(Math.Abs(annulus.Width - annulus.Height) < 1e-6);
         Assert.True(Math.Abs(roi.Width - roi.Height) < 1e-6);
         Assert.True(annulus.InnerRadius <= annulus.Width / 2.0 + 1e-6);
+    }
+
+    [StaFact]
+    public void ResizeByCorner_KeepsCircleUniform()
+    {
+        var roi = new RoiModel
+        {
+            Shape = RoiShape.Circle,
+            CX = 50,
+            CY = 50,
+            Width = 120,
+            Height = 80,
+            R = 60
+        };
+
+        var circle = new Ellipse
+        {
+            Width = 120,
+            Height = 80,
+            Tag = roi
+        };
+
+        Canvas.SetLeft(circle, 0);
+        Canvas.SetTop(circle, 0);
+
+        var adorner = new RoiAdorner(circle, (_, _) => { }, _ => { });
+
+        InvokeResizeByCorner(adorner, 30.0, -10.0, "NE");
+
+        Assert.True(Math.Abs(circle.Width - circle.Height) < 1e-6);
+        Assert.True(Math.Abs(roi.Width - roi.Height) < 1e-6);
     }
 
     private static void InvokeResizeByCorner(RoiAdorner adorner, double dx, double dy, string cornerName)

@@ -249,6 +249,193 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public async Task<FitOkResult> FitOkFromDatasetAsync(
+            string roleId,
+            string roiId,
+            double mmPerPx,
+            bool memoryFit = false,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(roleId)) throw new ArgumentException("Role id required", nameof(roleId));
+            if (string.IsNullOrWhiteSpace(roiId)) throw new ArgumentException("ROI id required", nameof(roiId));
+
+            using var form = new MultipartFormDataContent();
+            var effectiveRoleId = NormalizeRoleId(roleId, roiId);
+            form.Add(new StringContent(effectiveRoleId), "role_id");
+            form.Add(new StringContent(roiId), "roi_id");
+            form.Add(new StringContent(mmPerPx.ToString(CultureInfo.InvariantCulture)), "mm_per_px");
+            form.Add(new StringContent(memoryFit ? "true" : "false"), "memory_fit");
+            form.Add(new StringContent(roiId), "model_key");
+            form.Add(new StringContent("true"), "use_dataset");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "fit_ok")
+            {
+                Content = form
+            };
+            AddCommonHeaders(request);
+            using var response = await _httpTrainClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new HttpRequestException($"/fit_ok {response.StatusCode}: {body}");
+
+            using var streamResp = new MemoryStream(Encoding.UTF8.GetBytes(body));
+            var payload = await JsonSerializer.DeserializeAsync<FitOkResult>(streamResp, JsonOptions, ct).ConfigureAwait(false)
+                          ?? throw new InvalidOperationException("Empty or invalid JSON from fit_ok endpoint.");
+            return payload;
+        }
+
+        public async Task UploadDatasetSampleAsync(
+            string roleId,
+            string roiId,
+            bool isNg,
+            byte[] pngBytes,
+            string fileName,
+            SampleMetadata meta,
+            CancellationToken ct = default)
+        {
+            var endpoint = isNg ? "datasets/ng/upload" : "datasets/ok/upload";
+            using var form = new MultipartFormDataContent();
+            form.Add(new StringContent(roleId), "role_id");
+            form.Add(new StringContent(roiId), "roi_id");
+
+            var content = new ByteArrayContent(pngBytes ?? Array.Empty<byte>());
+            content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(content, "images", string.IsNullOrWhiteSpace(fileName) ? "sample.png" : fileName);
+
+            var metaJson = JsonSerializer.Serialize(meta, JsonOptions);
+            form.Add(new StringContent(metaJson, Encoding.UTF8, "application/json"), "metas");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            {
+                Content = form
+            };
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"/{endpoint} {response.StatusCode}: {body}");
+            }
+        }
+
+        public async Task<DatasetListDto> GetDatasetListAsync(string roleId, string roiId, CancellationToken ct = default)
+        {
+            var url = $"datasets/list?role_id={Uri.EscapeDataString(roleId)}&roi_id={Uri.EscapeDataString(roiId)}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"/datasets/list {response.StatusCode}: {body}");
+            }
+
+            var data = JsonSerializer.Deserialize<DatasetListResponse>(body, JsonOptions)
+                       ?? new DatasetListResponse();
+            return new DatasetListDto
+            {
+                ok = data.classes?.ok ?? new DatasetClassDto(),
+                ng = data.classes?.ng ?? new DatasetClassDto()
+            };
+        }
+
+        public async Task<byte[]> DownloadDatasetFileAsync(string roleId, string roiId, bool isNg, string filename, CancellationToken ct = default)
+        {
+            var label = isNg ? "ng" : "ok";
+            var url = $"datasets/file?role_id={Uri.EscapeDataString(roleId)}&roi_id={Uri.EscapeDataString(roiId)}&label={label}&filename={Uri.EscapeDataString(filename)}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                throw new HttpRequestException($"/datasets/file {response.StatusCode}: {body}");
+            }
+            return await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+        }
+
+        public async Task DeleteDatasetFileAsync(string roleId, string roiId, bool isNg, string filename, CancellationToken ct = default)
+        {
+            var label = isNg ? "ng" : "ok";
+            var url = $"datasets/file?role_id={Uri.EscapeDataString(roleId)}&roi_id={Uri.EscapeDataString(roiId)}&label={label}&filename={Uri.EscapeDataString(filename)}";
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"/datasets/file {response.StatusCode}: {body}");
+            }
+        }
+
+        public async Task<SampleMetadata> GetDatasetMetaAsync(string roleId, string roiId, bool isNg, string filename, CancellationToken ct = default)
+        {
+            var label = isNg ? "ng" : "ok";
+            var url = $"datasets/meta?role_id={Uri.EscapeDataString(roleId)}&roi_id={Uri.EscapeDataString(roiId)}&label={label}&filename={Uri.EscapeDataString(filename)}";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"/datasets/meta {response.StatusCode}: {body}");
+            }
+
+            return JsonSerializer.Deserialize<SampleMetadata>(body, JsonOptions)
+                   ?? new SampleMetadata();
+        }
+
+        public async Task<CalibrateDatasetResponse> CalibrateDatasetAsync(string roleId, string roiId, double? defaultMmPerPx, CancellationToken ct = default)
+        {
+            var payload = new Dictionary<string, object?>
+            {
+                ["role_id"] = roleId,
+                ["roi_id"] = roiId,
+                ["default_mm_per_px"] = defaultMmPerPx
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "calibrate_dataset")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+            };
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"/calibrate_dataset {response.StatusCode}: {body}");
+            }
+
+            return JsonSerializer.Deserialize<CalibrateDatasetResponse>(body, JsonOptions)
+                   ?? new CalibrateDatasetResponse();
+        }
+
+        public async Task<InferDatasetResponse> InferDatasetAsync(string roleId, string roiId, bool includeHeatmap, double? defaultMmPerPx, CancellationToken ct = default)
+        {
+            var payload = new Dictionary<string, object?>
+            {
+                ["role_id"] = roleId,
+                ["roi_id"] = roiId,
+                ["include_heatmap"] = includeHeatmap,
+                ["default_mm_per_px"] = defaultMmPerPx
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, "infer_dataset")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+            };
+            AddCommonHeaders(request);
+            using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"/infer_dataset {response.StatusCode}: {body}");
+            }
+
+            return JsonSerializer.Deserialize<InferDatasetResponse>(body, JsonOptions)
+                   ?? new InferDatasetResponse();
+        }
+
         public async Task<CalibResult> CalibrateAsync(
             string roleId,
             string roiId,

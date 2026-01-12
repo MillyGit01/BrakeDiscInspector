@@ -205,6 +205,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             bool isAnnulus = roi?.Shape == RoiShape.Annulus;
+            bool isCircle = roi?.Shape == RoiShape.Circle;
 
             Point[] cornerPositions = new Point[4];
             cornerPositions[0] = TransformPoint(GetCornerLocalPoint(Corner.NW, w, h));
@@ -218,7 +219,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 _corners[i].Arrange(new Rect(corner.X - r, corner.Y - r, 2 * r, 2 * r));
             }
 
-            if (isAnnulus)
+            bool hideEdges = isAnnulus || isCircle;
+            if (hideEdges)
             {
                 for (int i = 0; i < _edges.Length; i++)
                 {
@@ -383,7 +385,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     break;
             }
 
-            if (roi.Shape == RoiShape.Annulus)
+            if (roi.Shape == RoiShape.Annulus || roi.Shape == RoiShape.Circle)
             {
                 double widthCandidate = newWidth;
                 double heightCandidate = newHeight;
@@ -412,7 +414,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void ResizeByEdge(double dragDx, double dragDy, Edge edge)
         {
             var roi = _shape.Tag as RoiModel;
-            if (roi == null || roi.Shape == RoiShape.Annulus) return;
+            if (roi == null || roi.Shape == RoiShape.Annulus || roi.Shape == RoiShape.Circle) return;
 
             double x = Canvas.GetLeft(_shape); if (double.IsNaN(x)) x = 0;
             double y = Canvas.GetTop(_shape); if (double.IsNaN(y)) y = 0;

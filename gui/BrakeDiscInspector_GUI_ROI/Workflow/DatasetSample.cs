@@ -89,10 +89,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
     {
         public string role_id { get; set; } = string.Empty;
         public string roi_id { get; set; } = string.Empty;
+        public string label { get; set; } = string.Empty;
+        public string filename { get; set; } = string.Empty;
         public double mm_per_px { get; set; }
-        public string? shape_json { get; set; }
+        public object? shape_json { get; set; }
+        public string? created_at_utc { get; set; }
         public string? source_path { get; set; }
-        public double angle { get; set; }
-        public DateTime timestamp { get; set; }
     }
 }

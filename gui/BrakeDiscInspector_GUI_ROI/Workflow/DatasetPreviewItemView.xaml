@@ -6,13 +6,10 @@
              mc:Ignorable="d"
              d:DesignHeight="100"
              d:DesignWidth="140">
-    <Border BorderBrush="#303030" BorderThickness="1" Margin="0">
-        <Image Source="{Binding Thumbnail}"
-               Width="120"
-               Height="90"
-               Margin="0,0,8,0"
-               Cursor="Hand"
-               Stretch="UniformToFill"
-               MouseLeftButtonUp="DatasetImage_Click"/>
-    </Border>
+    <Image Source="{Binding Thumbnail}"
+           Width="120"
+           Height="90"
+           Cursor="Hand"
+           Stretch="UniformToFill"
+           MouseLeftButtonUp="DatasetImage_Click"/>
 </UserControl>

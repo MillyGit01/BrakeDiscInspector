@@ -19,7 +19,9 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -28,45 +30,18 @@
         <StackPanel Orientation="Horizontal">
             <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
             <TextBox Text="{Binding Name}" Width="200" Margin="0,0,12,0"/>
-            <CheckBox Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center"/>
-            <ui:Button Margin="8,0,0,0"
-                       Padding="12,4"
-                       Click="BtnToggleEdit_Click"
-                       IsEnabled="{Binding Enabled}">
-                <ui:Button.Style>
-                    <Style TargetType="{x:Type ui:Button}">
-                        <Setter Property="Content">
-                            <Setter.Value>
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Edit24}" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{Binding Path=Index, StringFormat=Edit ROI{0}}" VerticalAlignment="Center"/>
-                                </StackPanel>
-                            </Setter.Value>
-                        </Setter>
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsEditable}" Value="True">
-                                <Setter Property="Content">
-                                    <Setter.Value>
-                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0"/>
-                                            <TextBlock Text="{Binding Path=Index, StringFormat=Save ROI{0}}" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Setter.Value>
-                                </Setter>
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </ui:Button.Style>
-            </ui:Button>
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
-            <TextBox Text="{Binding ModelKey}" Width="220" Margin="0,0,12,0"/>
-            <CheckBox Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center"/>
-        </StackPanel>
+        <CheckBox Grid.Row="1" Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,8,0,0"/>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+            <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding ModelKey}" Width="220" Margin="0,0,12,0"/>
+        </StackPanel>
+
+        <CheckBox Grid.Row="3" Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                 <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <ComboBox Width="90"
@@ -82,33 +57,40 @@
             </StackPanel>
         </StackPanel>
 
-        <Grid Grid.Row="3" Margin="0,8,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Dataset" VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <TextBox Grid.Column="1" Text="{Binding DatasetPath}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-            <ui:Button Grid.Column="2"
-                       Padding="12,4"
-                       Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0"/>
-                    <TextBlock Text="Browse..." VerticalAlignment="Center"/>
-                </StackPanel>
-            </ui:Button>
-            <ui:Button Grid.Column="3" Padding="12,4"
-                       Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0"/>
-                    <TextBlock Text="Open Folder" VerticalAlignment="Center"/>
-                </StackPanel>
-            </ui:Button>
-        </Grid>
+        <StackPanel Grid.Row="5" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Dataset" Width="70" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding DatasetPath}"
+                         Margin="0,0,8,0"
+                         VerticalAlignment="Center"
+                         HorizontalAlignment="Stretch"
+                         FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+            </Grid>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                <ui:Button Padding="12,4"
+                           Margin="0,0,8,0"
+                           Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0"/>
+                        <TextBlock Text="Browse..." VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+                <ui:Button Padding="12,4"
+                           Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0"/>
+                        <TextBlock Text="Open Folder" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </ui:Button>
+            </StackPanel>
+        </StackPanel>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,8,0,0">
             <TextBlock Text="{Binding DatasetStatus}">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
@@ -126,18 +108,21 @@
             <TextBlock Text="{Binding DatasetCountsText}"/>
         </StackPanel>
 
-        <ProgressBar Grid.Row="5" Height="4" Margin="0,4,0,0"
+        <ProgressBar Grid.Row="7" Height="4" Margin="0,4,0,0"
                      IsIndeterminate="True"
                      Visibility="{Binding IsDatasetLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
-        <StackPanel Grid.Row="6" Margin="0,8,0,0">
-            <w:DatasetPreviewStripView Title="OK dataset" ItemsSource="{Binding OkPreview}" />
+        <StackPanel Grid.Row="8" Margin="0,8,0,0">
+            <w:DatasetPreviewStripView Title="OK dataset"
+                                       ItemsSource="{Binding OkPreview}"
+                                       SelectedItem="{Binding SelectedOkPreviewItem, Mode=TwoWay}"/>
             <w:DatasetPreviewStripView Title="NG dataset"
                                        ItemsSource="{Binding NgPreview}"
+                                       SelectedItem="{Binding SelectedNgPreviewItem, Mode=TwoWay}"
                                        Margin="0,8,0,0" />
         </StackPanel>
 
-        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
                        Tag="{Binding Index}"
@@ -180,7 +165,7 @@
             </ui:Button>
         </StackPanel>
 
-        <StackPanel Grid.Row="8" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,8,0,0">
             <TextBlock Text="Score:"/>
             <TextBlock Text="{Binding LastScore, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
             <TextBlock Text="Threshold:"/>

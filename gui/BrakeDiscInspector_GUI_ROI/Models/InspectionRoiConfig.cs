@@ -40,6 +40,8 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         private int _datasetKoCount;
         private ObservableCollection<DatasetPreviewItem> _okPreview = new();
         private ObservableCollection<DatasetPreviewItem> _ngPreview = new();
+        private DatasetPreviewItem? _selectedOkPreviewItem;
+        private DatasetPreviewItem? _selectedNgPreviewItem;
         private bool _hasFitOk;
         private MasterAnchorChoice _anchorMaster = MasterAnchorChoice.Master1;
 
@@ -203,6 +205,30 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             {
                 if (ReferenceEquals(_ngPreview, value)) return;
                 _ngPreview = value;
+                OnPropertyChanged();
+            }
+        }
+
+        [JsonIgnore]
+        public DatasetPreviewItem? SelectedOkPreviewItem
+        {
+            get => _selectedOkPreviewItem;
+            set
+            {
+                if (ReferenceEquals(_selectedOkPreviewItem, value)) return;
+                _selectedOkPreviewItem = value;
+                OnPropertyChanged();
+            }
+        }
+
+        [JsonIgnore]
+        public DatasetPreviewItem? SelectedNgPreviewItem
+        {
+            get => _selectedNgPreviewItem;
+            set
+            {
+                if (ReferenceEquals(_selectedNgPreviewItem, value)) return;
+                _selectedNgPreviewItem = value;
                 OnPropertyChanged();
             }
         }

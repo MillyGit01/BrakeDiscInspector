@@ -20,6 +20,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 typeof(DatasetPreviewStripView),
                 new PropertyMetadata(string.Empty));
 
+        public static readonly DependencyProperty SelectedItemProperty =
+            DependencyProperty.Register(
+                nameof(SelectedItem),
+                typeof(object),
+                typeof(DatasetPreviewStripView),
+                new PropertyMetadata(null));
+
         public DatasetPreviewStripView()
         {
             InitializeComponent();
@@ -35,6 +42,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             get => (string?)GetValue(TitleProperty);
             set => SetValue(TitleProperty, value);
+        }
+
+        public object? SelectedItem
+        {
+            get => GetValue(SelectedItemProperty);
+            set => SetValue(SelectedItemProperty, value);
         }
     }
 }

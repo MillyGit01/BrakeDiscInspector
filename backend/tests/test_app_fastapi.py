@@ -1,4 +1,5 @@
 import io
+import os
 import sys
 import types
 from types import SimpleNamespace
@@ -50,6 +51,8 @@ if "backend.features" not in sys.modules:  # pragma: no cover
     features_any = cast(Any, features_stub)
     features_any.DinoV2Features = _StubFeatures
     sys.modules["backend.features"] = features_stub
+
+os.environ.setdefault("BDI_REQUIRE_CUDA", "0")
 
 from backend import app as app_mod
 

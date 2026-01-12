@@ -57,8 +57,9 @@ Fits/updates PatchCore memory for a given `(role_id, roi_id)`.
   - `role_id` (string, required)
   - `roi_id` (string, required)
   - `mm_per_px` (float, required) – currently informational; stored in calibration.
-  - `images` (file[], required) – ROI crops (PNG/JPG).
+  - `images` (file[], optional) – ROI crops (PNG/JPG). Required when `use_dataset=false`.
   - `memory_fit` (bool-string, optional) – when `true`, disables coreset subsampling (`coreset_rate = 1.0`).
+  - `use_dataset` (bool-string, optional) – when `true`, train from backend dataset storage (no images required).
   - `recipe_id` (string, optional) – overrides recipe context.
   - `model_key` (string, optional) – logical model slot under the recipe. If omitted, defaults to `roi_id`.
 - **Response (200):**
@@ -211,6 +212,7 @@ Read/list operations apply recipe fallback to `"default"` when the recipe-specif
   - `role_id` (string, required)
   - `roi_id` (string, required)
   - `images` (file[], required)
+  - `metas` (string[], optional) – JSON strings aligned to `images[]`. Length must be `0` or `len(images)`.
   - `recipe_id` (string, optional)
 - **Response (200):**
 ```json
@@ -225,7 +227,33 @@ Read/list operations apply recipe fallback to `"default"` when the recipe-specif
 {
   "role_id": "Inspection",
   "roi_id": "inspection-1",
-  "classes": { "ok": { "count": 10, "files": [...] }, "ng": { "count": 2, "files": [...] } },
+  "classes": {
+    "ok": { "count": 10, "files": [...], "meta": { "sample.png": true } },
+    "ng": { "count": 2, "files": [...], "meta": { "sample.png": false } }
+  },
+  "request_id": "…",
+  "recipe_id": "default"
+}
+```
+
+### `GET /datasets/file`
+
+- **Query params:** `role_id`, `roi_id`, `label` (`ok|ng`), `filename` (required), `recipe_id` (optional).
+- **Response (200):** file download (image bytes).
+
+### `GET /datasets/meta`
+
+- **Query params:** `role_id`, `roi_id`, `label` (`ok|ng`), `filename` (required), `recipe_id` (optional).
+- **Response (200):**
+```json
+{
+  "role_id": "Inspection",
+  "roi_id": "inspection-1",
+  "label": "ok",
+  "filename": "sample.png",
+  "mm_per_px": 0.02,
+  "shape_json": {"kind":"circle","cx":200,"cy":200,"r":180},
+  "created_at_utc": "2025-01-01T12:00:00Z",
   "request_id": "…",
   "recipe_id": "default"
 }
@@ -248,6 +276,78 @@ Read/list operations apply recipe fallback to `"default"` when the recipe-specif
 ```
 
 ---
+
+## `POST /infer_dataset`
+
+Runs inference over the backend dataset with per-sample `mm_per_px` from metadata.
+
+- **Content type:** `application/json`.
+- **Body:**
+  - `role_id` (string, required)
+  - `roi_id` (string, required)
+  - `recipe_id` (string, optional)
+  - `model_key` (string, optional; defaults to `roi_id`)
+  - `labels` (string[], optional; defaults to `["ok","ng"]`)
+  - `include_heatmap` (bool, optional; defaults to `false`)
+  - `default_mm_per_px` (float, optional; used when metadata lacks `mm_per_px`)
+- **Response (200):**
+```json
+{
+  "status": "ok",
+  "role_id": "Inspection",
+  "roi_id": "inspection-1",
+  "recipe_id": "default",
+  "model_key": "inspection-1",
+  "request_id": "…",
+  "n_total": 3,
+  "n_errors": 0,
+  "items": [
+    {
+      "label": "ok",
+      "filename": "sample.png",
+      "mm_per_px": 0.02,
+      "score": 1.23,
+      "threshold": 0.9,
+      "regions": [],
+      "n_regions": 0,
+      "error": null
+    }
+  ]
+}
+```
+
+---
+
+## `POST /calibrate_dataset`
+
+Calibrates the threshold using backend dataset samples (per-sample `mm_per_px`).
+
+- **Content type:** `application/json`.
+- **Body:**
+  - `role_id` (string, required)
+  - `roi_id` (string, required)
+  - `recipe_id` (string, optional)
+  - `model_key` (string, optional; defaults to `roi_id`)
+  - `score_percentile` (int, optional; default from config)
+  - `area_mm2_thr` (float, optional; default from config)
+  - `default_mm_per_px` (float, optional)
+  - `require_ng` (bool, optional; defaults to `true`)
+- **Response (200):**
+```json
+{
+  "status": "ok",
+  "threshold": 0.9,
+  "score_percentile": 99,
+  "area_mm2_thr": 1.0,
+  "n_ok": 10,
+  "n_ng": 2,
+  "request_id": "…",
+  "recipe_id": "default",
+  "role_id": "Inspection",
+  "roi_id": "inspection-1",
+  "model_key": "inspection-1"
+}
+```
 
 ## Shape JSON schema
 

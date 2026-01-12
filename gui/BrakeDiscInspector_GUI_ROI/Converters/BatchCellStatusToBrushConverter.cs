@@ -41,7 +41,7 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
                 return MapStatusText(textValue);
             }
 
-            if (value is Enum || value is int)
+            if (value is Enum)
             {
                 return MapStatusText(value.ToString());
             }
@@ -52,6 +52,16 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         {
             return DependencyProperty.UnsetValue;
+        }
+
+        private static Brush MapStatus(BatchCellStatus status)
+        {
+            return status switch
+            {
+                BatchCellStatus.Ok => Brushes.LimeGreen,
+                BatchCellStatus.Nok => Brushes.IndianRed,
+                _ => Brushes.Gray
+            };
         }
 
         private static Brush MapStatusText(string text)

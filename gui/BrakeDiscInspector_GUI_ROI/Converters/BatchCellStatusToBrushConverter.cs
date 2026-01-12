@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using BrakeDiscInspector_GUI_ROI.Workflow;
 
 namespace BrakeDiscInspector_GUI_ROI.Converters
 {
@@ -25,12 +26,22 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
                 return boolValue ? Brushes.LimeGreen : Brushes.IndianRed;
             }
 
+            if (value is BatchCellStatus statusValue)
+            {
+                return MapStatus(statusValue);
+            }
+
+            if (value is int statusInt && Enum.IsDefined(typeof(BatchCellStatus), statusInt))
+            {
+                return MapStatus((BatchCellStatus)statusInt);
+            }
+
             if (value is string textValue)
             {
                 return MapStatusText(textValue);
             }
 
-            if (value is Enum || value is int)
+            if (value is Enum)
             {
                 return MapStatusText(value.ToString());
             }
@@ -43,6 +54,16 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
             return DependencyProperty.UnsetValue;
         }
 
+        private static Brush MapStatus(BatchCellStatus status)
+        {
+            return status switch
+            {
+                BatchCellStatus.Ok => Brushes.LimeGreen,
+                BatchCellStatus.Nok => Brushes.IndianRed,
+                _ => Brushes.Gray
+            };
+        }
+
         private static Brush MapStatusText(string text)
         {
             if (string.IsNullOrWhiteSpace(text) || text.Trim() == "-")
@@ -50,16 +71,17 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
                 return Brushes.Gray;
             }
 
-            if (text.IndexOf("OK", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("PASS", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return Brushes.LimeGreen;
-            }
-
-            if (text.IndexOf("NG", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("FAIL", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (text.Equals("NOK", StringComparison.OrdinalIgnoreCase)
+                || text.Equals("NG", StringComparison.OrdinalIgnoreCase)
+                || text.Equals("FAIL", StringComparison.OrdinalIgnoreCase))
             {
                 return Brushes.IndianRed;
+            }
+
+            if (text.Equals("OK", StringComparison.OrdinalIgnoreCase)
+                || text.Equals("PASS", StringComparison.OrdinalIgnoreCase))
+            {
+                return Brushes.LimeGreen;
             }
 
             return Brushes.Gray;

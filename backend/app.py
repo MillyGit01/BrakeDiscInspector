@@ -7,6 +7,7 @@ import traceback
 import time
 import uuid
 import threading
+import datetime
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,10 +15,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import cv2
+import torch
 
 try:
     from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
-    from fastapi.responses import JSONResponse
+    from fastapi.responses import JSONResponse, FileResponse
     from starlette.middleware.cors import CORSMiddleware
 except ModuleNotFoundError as exc:  # pragma: no cover - import guard
     missing = exc.name or "fastapi"
@@ -166,10 +168,18 @@ except Exception:
 ensure_dir(MODELS_DIR)
 store = ModelStore(MODELS_DIR)
 
+# --- GPU requirement ---
+REQUIRE_CUDA = os.getenv("BDI_REQUIRE_CUDA", "1").strip() == "1"
+if REQUIRE_CUDA and not torch.cuda.is_available():
+    raise RuntimeError("CUDA is required (BDI_REQUIRE_CUDA=1). No GPU detected.")
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+
 # Carga única del extractor (congelado)
 _extractor = DinoV2Features(
     model_name="vit_small_patch14_dinov2.lvd142m",
-    device="auto",
+    device="cuda" if torch.cuda.is_available() else "cpu",
+    half=torch.cuda.is_available(),
     input_size=448,   # múltiplo de 14; si envías 384, el extractor reescala internamente
     patch_size=14
 )
@@ -341,6 +351,35 @@ def _read_image_file(file: UploadFile) -> np.ndarray:
         raise ValueError("No se pudo decodificar la imagen")
     return img
 
+
+def _read_image_path(path: Path) -> np.ndarray:
+    data = path.read_bytes()
+    img_array = np.frombuffer(data, dtype=np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError(f"No se pudo decodificar la imagen: {path.name}")
+    return img
+
+
+def _validate_mm_per_px(value: float) -> float:
+    mm = float(value)
+    if not np.isfinite(mm) or mm <= 0:
+        raise HTTPException(status_code=400, detail="mm_per_px must be > 0 and finite")
+    return mm
+
+
+def _parse_shape_value(raw: Any) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        return None
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw:
+            return None
+        return json.loads(raw)
+    return raw  # best-effort for unexpected types
+
 @app.get("/health")
 def health(request: Request):
     try:
@@ -371,8 +410,9 @@ def fit_ok(
     role_id: str = Form(...),
     roi_id: str = Form(...),
     mm_per_px: float = Form(...),
-    images: List[UploadFile] = File(...),
+    images: Optional[List[UploadFile]] = File(None),
     memory_fit: bool = Form(False),
+    use_dataset: bool = Form(False),
     recipe_id: Optional[str] = Form(None),
     model_key: Optional[str] = Form(None),
 ):
@@ -390,11 +430,12 @@ def fit_ok(
             recipe_id=recipe_resolved,
             model_key=model_key_effective,
             request_id=request_id,
-            n_files=len(images),
+            n_files=len(images or []),
             memory_fit=bool(memory_fit),
+            use_dataset=bool(use_dataset),
         )
         t0 = time.time()
-        if not images:
+        if not use_dataset and not images:
             return JSONResponse(
                 status_code=400,
                 content={"error": "No images provided", "request_id": request_id},
@@ -403,18 +444,40 @@ def fit_ok(
         all_emb: List[np.ndarray] = []
         token_hw: tuple[int, int] | None = None
 
-        for uf in images:
-            img = _read_image_file(uf)
-            emb, token_hw_local = _extractor.extract(img)
-            if token_hw is None:
+        if use_dataset:
+            listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
+            ok_files = listing.get("classes", {}).get("ok", {}).get("files", [])
+            if not ok_files:
+                return JSONResponse(status_code=400, content={"error": "No OK dataset samples found", "request_id": request_id})
+
+            for fn in ok_files:
+                p = store.resolve_dataset_file_existing(role_id, roi_id, "ok", fn, recipe_id=recipe_resolved)
+                if p is None:
+                    continue
+                img = _read_image_path(p)
+                emb, token_hw_local = _extractor.extract(img)
+                if token_hw is None:
+                    token_hw = token_hw_local
+                elif (int(token_hw_local[0]), int(token_hw_local[1])) != (int(token_hw[0]), int(token_hw[1])):
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": f"Token grid mismatch: got {token_hw_local}, expected {token_hw}", "request_id": request_id},
+                    )
                 token_hw = token_hw_local
-            elif (int(token_hw_local[0]), int(token_hw_local[1])) != (int(token_hw[0]), int(token_hw[1])):
-                return JSONResponse(
-                    status_code=400,
-                    content={"error": f"Token grid mismatch: got {token_hw_local}, expected {token_hw}", "request_id": request_id},
-                )
-            token_hw = token_hw_local
-            all_emb.append(emb)
+                all_emb.append(emb)
+        else:
+            for uf in images or []:
+                img = _read_image_file(uf)
+                emb, token_hw_local = _extractor.extract(img)
+                if token_hw is None:
+                    token_hw = token_hw_local
+                elif (int(token_hw_local[0]), int(token_hw_local[1])) != (int(token_hw[0]), int(token_hw[1])):
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": f"Token grid mismatch: got {token_hw_local}, expected {token_hw}", "request_id": request_id},
+                    )
+                token_hw = token_hw_local
+                all_emb.append(emb)
 
         if not all_emb:
             return JSONResponse(status_code=400, content={"error": "No valid images", "request_id": request_id})
@@ -733,23 +796,295 @@ def infer(
         return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
 
+@app.post("/infer_dataset")
+def infer_dataset(payload: Dict[str, Any], request: Request):
+    try:
+        _raw_recipe = payload.get("recipe_id")
+        recipe_from_payload = _raw_recipe if isinstance(_raw_recipe, str) else None
+        request_id, recipe_resolved = _resolve_request_context(request, recipe_from_payload)
+
+        role_id = payload["role_id"]
+        roi_id = payload["roi_id"]
+        model_key = payload.get("model_key") or roi_id
+        labels = payload.get("labels") or ["ok", "ng"]
+        include_heatmap = bool(payload.get("include_heatmap", False))
+        default_mm_per_px = payload.get("default_mm_per_px")
+
+        cached = _get_patchcore_memory_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key)
+        if cached is None:
+            raise HTTPException(status_code=400, detail="Memoria no encontrada. Ejecuta /fit_ok antes de /infer_dataset.")
+        mem, token_hw_mem, metadata = cached
+
+        calib = _get_calib_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key)
+        thr = calib.get("threshold") if calib else None
+        area_mm2_thr = calib.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)) if calib else SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)
+        p_score = calib.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)) if calib else SETTINGS.get("inference", {}).get("score_percentile", 99)
+
+        listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
+        items: list[dict[str, Any]] = []
+        n_errors = 0
+
+        for label in labels:
+            files = listing.get("classes", {}).get(label, {}).get("files", []) or []
+            for fn in files:
+                item: dict[str, Any] = {
+                    "label": label,
+                    "filename": fn,
+                    "mm_per_px": None,
+                    "score": None,
+                    "threshold": float(thr) if thr is not None else None,
+                    "regions": [],
+                    "n_regions": 0,
+                    "error": None,
+                }
+                try:
+                    p = store.resolve_dataset_file_existing(role_id, roi_id, label, fn, recipe_id=recipe_resolved)
+                    if p is None:
+                        raise FileNotFoundError("file not found")
+
+                    meta = store.load_dataset_meta(role_id, roi_id, label, fn, recipe_id=recipe_resolved, default={}) or {}
+                    mm_value = meta.get("mm_per_px", default_mm_per_px)
+                    if mm_value is None:
+                        raise ValueError("mm_per_px missing and default_mm_per_px not provided")
+                    mm = _validate_mm_per_px(mm_value)
+
+                    shape_obj = _parse_shape_value(meta.get("shape_json"))
+                    img = _read_image_path(p)
+
+                    engine = InferenceEngine(
+                        _extractor,
+                        mem,
+                        token_hw_mem,
+                        mm_per_px=float(mm),
+                        memory_metadata=metadata,
+                    )
+
+                    token_shape_expected = (int(token_hw_mem[0]), int(token_hw_mem[1]))
+                    res = engine.run(
+                        img,
+                        token_shape_expected=token_shape_expected,
+                        shape=shape_obj,
+                        threshold=thr,
+                        area_mm2_thr=float(area_mm2_thr),
+                        score_percentile=int(p_score),
+                    )
+
+                    heat_u8 = res.get("heatmap_u8")
+                    heatmap_png_b64 = None
+                    if include_heatmap and heat_u8 is not None:
+                        heat_u8 = np.asarray(heat_u8, dtype=np.uint8)
+                        try:
+                            ok, buf = cv2.imencode(".png", heat_u8)
+                            if ok:
+                                heatmap_png_b64 = base64_from_bytes(buf.tobytes())
+                        except Exception:
+                            from PIL import Image
+                            import io
+                            im = Image.fromarray(heat_u8)
+                            bio = io.BytesIO()
+                            im.save(bio, format="PNG")
+                            heatmap_png_b64 = base64_from_bytes(bio.getvalue())
+
+                    regions = res.get("regions", []) or []
+                    item.update(
+                        {
+                            "mm_per_px": float(mm),
+                            "score": float(res.get("score", 0.0)),
+                            "regions": regions,
+                            "n_regions": len(regions),
+                        }
+                    )
+                    if include_heatmap:
+                        item["heatmap_png_base64"] = heatmap_png_b64
+                except Exception as exc:
+                    item["error"] = str(exc)
+                    n_errors += 1
+                items.append(item)
+
+        return {
+            "status": "ok",
+            "role_id": role_id,
+            "roi_id": roi_id,
+            "recipe_id": recipe_resolved,
+            "model_key": model_key,
+            "request_id": request_id,
+            "n_total": len(items),
+            "n_errors": n_errors,
+            "items": items,
+        }
+    except HTTPException:
+        raise
+    except (KeyError, ValueError) as e:
+        request_id2, recipe_id2 = _resolve_request_context_safe(
+            request,
+            payload.get("recipe_id") if isinstance(payload, dict) else None,
+        )
+        return JSONResponse(status_code=400, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
+    except Exception as e:
+        request_id2, recipe_id2 = _resolve_request_context_safe(
+            request,
+            payload.get("recipe_id") if isinstance(payload, dict) else None,
+        )
+        return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
+
+
+@app.post("/calibrate_dataset")
+def calibrate_dataset(payload: Dict[str, Any], request: Request):
+    try:
+        _raw_recipe = payload.get("recipe_id")
+        recipe_from_payload = _raw_recipe if isinstance(_raw_recipe, str) else None
+        request_id, recipe_resolved = _resolve_request_context(request, recipe_from_payload)
+
+        role_id = payload["role_id"]
+        roi_id = payload["roi_id"]
+        model_key = payload.get("model_key") or roi_id
+        score_percentile = int(payload.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)))
+        area_mm2_thr = float(payload.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)))
+        default_mm_per_px = payload.get("default_mm_per_px")
+        require_ng = bool(payload.get("require_ng", True))
+
+        cached = _get_patchcore_memory_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key)
+        if cached is None:
+            raise HTTPException(status_code=400, detail="Memoria no encontrada. Ejecuta /fit_ok antes de /calibrate_dataset.")
+        mem, token_hw_mem, metadata = cached
+
+        listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
+        ok_files = listing.get("classes", {}).get("ok", {}).get("files", []) or []
+        ng_files = listing.get("classes", {}).get("ng", {}).get("files", []) or []
+
+        ok_scores: list[float] = []
+        ng_scores: list[float] = []
+
+        def _score_for(label: str, filename: str) -> Optional[float]:
+            try:
+                p = store.resolve_dataset_file_existing(role_id, roi_id, label, filename, recipe_id=recipe_resolved)
+                if p is None:
+                    return None
+                meta = store.load_dataset_meta(role_id, roi_id, label, filename, recipe_id=recipe_resolved, default={}) or {}
+                mm_value = meta.get("mm_per_px", default_mm_per_px)
+                if mm_value is None:
+                    return None
+                mm = _validate_mm_per_px(mm_value)
+                shape_obj = _parse_shape_value(meta.get("shape_json"))
+                img = _read_image_path(p)
+                engine = InferenceEngine(
+                    _extractor,
+                    mem,
+                    token_hw_mem,
+                    mm_per_px=float(mm),
+                    memory_metadata=metadata,
+                )
+                token_shape_expected = (int(token_hw_mem[0]), int(token_hw_mem[1]))
+                res = engine.run(
+                    img,
+                    token_shape_expected=token_shape_expected,
+                    shape=shape_obj,
+                    threshold=None,
+                    area_mm2_thr=float(area_mm2_thr),
+                    score_percentile=int(score_percentile),
+                )
+                return float(res.get("score", 0.0))
+            except Exception:
+                return None
+
+        for fn in ok_files:
+            score = _score_for("ok", fn)
+            if score is not None:
+                ok_scores.append(score)
+
+        for fn in ng_files:
+            score = _score_for("ng", fn)
+            if score is not None:
+                ng_scores.append(score)
+
+        if not ok_scores:
+            raise HTTPException(status_code=400, detail="No valid OK samples for calibration.")
+        if require_ng and not ng_scores:
+            raise HTTPException(status_code=400, detail="No NG samples available for calibration.")
+
+        t = choose_threshold(
+            np.asarray(ok_scores, dtype=float),
+            np.asarray(ng_scores, dtype=float) if ng_scores else None,
+            percentile=score_percentile,
+        )
+
+        calib = {
+            "threshold": float(t),
+            "score_percentile": int(score_percentile),
+            "area_mm2_thr": float(area_mm2_thr),
+            "recipe_id": recipe_resolved,
+            "role_id": role_id,
+            "roi_id": roi_id,
+            "model_key": model_key,
+            "created_at_utc": datetime.datetime.utcnow().isoformat() + "Z",
+        }
+        store.save_calib(role_id, roi_id, calib, recipe_id=recipe_resolved, model_key=model_key)
+        _invalidate_calib_cache(recipe_resolved, model_key, role_id, roi_id)
+
+        return {
+            "status": "ok",
+            "threshold": float(t),
+            "score_percentile": int(score_percentile),
+            "area_mm2_thr": float(area_mm2_thr),
+            "n_ok": len(ok_scores),
+            "n_ng": len(ng_scores),
+            "request_id": request_id,
+            "recipe_id": recipe_resolved,
+            "role_id": role_id,
+            "roi_id": roi_id,
+            "model_key": model_key,
+        }
+    except HTTPException:
+        raise
+    except (KeyError, ValueError) as e:
+        request_id2, recipe_id2 = _resolve_request_context_safe(
+            request,
+            payload.get("recipe_id") if isinstance(payload, dict) else None,
+        )
+        return JSONResponse(status_code=400, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
+    except Exception as e:
+        request_id2, recipe_id2 = _resolve_request_context_safe(
+            request,
+            payload.get("recipe_id") if isinstance(payload, dict) else None,
+        )
+        return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
+
 @app.post("/datasets/ok/upload")
-def datasets_ok_upload(
+async def datasets_ok_upload(
     request: Request,
     role_id: str = Form(...),
     roi_id: str = Form(...),
     images: List[UploadFile] = File(...),
+    metas: Optional[List[str]] = Form(None),
     recipe_id: Optional[str] = Form(None),
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
     slog("datasets.upload.request", label="ok", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id, n_files=len(images))
     t0 = time.time()
+    if metas is not None and len(metas) not in (0, len(images)):
+        raise HTTPException(status_code=400, detail="metas length must match images length")
     saved = []
-    for up in images:
-        data = up.file.read()
-        ext = Path(up.filename).suffix or ".png"
+    for i, up in enumerate(images):
+        data = await up.read()
+        ext = Path(up.filename or "x.png").suffix or ".png"
         path = store.save_dataset_image(role_id, roi_id, "ok", data, ext, recipe_id=recipe_resolved)
         saved.append(Path(path).name)
+
+        meta_obj: dict[str, Any] = {}
+        if metas is not None and i < len(metas) and metas[i]:
+            meta_obj = json.loads(metas[i])
+
+        meta_obj.setdefault("role_id", role_id)
+        meta_obj.setdefault("roi_id", roi_id)
+        meta_obj.setdefault("label", "ok")
+        meta_obj.setdefault("filename", path.name)
+        meta_obj.setdefault("recipe_id", recipe_resolved)
+        meta_obj.setdefault("created_at_utc", datetime.datetime.utcnow().isoformat() + "Z")
+
+        if "mm_per_px" in meta_obj:
+            _validate_mm_per_px(meta_obj["mm_per_px"])
+
+        store.save_dataset_meta(role_id, roi_id, "ok", path.name, meta_obj, recipe_id=recipe_resolved)
     slog(
         "datasets.upload.response",
         label="ok",
@@ -764,22 +1099,41 @@ def datasets_ok_upload(
 
 
 @app.post("/datasets/ng/upload")
-def datasets_ng_upload(
+async def datasets_ng_upload(
     request: Request,
     role_id: str = Form(...),
     roi_id: str = Form(...),
     images: List[UploadFile] = File(...),
+    metas: Optional[List[str]] = Form(None),
     recipe_id: Optional[str] = Form(None),
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
     slog("datasets.upload.request", label="ng", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id, n_files=len(images))
     t0 = time.time()
+    if metas is not None and len(metas) not in (0, len(images)):
+        raise HTTPException(status_code=400, detail="metas length must match images length")
     saved = []
-    for up in images:
-        data = up.file.read()
-        ext = Path(up.filename).suffix or ".png"
+    for i, up in enumerate(images):
+        data = await up.read()
+        ext = Path(up.filename or "x.png").suffix or ".png"
         path = store.save_dataset_image(role_id, roi_id, "ng", data, ext, recipe_id=recipe_resolved)
         saved.append(Path(path).name)
+
+        meta_obj: dict[str, Any] = {}
+        if metas is not None and i < len(metas) and metas[i]:
+            meta_obj = json.loads(metas[i])
+
+        meta_obj.setdefault("role_id", role_id)
+        meta_obj.setdefault("roi_id", roi_id)
+        meta_obj.setdefault("label", "ng")
+        meta_obj.setdefault("filename", path.name)
+        meta_obj.setdefault("recipe_id", recipe_resolved)
+        meta_obj.setdefault("created_at_utc", datetime.datetime.utcnow().isoformat() + "Z")
+
+        if "mm_per_px" in meta_obj:
+            _validate_mm_per_px(meta_obj["mm_per_px"])
+
+        store.save_dataset_meta(role_id, roi_id, "ng", path.name, meta_obj, recipe_id=recipe_resolved)
     slog(
         "datasets.upload.response",
         label="ng",
@@ -809,6 +1163,40 @@ def datasets_list(request: Request, role_id: str, roi_id: str, recipe_id: Option
         classes=list((data.get("classes") or {}).keys()),
     )
     return data
+
+
+@app.get("/datasets/file")
+def datasets_get_file(
+    request: Request,
+    role_id: str,
+    roi_id: str,
+    label: str,
+    filename: str,
+    recipe_id: Optional[str] = None,
+):
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    p = store.resolve_dataset_file_existing(role_id, roi_id, label, filename, recipe_id=recipe_resolved)
+    if p is None:
+        raise HTTPException(status_code=404, detail="file not found")
+    return FileResponse(str(p), filename=p.name)
+
+
+@app.get("/datasets/meta")
+def datasets_get_meta(
+    request: Request,
+    role_id: str,
+    roi_id: str,
+    label: str,
+    filename: str,
+    recipe_id: Optional[str] = None,
+):
+    request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    meta = store.load_dataset_meta(role_id, roi_id, label, filename, recipe_id=recipe_resolved, default=None)
+    if meta is None:
+        raise HTTPException(status_code=404, detail="meta not found")
+    meta.setdefault("request_id", request_id)
+    meta.setdefault("recipe_id", recipe_resolved)
+    return meta
 
 
 @app.get("/manifest")

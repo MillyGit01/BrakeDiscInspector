@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
 using BrakeDiscInspector_GUI_ROI.Workflow;
@@ -9,90 +8,79 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
 {
     public sealed class BatchCellStatusToBrushConverter : IValueConverter
     {
+        // Ajusta aquí si quieres otros colores
+        private static readonly Brush OkBrush = Brushes.LimeGreen;
+        private static readonly Brush NokBrush = Brushes.Tomato;
+        private static readonly Brush UnknownBrush = Brushes.Gray;
+        private static readonly Brush AnchorFailBrush = Brushes.Orange;
+        private static readonly Brush SkippedBrush = Brushes.SlateGray;
+
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            if (targetType != typeof(Brush) && !targetType.IsAssignableFrom(typeof(Brush)))
-            {
-                return DependencyProperty.UnsetValue;
-            }
+            if (value is null)
+                return UnknownBrush;
 
-            if (value == null || value == DependencyProperty.UnsetValue)
-            {
-                return Brushes.Gray;
-            }
-
-            if (value is bool boolValue)
-            {
-                return boolValue ? Brushes.LimeGreen : Brushes.IndianRed;
-            }
-
+            // 1) Caso ideal: enum BatchCellStatus
             if (value is BatchCellStatus status)
-            {
                 return MapStatus(status);
-            }
 
-            if (value is int intValue && Enum.IsDefined(typeof(BatchCellStatus), intValue))
-            {
-                return MapStatus((BatchCellStatus)intValue);
-            }
+            // 2) Legacy: bool (si tu UI estaba enlazando a bool)
+            if (value is bool b)
+                return b ? OkBrush : NokBrush;
 
-            if (value is string textValue)
-            {
-                return MapStatusText(textValue);
-            }
+            // 3) Legacy: string ("OK"/"NOK"/"NG"/etc). SIN CONTAINS.
+            if (value is string s)
+                return MapStatusText(s);
 
-            if (value is Enum)
-            {
-                return MapStatusText(value.ToString());
-            }
-
-            return Brushes.Gray;
+            // 4) Fallback: intenta ToString()
+            return MapStatusText(value.ToString());
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return DependencyProperty.UnsetValue;
-        }
+            => Binding.DoNothing;
 
         private static Brush MapStatus(BatchCellStatus status)
         {
             return status switch
             {
-                BatchCellStatus.Ok => Brushes.LimeGreen,
-                BatchCellStatus.Nok => Brushes.IndianRed,
-                BatchCellStatus.AnchorFail => Brushes.IndianRed,
-                BatchCellStatus.Skipped => Brushes.Gray,
-                _ => Brushes.Gray
+                BatchCellStatus.Ok => OkBrush,
+                BatchCellStatus.Nok => NokBrush,
+                BatchCellStatus.AnchorFail => AnchorFailBrush,
+                BatchCellStatus.Skipped => SkippedBrush,
+                BatchCellStatus.Unknown => UnknownBrush,
+                _ => UnknownBrush
             };
         }
 
-        private static Brush MapStatusText(string text)
+        private static Brush MapStatusText(string statusText)
         {
-            if (string.IsNullOrWhiteSpace(text) || text.Trim() == "-")
-            {
-                return Brushes.Gray;
-            }
+            if (string.IsNullOrWhiteSpace(statusText))
+                return UnknownBrush;
 
-            if (text.Trim().Equals("NOK", StringComparison.OrdinalIgnoreCase)
-                || text.Trim().Equals("NG", StringComparison.OrdinalIgnoreCase)
-                || text.Trim().Equals("FAIL", StringComparison.OrdinalIgnoreCase)
-                || text.Trim().Replace(" ", string.Empty).Equals("ANCHORFAIL", StringComparison.OrdinalIgnoreCase))
-            {
-                return Brushes.IndianRed;
-            }
+            var t = statusText.Trim();
 
-            if (text.Trim().Equals("OK", StringComparison.OrdinalIgnoreCase)
-                || text.Trim().Equals("PASS", StringComparison.OrdinalIgnoreCase))
-            {
-                return Brushes.LimeGreen;
-            }
+            // Comparación EXACTA (sin Contains)
+            if (string.Equals(t, "OK", StringComparison.OrdinalIgnoreCase))
+                return OkBrush;
 
-            if (text.Trim().Equals("SKIPPED", StringComparison.OrdinalIgnoreCase))
-            {
-                return Brushes.Gray;
-            }
+            if (string.Equals(t, "NOK", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(t, "NG", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(t, "FAIL", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(t, "KO", StringComparison.OrdinalIgnoreCase))
+                return NokBrush;
 
-            return Brushes.Gray;
+            if (string.Equals(t, "ANCHORFAIL", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(t, "ANCHOR_FAIL", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(t, "ANCHOR FAIL", StringComparison.OrdinalIgnoreCase))
+                return AnchorFailBrush;
+
+            if (string.Equals(t, "SKIPPED", StringComparison.OrdinalIgnoreCase))
+                return SkippedBrush;
+
+            if (string.Equals(t, "UNKNOWN", StringComparison.OrdinalIgnoreCase))
+                return UnknownBrush;
+
+            return UnknownBrush;
         }
     }
 }

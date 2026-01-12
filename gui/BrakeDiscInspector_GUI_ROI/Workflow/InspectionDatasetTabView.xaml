@@ -32,17 +32,17 @@
             <TextBox Text="{Binding Name}" Width="200" Margin="0,0,12,0"/>
         </StackPanel>
 
-        <CheckBox Grid.Row="1" Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+        <CheckBox Grid.Row="1" Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,4,0,4"/>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,4,0,4">
             <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
             <TextBox Text="{Binding ModelKey}" Width="220" Margin="0,0,12,0"/>
         </StackPanel>
 
-        <CheckBox Grid.Row="3" Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+        <CheckBox Grid.Row="3" Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center" Margin="0,4,0,4"/>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
-            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,4,0,4">
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
                 <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <ComboBox Width="90"
                           SelectedValuePath="Tag"
@@ -107,10 +107,6 @@
             <TextBlock Text="  "/>
             <TextBlock Text="{Binding DatasetCountsText}"/>
         </StackPanel>
-
-        <ProgressBar Grid.Row="7" Height="4" Margin="0,4,0,0"
-                     IsIndeterminate="True"
-                     Visibility="{Binding IsDatasetLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
         <StackPanel Grid.Row="8" Margin="0,8,0,0">
             <w:DatasetPreviewStripView Title="OK dataset"

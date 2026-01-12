@@ -60,6 +60,8 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
             {
                 BatchCellStatus.Ok => Brushes.LimeGreen,
                 BatchCellStatus.Nok => Brushes.IndianRed,
+                BatchCellStatus.AnchorFail => Brushes.IndianRed,
+                BatchCellStatus.Skipped => Brushes.Gray,
                 _ => Brushes.Gray
             };
         }
@@ -73,7 +75,8 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
 
             if (text.Trim().Equals("NOK", StringComparison.OrdinalIgnoreCase)
                 || text.Trim().Equals("NG", StringComparison.OrdinalIgnoreCase)
-                || text.Trim().Equals("FAIL", StringComparison.OrdinalIgnoreCase))
+                || text.Trim().Equals("FAIL", StringComparison.OrdinalIgnoreCase)
+                || text.Trim().Replace(" ", string.Empty).Equals("ANCHORFAIL", StringComparison.OrdinalIgnoreCase))
             {
                 return Brushes.IndianRed;
             }
@@ -84,17 +87,12 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
                 return Brushes.LimeGreen;
             }
 
-            return Brushes.Gray;
-        }
-
-        private static Brush MapStatus(BatchCellStatus status)
-        {
-            return status switch
+            if (text.Trim().Equals("SKIPPED", StringComparison.OrdinalIgnoreCase))
             {
-                BatchCellStatus.Ok => Brushes.LimeGreen,
-                BatchCellStatus.Nok => Brushes.IndianRed,
-                _ => Brushes.Gray
-            };
+                return Brushes.Gray;
+            }
+
+            return Brushes.Gray;
         }
     }
 }

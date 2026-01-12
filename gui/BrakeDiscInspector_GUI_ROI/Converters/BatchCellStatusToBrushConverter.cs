@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using BrakeDiscInspector_GUI_ROI.Workflow;
 
 namespace BrakeDiscInspector_GUI_ROI.Converters
 {
@@ -23,6 +24,16 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
             if (value is bool boolValue)
             {
                 return boolValue ? Brushes.LimeGreen : Brushes.IndianRed;
+            }
+
+            if (value is BatchCellStatus status)
+            {
+                return MapStatus(status);
+            }
+
+            if (value is int intValue && Enum.IsDefined(typeof(BatchCellStatus), intValue))
+            {
+                return MapStatus((BatchCellStatus)intValue);
             }
 
             if (value is string textValue)
@@ -50,19 +61,30 @@ namespace BrakeDiscInspector_GUI_ROI.Converters
                 return Brushes.Gray;
             }
 
-            if (text.IndexOf("OK", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("PASS", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return Brushes.LimeGreen;
-            }
-
-            if (text.IndexOf("NG", StringComparison.OrdinalIgnoreCase) >= 0
-                || text.IndexOf("FAIL", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (text.Trim().Equals("NOK", StringComparison.OrdinalIgnoreCase)
+                || text.Trim().Equals("NG", StringComparison.OrdinalIgnoreCase)
+                || text.Trim().Equals("FAIL", StringComparison.OrdinalIgnoreCase))
             {
                 return Brushes.IndianRed;
             }
 
+            if (text.Trim().Equals("OK", StringComparison.OrdinalIgnoreCase)
+                || text.Trim().Equals("PASS", StringComparison.OrdinalIgnoreCase))
+            {
+                return Brushes.LimeGreen;
+            }
+
             return Brushes.Gray;
+        }
+
+        private static Brush MapStatus(BatchCellStatus status)
+        {
+            return status switch
+            {
+                BatchCellStatus.Ok => Brushes.LimeGreen,
+                BatchCellStatus.Nok => Brushes.IndianRed,
+                _ => Brushes.Gray
+            };
         }
     }
 }

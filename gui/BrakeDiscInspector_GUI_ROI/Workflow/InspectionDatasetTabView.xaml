@@ -12,7 +12,7 @@
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     </UserControl.Resources>
-    <Grid Margin="0,8,0,0">
+    <Grid Margin="0,8,0,-462">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -27,21 +27,21 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel Orientation="Horizontal" Height="45">
             <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
             <TextBox Text="{Binding Name}" Width="200" Margin="0,0,12,0"/>
         </StackPanel>
 
-        <CheckBox Grid.Row="1" Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+        <CheckBox Grid.Row="1" Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,8,0,0" Height="45"/>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0" Height="45">
             <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
             <TextBox Text="{Binding ModelKey}" Width="220" Margin="0,0,12,0"/>
         </StackPanel>
 
-        <CheckBox Grid.Row="3" Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center" Margin="0,8,0,0"/>
+        <CheckBox Grid.Row="3" Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center" Margin="0,8,0,0" Height="45"/>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0" Height="45">
             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                 <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <ComboBox Width="90"
@@ -57,7 +57,7 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel Grid.Row="5" Margin="0,8,0,0">
+        <StackPanel Grid.Row="5" Margin="0,8,0,0" Height="88">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -69,7 +69,7 @@
                          Margin="0,0,8,0"
                          VerticalAlignment="Center"
                          HorizontalAlignment="Stretch"
-                         FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+                         FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=UserControl}}" Height="45"/>
             </Grid>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
                 <ui:Button Padding="12,4"
@@ -91,7 +91,7 @@
         </StackPanel>
 
         <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="{Binding DatasetStatus}">
+            <TextBlock Text="{Binding DatasetStatus}" FontSize="16">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -104,13 +104,9 @@
                     </Style>
                 </TextBlock.Style>
             </TextBlock>
-            <TextBlock Text="  "/>
+            <TextBlock Text="  " FontSize="16"/>
             <TextBlock Text="{Binding DatasetCountsText}"/>
         </StackPanel>
-
-        <ProgressBar Grid.Row="7" Height="4" Margin="0,4,0,0"
-                     IsIndeterminate="True"
-                     Visibility="{Binding IsDatasetLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
         <StackPanel Grid.Row="8" Margin="0,8,0,0">
             <w:DatasetPreviewStripView Title="OK dataset"
@@ -124,25 +120,24 @@
 
         <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
             <ui:Button Padding="12,4"
-                       Margin="0,0,8,0"
                        Tag="{Binding Index}"
-                       Click="LoadModelButton_Click">
+                       Click="LoadModelButton_Click" Width="92">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.ArrowDownload24}" Margin="0,0,8,0"/>
-                    <TextBlock Text="Load model" VerticalAlignment="Center"/>
+                    <TextBlock Text="Load model" VerticalAlignment="Center" HorizontalAlignment="Left"/>
                 </StackPanel>
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                       Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                       Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}" Width="92">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
-                    <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>
+                    <TextBlock Text="Delete" VerticalAlignment="Center"/>
                 </StackPanel>
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                       Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                       Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}" Width="92">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Rocket24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Train" VerticalAlignment="Center"/>
@@ -150,28 +145,28 @@
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                       Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                       Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}" Width="92">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Wrench24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Calibrate" VerticalAlignment="Center"/>
                 </StackPanel>
             </ui:Button>
             <ui:Button Padding="12,4"
-                       Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                       Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}" Width="92">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Search24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Evaluate ROI" VerticalAlignment="Center"/>
                 </StackPanel>
             </ui:Button>
         </StackPanel>
 
-        <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="10" Orientation="Horizontal" Margin="0,20,0,0" Height="45" HorizontalAlignment="Left">
             <TextBlock Text="Score:"/>
             <TextBlock Text="{Binding LastScore, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
             <TextBlock Text="Threshold:"/>
             <TextBlock Text="{Binding CalibratedThreshold, StringFormat={}{0:0.000}}" Margin="4,0,12,0"/>
             <TextBlock Text="Result:"/>
-            <TextBlock Margin="4,0,0,0">
+            <TextBlock Margin="4,0,0,0" FontSize="16">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="Text" Value="—"/>

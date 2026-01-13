@@ -4910,7 +4910,6 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool GetShowMaster2Pattern() => ViewModel?.ShowMaster2Pattern ?? true;
         private bool GetShowMaster2Inspection() => ViewModel?.ShowMaster2Inspection ?? true;
         private bool GetShowInspectionRoi() => ViewModel?.ShowInspectionRoi ?? true;
-        private bool IsImageLoaded() => ViewModel?.IsImageLoaded == true;
 
         private bool IsInspectionRoiEnabled(int index)
         {
@@ -5936,7 +5935,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
-            if (!IsImageLoaded())
+            if (!IsImageLoaded)
             {
                 ClearPersistedRoisFromCanvas();
                 return;
@@ -7891,7 +7890,7 @@ namespace BrakeDiscInspector_GUI_ROI
             int count = 0;
             RoiHudStack.Children.Clear();
 
-            if (!IsImageLoaded())
+            if (!IsImageLoaded)
             {
                 RoiHudOverlay.Visibility = Visibility.Collapsed;
                 return;

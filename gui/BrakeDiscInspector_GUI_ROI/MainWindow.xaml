@@ -2093,7 +2093,7 @@
                         IsHitTestVisible="False"
                         Panel.ZIndex="950">
                     <TextBlock Text="{Binding LayoutNameDisplay}"
-                               FontSize="12"
+                               FontSize="30"
                                FontWeight="SemiBold"
                                Foreground="White"
                                TextTrimming="CharacterEllipsis"/>

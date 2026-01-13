@@ -2572,6 +2572,11 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             get
             {
+                if (ViewModel?.IsImageLoaded != true)
+                {
+                    yield break;
+                }
+
                 if (_layout.Master1Pattern != null && _showMaster1PatternOverlay)
                     yield return _layout.Master1Pattern;
 
@@ -2587,7 +2592,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 for (int index = 1; index <= 4; index++)
                 {
                     var inspection = GetInspectionSlotModel(index);
-                    if (inspection != null && IsRoiSaved(inspection))
+                    if (inspection != null && IsRoiSaved(inspection) && IsInspectionRoiEnabled(index))
                     {
                         yield return inspection;
                     }
@@ -4905,6 +4910,29 @@ namespace BrakeDiscInspector_GUI_ROI
         private bool GetShowMaster2Pattern() => ViewModel?.ShowMaster2Pattern ?? true;
         private bool GetShowMaster2Inspection() => ViewModel?.ShowMaster2Inspection ?? true;
         private bool GetShowInspectionRoi() => ViewModel?.ShowInspectionRoi ?? true;
+        private bool IsImageLoaded() => ViewModel?.IsImageLoaded == true;
+
+        private bool IsInspectionRoiEnabled(int index)
+        {
+            return ViewModel?.InspectionRois?.FirstOrDefault(r => r.Index == index)?.Enabled == true;
+        }
+
+        private bool IsInspectionRoiEnabled(RoiModel roi)
+        {
+            if (roi == null)
+            {
+                return false;
+            }
+
+            var index = TryParseInspectionIndex(roi);
+            if (index.HasValue)
+            {
+                return IsInspectionRoiEnabled(index.Value);
+            }
+
+            var config = ViewModel?.InspectionRois?.FirstOrDefault(r => string.Equals(r.Id, roi.Id, StringComparison.OrdinalIgnoreCase));
+            return config?.Enabled == true;
+        }
 
         private bool GetRoiVisibility(RoiRole role) => role switch
         {
@@ -5905,6 +5933,12 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_suspendManualOverlayInvalidations)
             {
                 AppendLog("[batch] skip overlay redraw (batch running)");
+                return;
+            }
+
+            if (!IsImageLoaded())
+            {
+                ClearPersistedRoisFromCanvas();
                 return;
             }
 
@@ -7857,6 +7891,12 @@ namespace BrakeDiscInspector_GUI_ROI
             int count = 0;
             RoiHudStack.Children.Clear();
 
+            if (!IsImageLoaded())
+            {
+                RoiHudOverlay.Visibility = Visibility.Collapsed;
+                return;
+            }
+
             // Masters (Patterns)
             if (_layout.Master1Pattern != null && IsRoiSaved(_layout.Master1Pattern))
             {
@@ -7891,7 +7931,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // Inspection ROIs (saved only)
             var savedInspectionRois = CollectSavedInspectionRois();
-            foreach (var roi in savedInspectionRois)
+            foreach (var roi in savedInspectionRois.Where(IsInspectionRoiEnabled))
             {
                 RoiHudStack.Children.Add(CreateRoiHudItem(roi));
                 count++;
@@ -9035,6 +9075,7 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             Dispatcher.Invoke(() =>
             {
+                RedrawOverlaySafe();
                 RequestRoiVisibilityRefresh();
                 UpdateRoiHud();
             });

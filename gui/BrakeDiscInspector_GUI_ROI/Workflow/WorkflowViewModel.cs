@@ -1333,11 +1333,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (_inspectionRois != null)
             {
-                _inspectionRois.CollectionChanged -= InspectionRoisCollectionChanged;
-                foreach (var roi in _inspectionRois)
-                {
-                    roi.PropertyChanged -= InspectionRoiPropertyChanged;
-                }
+                DetachInspectionRoiHandlers(_inspectionRois);
             }
 
             _inspectionRois = rois;
@@ -1346,20 +1342,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (_inspectionRois != null)
             {
-                _inspectionRois.CollectionChanged += InspectionRoisCollectionChanged;
+                AttachInspectionRoiHandlers(_inspectionRois);
                 foreach (var roi in _inspectionRois)
                 {
-                    if (string.IsNullOrWhiteSpace(roi.Id))
-                    {
-                        roi.Id = $"Inspection_{roi.Index}";
-                    }
-                    roi.PropertyChanged += InspectionRoiPropertyChanged;
-                    if (string.IsNullOrWhiteSpace(roi.DatasetStatus))
-                    {
-                        roi.DatasetStatus = "Syncing dataset...";
-                    }
-                    roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                    roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
+                    InitializeInspectionRoi(roi);
                     if (_initialized && !_isInitializing)
                     {
                         _ = RefreshRoiDatasetStateAsync(roi);
@@ -1377,6 +1363,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             ClearBaselines();
             UpdateSelectedRoiState();
+            InvokeOnUi(RedrawOverlays);
             EvaluateAllRoisCommand.RaiseCanExecuteChanged();
             UpdateGlobalBadge();
         }
@@ -1600,7 +1587,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 foreach (InspectionRoiConfig roi in e.OldItems)
                 {
-                    roi.PropertyChanged -= InspectionRoiPropertyChanged;
+                    DetachInspectionRoiHandler(roi);
                     _lastFitResultsByRoi.Remove(roi);
                     _lastCalibResultsByRoi.Remove(roi);
                 }
@@ -1610,7 +1597,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 foreach (InspectionRoiConfig roi in e.NewItems)
                 {
-                    roi.PropertyChanged += InspectionRoiPropertyChanged;
+                    AttachInspectionRoiHandler(roi);
+                    InitializeInspectionRoi(roi);
                 }
             }
 
@@ -1619,8 +1607,78 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 SelectedInspectionRoi = _inspectionRois.FirstOrDefault();
             }
 
+            InvokeOnUi(RedrawOverlays);
             EvaluateAllRoisCommand.RaiseCanExecuteChanged();
             UpdateGlobalBadge();
+        }
+
+        private void AttachInspectionRoiHandlers(ObservableCollection<InspectionRoiConfig> rois)
+        {
+            if (rois == null)
+            {
+                return;
+            }
+
+            rois.CollectionChanged += InspectionRoisCollectionChanged;
+            foreach (var roi in rois)
+            {
+                AttachInspectionRoiHandler(roi);
+            }
+        }
+
+        private void DetachInspectionRoiHandlers(ObservableCollection<InspectionRoiConfig> rois)
+        {
+            if (rois == null)
+            {
+                return;
+            }
+
+            rois.CollectionChanged -= InspectionRoisCollectionChanged;
+            foreach (var roi in rois)
+            {
+                DetachInspectionRoiHandler(roi);
+            }
+        }
+
+        private void AttachInspectionRoiHandler(InspectionRoiConfig roi)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            roi.PropertyChanged += InspectionRoiPropertyChanged;
+        }
+
+        private void DetachInspectionRoiHandler(InspectionRoiConfig roi)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            roi.PropertyChanged -= InspectionRoiPropertyChanged;
+        }
+
+        private void InitializeInspectionRoi(InspectionRoiConfig roi)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(roi.Id))
+            {
+                roi.Id = $"Inspection_{roi.Index}";
+            }
+
+            if (string.IsNullOrWhiteSpace(roi.DatasetStatus))
+            {
+                roi.DatasetStatus = "Syncing dataset...";
+            }
+
+            roi.OkPreview = new ObservableCollection<DatasetPreviewItem>();
+            roi.NgPreview = new ObservableCollection<DatasetPreviewItem>();
         }
 
         private void SetInspectionRoi(ref RoiModel? field, RoiModel? value, string propertyName)
@@ -2381,8 +2439,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (e.PropertyName == nameof(InspectionRoiConfig.Enabled))
             {
-                EvaluateAllRoisCommand.RaiseCanExecuteChanged();
-                EvaluateSelectedRoiCommand.RaiseCanExecuteChanged();
+                UpdateSelectedRoiState();
+                InvokeOnUi(RedrawOverlays);
             }
 
             if (e.PropertyName == nameof(InspectionRoiConfig.HasFitOk) && sender is InspectionRoiConfig changedFit && !changedFit.HasFitOk)

@@ -2117,27 +2117,19 @@
                   HorizontalAlignment="Right"
                   VerticalAlignment="Bottom"
                   Margin="16"
-                  Background="#CC0F0F0F"
                   CornerRadius="8"
                   Padding="10"
                   IsHitTestVisible="True">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <CheckBox x:Name="ChkHeatmap"
-                        Content="Heatmap"
-                        IsChecked="True"
-                        Margin="0,0,8,0"/>
-                        <TextBlock x:Name="ResultLabel"
-                         Text="Result: --"
-                         Foreground="LightGreen"
-                         FontFamily="Segoe UI"
-                         FontWeight="SemiBold"
-                         Margin="0,0,8,0"/>
                         <TextBlock x:Name="HeatmapScaleLabel"
                          Text="Heatmap Scale: 1.00"
-                         Foreground="#39FF14"
                          FontFamily="Segoe UI"
                          FontWeight="SemiBold"
-                         Margin="0,0,8,0"/>
+                         Margin="0,0,8,0" FontSize="16">
+                            <TextBlock.Foreground>
+                                <SolidColorBrush Color="{DynamicResource {x:Static SystemColors.ActiveCaptionTextColorKey}}"/>
+                            </TextBlock.Foreground>
+                        </TextBlock>
                         <Slider x:Name="HeatmapScaleSlider"
                       Width="160"
                       Minimum="0.10"
@@ -2145,10 +2137,13 @@
                       Value="1.00"
                       Margin="0,0,12,0"/>
                         <TextBlock Text="Opacity"
-                         Foreground="#39FF14"
                          FontFamily="Segoe UI"
                          FontWeight="SemiBold"
-                         Margin="0,0,8,0"/>
+                         Margin="0,0,8,0" FontSize="16">
+                            <TextBlock.Foreground>
+                                <SolidColorBrush Color="{DynamicResource {x:Static SystemColors.ControlTextColorKey}}"/>
+                            </TextBlock.Foreground>
+                        </TextBlock>
                         <Slider x:Name="HeatmapOpacitySlider"
                       Width="140"
                       Minimum="0"

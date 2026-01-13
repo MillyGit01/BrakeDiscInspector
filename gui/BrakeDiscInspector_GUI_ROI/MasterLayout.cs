@@ -244,6 +244,18 @@ namespace BrakeDiscInspector_GUI_ROI
                 loadedFromFile = false;
             }
 
+            // If we are effectively in "no valid layout loaded" mode, do NOT preload any inspection ROI as enabled.
+            if (!loadedFromFile && layout.InspectionRois != null)
+            {
+                foreach (var roi in layout.InspectionRois)
+                {
+                    if (roi != null)
+                    {
+                        roi.Enabled = false;
+                    }
+                }
+            }
+
             layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
             layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };
             return (layout, loadedFromFile);

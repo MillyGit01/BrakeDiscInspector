@@ -175,8 +175,8 @@
                                      Path="(local:NavSelection.Key)" />
                         </MultiBinding>
                     </DataTrigger.Binding>
-                    <Setter Property="Foreground" Value="{DynamicResource LeftNavSelectedForeground}" />
                     <Setter Property="Effect" Value="{StaticResource LeftNavSelectedShadow}" />
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -1889,7 +1889,7 @@
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}"
                                        FontSize="18"
                                        Margin="0,0,10,0"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                       Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                         <TextBlock Text="Layout Setup"
                                    VerticalAlignment="Center" />
                     </StackPanel>
@@ -1901,7 +1901,7 @@
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}"
                                        FontSize="18"
                                        Margin="0,0,10,0"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                       Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                         <TextBlock Text="ROI Management"
                                    VerticalAlignment="Center" />
                     </StackPanel>
@@ -1916,7 +1916,7 @@
                             <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}"
                                            FontSize="18"
                                            Margin="0,0,10,0"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                           Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                             <TextBlock Text="Master ROIs"
                                        VerticalAlignment="Center" />
                         </StackPanel>
@@ -1932,7 +1932,7 @@
                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}"
                                                FontSize="18"
                                                Margin="0,0,10,0"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                               Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                                 <TextBlock Text="Advanced"
                                            VerticalAlignment="Center" />
                             </StackPanel>
@@ -1943,10 +1943,10 @@
                                Style="{StaticResource LeftNavButtonStyle}"
                                local:NavSelection.Key="InspectionRois">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}"
-                                           FontSize="18"
-                                           Margin="0,0,10,0"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}"
+                                       FontSize="18"
+                                       Margin="0,0,10,0"
+                                       Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                             <TextBlock Text="Inspection ROIs"
                                        VerticalAlignment="Center" />
                         </StackPanel>
@@ -1960,7 +1960,7 @@
                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}"
                                                FontSize="18"
                                                Margin="0,0,10,0"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                               Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                                 <TextBlock Text="Dataset"
                                            VerticalAlignment="Center" />
                             </StackPanel>
@@ -1974,7 +1974,7 @@
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlayCircle24}"
                                        FontSize="18"
                                        Margin="0,0,10,0"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                       Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                         <TextBlock Text="Batch Inspection"
                                    VerticalAlignment="Center" />
                     </StackPanel>
@@ -1987,7 +1987,7 @@
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}"
                                        FontSize="18"
                                        Margin="0,0,10,0"
-                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
+                                       Foreground="{DynamicResource UI.Brush.ButtonForeground}"/>
                         <TextBlock Text="Comms"
                                    VerticalAlignment="Center" />
                     </StackPanel>

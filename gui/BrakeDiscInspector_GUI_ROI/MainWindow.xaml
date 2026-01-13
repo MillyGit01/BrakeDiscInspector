@@ -26,6 +26,8 @@
         <conv:RoiPanelModeToVisibilityConverter x:Key="RoiPanelModeToVisibility" />
         <conv:NavKeyEqualsConverter x:Key="NavKeyEquals" />
         <SolidColorBrush x:Key="BrushAppBackground" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+        <SolidColorBrush x:Key="LeftNavSelectedForeground"
+                         Color="{DynamicResource {x:Static SystemColors.ControlLightColorKey}}" />
 
         <DropShadowEffect x:Key="LeftNavSelectedShadow"
                           ShadowDepth="0"
@@ -173,7 +175,7 @@
                                      Path="(local:NavSelection.Key)" />
                         </MultiBinding>
                     </DataTrigger.Binding>
-                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+                    <Setter Property="Foreground" Value="{DynamicResource LeftNavSelectedForeground}" />
                     <Setter Property="Effect" Value="{StaticResource LeftNavSelectedShadow}" />
                 </DataTrigger>
             </Style.Triggers>

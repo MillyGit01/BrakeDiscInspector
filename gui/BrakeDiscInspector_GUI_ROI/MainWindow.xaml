@@ -217,7 +217,7 @@
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
         </Style>
         <Style TargetType="{x:Type ui:ToggleSwitch}"
-               BasedOn="{DynamicResource {x:Type ui:ToggleSwitch}}">
+               BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}">
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.CheckBox}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />

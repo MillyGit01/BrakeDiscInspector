@@ -2012,83 +2012,18 @@
                     </Border>
                 </Grid>
 
-                <Border x:Name="RoiVisibilityPanel"
-                  Grid.Row="2"
-                  HorizontalAlignment="Left"
-                  VerticalAlignment="Center"
-                  Margin="12,8,12,12"
-                  Padding="10,8"
-                  Background="#CC1E1E1E"
-                  CornerRadius="8"
-                  Panel.ZIndex="1"
-                  DataContext="{Binding DataContext, ElementName=WorkflowHost}">
-                    <StackPanel Orientation="Horizontal">
-                        <StackPanel.Resources>
-                            <Style TargetType="{x:Type Button}">
-                                <Setter Property="Foreground" Value="White"/>
-                            </Style>
-                            <Style TargetType="{x:Type ToggleButton}">
-                                <Setter Property="Foreground" Value="White"/>
-                            </Style>
-                            <Style TargetType="{x:Type CheckBox}">
-                                <Setter Property="Foreground" Value="White"/>
-                            </Style>
-                            <Style TargetType="{x:Type TextBlock}">
-                                <Setter Property="Foreground" Value="White"/>
-                            </Style>
-                        </StackPanel.Resources>
-                        <CheckBox x:Name="ChkShowMaster1Pattern"
-                        IsChecked="{Binding ShowMaster1Pattern}"
-                        Margin="0,0,6,0"
-                        Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
-                                <TextBlock Text="Master 1"/>
-                            </StackPanel>
-                        </CheckBox>
-                        <CheckBox x:Name="ChkShowMaster1Inspection"
-                        IsChecked="{Binding ShowMaster1Inspection}"
-                        Margin="0,0,6,0"
-                        Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
-                                <TextBlock Text="Search 1"/>
-                            </StackPanel>
-                        </CheckBox>
-                        <CheckBox x:Name="ChkShowMaster2Pattern"
-                        IsChecked="{Binding ShowMaster2Pattern}"
-                        Margin="0,0,6,0"
-                        Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
-                                <TextBlock Text="Master 2"/>
-                            </StackPanel>
-                        </CheckBox>
-                        <CheckBox x:Name="ChkShowMaster2Inspection"
-                        IsChecked="{Binding ShowMaster2Inspection}"
-                        Margin="0,0,6,0"
-                        Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
-                                <TextBlock Text="Search 2"/>
-                            </StackPanel>
-                        </CheckBox>
-                        <CheckBox x:Name="ChkShowInspectionRoi"
-                        IsChecked="{Binding ShowInspectionRoi}"
-                        Margin="0,0,6,0"
-                        Checked="RoiVisibilityCheckChanged"
-                        Unchecked="RoiVisibilityCheckChanged">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="&#xE8A4;" FontFamily="Segoe MDL2 Assets" Margin="0,0,4,0"/>
-                                <TextBlock Text="Inspection"/>
-                            </StackPanel>
-                        </CheckBox>
-                    </StackPanel>
-                </Border>
+                <StackPanel Grid.Row="2"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Left"
+                            Margin="12,8,12,12">
+                    <ui:Button x:Name="BtnLoadImageUnderCanvas"
+                               Style="{StaticResource LayoutIconTextButtonStyle}"
+                               MinWidth="140"
+                               ToolTip="{DynamicResource LoadPictureTooltip}"
+                               Tag="{x:Static ui:SymbolRegular.Image24}"
+                               Content="{DynamicResource LoadImage}"
+                               Click="BtnLoadImage_Click" />
+                </StackPanel>
             </Grid>
             <Grid x:Name="DiskStatusHUD"
               HorizontalAlignment="Right"

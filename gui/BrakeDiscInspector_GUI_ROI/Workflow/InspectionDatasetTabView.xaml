@@ -115,7 +115,7 @@
         <StackPanel Grid.Row="8" Margin="0,8,0,0">
             <w:DatasetPreviewStripView Title="OK dataset"
                                        ItemsSource="{Binding OkPreview}"
-                                       SelectedItem="{Binding SelectedOkPreviewItem, Mode=TwoWay}"/>
+                                       SelectedItem="{Binding SelectedOkPreviewItem, Mode=TwoWay}" Cursor=""/>
             <w:DatasetPreviewStripView Title="NG dataset"
                                        ItemsSource="{Binding NgPreview}"
                                        SelectedItem="{Binding SelectedNgPreviewItem, Mode=TwoWay}"

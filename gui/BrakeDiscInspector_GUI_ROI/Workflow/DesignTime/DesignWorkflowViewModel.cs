@@ -9,7 +9,7 @@ using BrakeDiscInspector_GUI_ROI.Workflow;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow.DesignTime
 {
-    internal sealed class DesignWorkflowViewModel
+    public sealed class DesignWorkflowViewModel
     {
         private const int ThumbnailWidth = 120;
         private const int ThumbnailHeight = 90;

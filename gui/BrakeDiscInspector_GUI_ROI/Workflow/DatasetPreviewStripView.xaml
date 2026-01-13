@@ -8,11 +8,11 @@
              d:DesignHeight="140"
              d:DesignWidth="420">
     <StackPanel>
-        <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType={x:Type w:DatasetPreviewStripView}}}"
+        <TextBlock Text="{Binding Title, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:DatasetPreviewStripView}}}"
                    FontWeight="SemiBold"
                    Margin="0,6,0,4"/>
-        <ListBox ItemsSource="{Binding ItemsSource, RelativeSource={RelativeSource AncestorType={x:Type w:DatasetPreviewStripView}}}"
-                 SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType={x:Type w:DatasetPreviewStripView}}, Mode=TwoWay}"
+        <ListBox ItemsSource="{Binding ItemsSource, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:DatasetPreviewStripView}}}"
+                 SelectedItem="{Binding SelectedItem, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:DatasetPreviewStripView}}, Mode=TwoWay}"
                  BorderThickness="0"
                  Background="Transparent"
                  Height="110"

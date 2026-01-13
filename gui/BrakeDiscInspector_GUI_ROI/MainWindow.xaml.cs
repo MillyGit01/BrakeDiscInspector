@@ -14332,16 +14332,21 @@ namespace BrakeDiscInspector_GUI_ROI
                 };
                 var resp = await BackendAPI.InferAsync(request);
 
-                // 6) Mostrar texto (si tienes el TextBlock en XAML)
+                // 6) Reportar resultado sin UI dedicada
                 bool isNg = resp.threshold.HasValue && resp.score > resp.threshold.Value;
                 _lastIsNg = isNg;
-                if (ResultLabel != null)
+                string thrText = resp.threshold.HasValue ? resp.threshold.Value.ToString("0.###") : "n/a";
+                var msg = isNg
+                    ? $"NG (score={resp.score:F3} / thr {thrText})"
+                    : $"OK (score={resp.score:F3} / thr {thrText})";
+                AppendLog(msg);
+                try
                 {
-                    string thrText = resp.threshold.HasValue ? resp.threshold.Value.ToString("0.###") : "n/a";
-                    ResultLabel.Text = isNg
-                        ? $"NG (score={resp.score:F3} / thr {thrText})"
-                        : $"OK (score={resp.score:F3} / thr {thrText})";
-                    ResultLabel.Foreground = isNg ? Brushes.OrangeRed : Brushes.LightGreen;
+                    Snack(msg);
+                }
+                catch
+                {
+                    System.Windows.MessageBox.Show(msg);
                 }
 
                 // 7) Decodificar heatmap y pintarlo en el Image del XAML

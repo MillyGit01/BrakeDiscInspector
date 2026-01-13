@@ -20,7 +20,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
     {
         private int _index;
         private string _id;
-        private bool _enabled = true;
+        private bool _enabled = false;
         private bool _isEditable;
         private string _modelKey;
         private double _threshold;
@@ -48,7 +48,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         public InspectionRoiConfig(int index)
         {
             Index = index;
-            _enabled = index <= 2;
+            _enabled = false;
             _name = $"Inspection {index}";
             _modelKey = $"inspection-{index}";
             _id = $"Inspection_{index}";

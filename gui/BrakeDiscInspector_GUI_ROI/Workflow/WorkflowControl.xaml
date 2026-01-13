@@ -35,7 +35,7 @@
 
             <GroupBox Header="Inspection ROIs"
                       Visibility="{Binding ShowInspectionDatasetSection,
-                                           RelativeSource={RelativeSource AncestorType={x:Type w:WorkflowControl}},
+                                           RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:WorkflowControl}},
                                            Converter={StaticResource BoolToVis}}">
                 <DockPanel Margin="8">
                     <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">

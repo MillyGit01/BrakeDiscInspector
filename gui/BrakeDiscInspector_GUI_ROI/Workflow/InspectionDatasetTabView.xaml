@@ -74,14 +74,14 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
                 <ui:Button Padding="12,4"
                            Margin="0,0,8,0"
-                           Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                          Command="{Binding DataContext.BrowseDatasetCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0"/>
                         <TextBlock Text="Browse..." VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
                 <ui:Button Padding="12,4"
-                           Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                          Command="{Binding DataContext.OpenDatasetFolderCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Folder24}" Margin="0,0,8,0"/>
                         <TextBlock Text="Open Folder" VerticalAlignment="Center"/>
@@ -134,7 +134,7 @@
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                       Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                      Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>
@@ -142,7 +142,7 @@
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                       Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                      Command="{Binding DataContext.TrainSelectedRoiCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Rocket24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Train" VerticalAlignment="Center"/>
@@ -150,14 +150,14 @@
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                       Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                      Command="{Binding DataContext.CalibrateSelectedRoiCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Wrench24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Calibrate" VerticalAlignment="Center"/>
                 </StackPanel>
             </ui:Button>
             <ui:Button Padding="12,4"
-                       Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                      Command="{Binding DataContext.EvaluateSelectedRoiCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Search24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Evaluate ROI" VerticalAlignment="Center"/>

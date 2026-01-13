@@ -194,22 +194,22 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
-        public static readonly DependencyProperty SelectedLeftMenuKeyProperty =
+        public static readonly DependencyProperty SelectedLeftNavKeyProperty =
             DependencyProperty.Register(
-                nameof(SelectedLeftMenuKey),
+                nameof(SelectedLeftNavKey),
                 typeof(string),
                 typeof(MainWindow),
                 new PropertyMetadata(string.Empty));
 
-        public string SelectedLeftMenuKey
+        public string SelectedLeftNavKey
         {
-            get => (string)GetValue(SelectedLeftMenuKeyProperty);
-            set => SetValue(SelectedLeftMenuKeyProperty, value);
+            get => (string)GetValue(SelectedLeftNavKeyProperty);
+            set => SetValue(SelectedLeftNavKeyProperty, value);
         }
 
-        private void SelectLeftMenu(string key)
+        private void SetSelectedLeftNav(string key)
         {
-            SelectedLeftMenuKey = key ?? string.Empty;
+            SelectedLeftNavKey = key ?? string.Empty;
         }
 
         public RoiPanelMode RoiPanelMode
@@ -3746,7 +3746,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("LayoutSetup");
+            SetSelectedLeftNav("LayoutSetup");
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
             InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
@@ -3758,7 +3758,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void NavRoiManagement_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("RoiManagement");
+            SetSelectedLeftNav("RoiManagement");
             var expand = RoiNavSubmenu.Visibility != Visibility.Visible;
             RoiNavSubmenu.Visibility = expand ? Visibility.Visible : Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
@@ -3781,7 +3781,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void RoiManagementSelectMaster_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("MasterRois");
+            SetSelectedLeftNav("MasterRois");
             RoiPanelMode = RoiPanelMode.Master;
             MasterRoiSubmenu.Visibility = Visibility.Visible;
             InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
@@ -3791,7 +3791,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void RoiManagementSelectInspection_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("InspectionRois");
+            SetSelectedLeftNav("InspectionRois");
             RoiPanelMode = RoiPanelMode.Inspection;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
             InspectionRoiSubmenu.Visibility = Visibility.Visible;
@@ -3802,21 +3802,21 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void RoiManagementInspectionDataset_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("InspectionDataset");
+            SetSelectedLeftNav("InspectionDataset");
             var open = InspectionDatasetPanel?.Visibility != Visibility.Visible;
             SetInspectionDatasetView(open);
         }
 
         private void NavMasterAdvanced_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("MasterAdvanced");
+            SetSelectedLeftNav("MasterAdvanced");
             var show = MasterAdvancedOptionsPanel?.Visibility != Visibility.Visible;
             SetMasterAdvancedOpen(show);
         }
 
         private void NavBatchInspection_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("BatchInspection");
+            SetSelectedLeftNav("BatchInspection");
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
             InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
@@ -3828,7 +3828,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void NavComms_Click(object sender, RoutedEventArgs e)
         {
-            SelectLeftMenu("Comms");
+            SetSelectedLeftNav("Comms");
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
             MasterRoiSubmenu.Visibility = Visibility.Collapsed;
             InspectionRoiSubmenu.Visibility = Visibility.Collapsed;
@@ -9266,19 +9266,19 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (LayoutSetupPanel?.Visibility == Visibility.Visible)
             {
-                SelectLeftMenu("LayoutSetup");
+                SetSelectedLeftNav("LayoutSetup");
             }
             else if (RoiManagementPanel?.Visibility == Visibility.Visible)
             {
-                SelectLeftMenu("RoiManagement");
+                SetSelectedLeftNav("RoiManagement");
             }
             else if (BatchInspectionPanel?.Visibility == Visibility.Visible)
             {
-                SelectLeftMenu("BatchInspection");
+                SetSelectedLeftNav("BatchInspection");
             }
             else if (CommsPanel?.Visibility == Visibility.Visible)
             {
-                SelectLeftMenu("Comms");
+                SetSelectedLeftNav("Comms");
             }
 
             RefreshCreateButtonsEnabled();

@@ -294,11 +294,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _isInitializing;
         private string? _annotatedOutputDir;
         private string _currentLayoutName = "DefaultLayout";
+        private bool _hasLoadedLayout;
         private int _layoutIoDepth;
         private readonly SemaphoreSlim _captureGate = new(1, 1);
         private bool _sharedHeatmapGuardLogged;
 
         public string CurrentLayoutName => _currentLayoutName;
+
+        public bool HasLoadedLayout
+        {
+            get => _hasLoadedLayout;
+            private set
+            {
+                if (_hasLoadedLayout != value)
+                {
+                    _hasLoadedLayout = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(LayoutNameDisplay));
+                }
+            }
+        }
+
+        public string LayoutNameDisplay => HasLoadedLayout ? CurrentLayoutName : "Layout not loaded";
 
         public int AnchorScoreMin { get; set; } = 85;
 
@@ -608,11 +625,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var isReservedLast = string.Equals(normalized, "last", StringComparison.OrdinalIgnoreCase);
 
             _currentLayoutName = normalized;
+            OnPropertyChanged(nameof(CurrentLayoutName));
+            OnPropertyChanged(nameof(LayoutNameDisplay));
 
             // Si es "last", no mandamos header (backend resolverá 'default').
             _client.RecipeId = isReservedLast ? null : _currentLayoutName;
 
             InvalidateMasterPatternCache();
+        }
+
+        public void SetLayoutLoadedState(bool hasLoadedLayout)
+        {
+            HasLoadedLayout = hasLoadedLayout;
         }
 
         public void AlignDatasetPathsWithCurrentLayout()

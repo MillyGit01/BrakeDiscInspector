@@ -140,6 +140,7 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="Padding" Value="12,8" />
@@ -1858,73 +1859,177 @@
                 Background="{DynamicResource BrushAppBackground}"
                 Margin="0">
             <StackPanel Margin="8">
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                           Click="NavLayoutSetup_Click">
+                <ui:Button Click="NavLayoutSetup_Click">
+                    <ui:Button.Style>
+                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                             Value="LayoutSetup">
+                                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ui:Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" FontSize="18" Margin="0,0,10,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}"
+                                       FontSize="18"
+                                       Margin="0,0,10,0"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                         <TextBlock Text="Layout Setup" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                           Click="NavRoiManagement_Click">
+                <ui:Button Click="NavRoiManagement_Click">
+                    <ui:Button.Style>
+                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                             Value="RoiManagement">
+                                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ui:Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}" FontSize="18" Margin="0,0,10,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Crop24}"
+                                       FontSize="18"
+                                       Margin="0,0,10,0"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                         <TextBlock Text="ROI Management" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
                 <!-- Submenú colapsable: mismo tamaño/estilo que el resto, con tabulación -->
                 <StackPanel x:Name="RoiNavSubmenu" Visibility="Collapsed" Margin="0">
-                    <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                               Click="RoiManagementSelectMaster_Click">
+                    <ui:Button Click="RoiManagementSelectMaster_Click">
+                        <ui:Button.Style>
+                            <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                                <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                 Value="MasterRois">
+                                        <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:Button.Style>
                         <!-- Tabulación: indentamos SOLO el contenido para mantener mismo ancho/alineación del botón -->
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}" FontSize="18" Margin="0,0,10,0"/>
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Target24}"
+                                           FontSize="18"
+                                           Margin="0,0,10,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                             <TextBlock Text="Master ROIs" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ui:Button>
 
                     <!-- Sub-submenú: visible solo cuando se selecciona Master ROIs -->
                     <StackPanel x:Name="MasterRoiSubmenu" Visibility="Collapsed" Margin="0">
-                        <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                                   Click="NavMasterAdvanced_Click">
+                        <ui:Button Click="NavMasterAdvanced_Click">
+                            <ui:Button.Style>
+                                <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                     Value="MasterAdvanced">
+                                            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:Button.Style>
                             <!-- tabulación para subnivel -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="40,0,0,0">
-                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}" FontSize="18" Margin="0,0,10,0"/>
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Settings24}"
+                                               FontSize="18"
+                                               Margin="0,0,10,0"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                                 <TextBlock Text="Advanced" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ui:Button>
                     </StackPanel>
 
-                    <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                               Click="RoiManagementSelectInspection_Click">
+                    <ui:Button Click="RoiManagementSelectInspection_Click">
+                        <ui:Button.Style>
+                            <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                                <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                 Value="InspectionRois">
+                                        <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:Button.Style>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0,0,0">
-                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}" FontSize="18" Margin="0,0,10,0"/>
+                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Scan24}"
+                                           FontSize="18"
+                                           Margin="0,0,10,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                             <TextBlock Text="Inspection ROIs" VerticalAlignment="Center"/>
                         </StackPanel>
                     </ui:Button>
 
                     <StackPanel x:Name="InspectionRoiSubmenu" Visibility="Collapsed" Margin="0">
-                        <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                                   Click="RoiManagementInspectionDataset_Click">
+                        <ui:Button Click="RoiManagementInspectionDataset_Click">
+                            <ui:Button.Style>
+                                <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                                     Value="InspectionDataset">
+                                            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:Button.Style>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="40,0,0,0">
-                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" FontSize="18" Margin="0,0,10,0"/>
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}"
+                                               FontSize="18"
+                                               Margin="0,0,10,0"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                                 <TextBlock Text="Dataset" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ui:Button>
                     </StackPanel>
                 </StackPanel>
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                           Click="NavBatchInspection_Click">
+                <ui:Button Click="NavBatchInspection_Click">
+                    <ui:Button.Style>
+                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                             Value="BatchInspection">
+                                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ui:Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlayCircle24}" FontSize="18" Margin="0,0,10,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlayCircle24}"
+                                       FontSize="18"
+                                       Margin="0,0,10,0"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                         <TextBlock Text="Batch Inspection" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>
-                <ui:Button Style="{StaticResource LeftNavButtonStyle}"
-                           Click="NavComms_Click"
+                <ui:Button Click="NavComms_Click"
                            Margin="0">
+                    <ui:Button.Style>
+                        <Style TargetType="{x:Type ui:Button}" BasedOn="{StaticResource LeftNavButtonStyle}">
+                            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedLeftMenuKey, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                             Value="Comms">
+                                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Accent}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ui:Button.Style>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" FontSize="18" Margin="0,0,10,0"/>
+                        <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}"
+                                       FontSize="18"
+                                       Margin="0,0,10,0"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type ui:Button}}}"/>
                         <TextBlock Text="Comms" VerticalAlignment="Center"/>
                     </StackPanel>
                 </ui:Button>

@@ -5704,7 +5704,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     try
                     {
                         LogDebug("[auto-analyze] ImageLoaded → AnalyzeMaster()");
-                        await AnalyzeMastersAsync();
+                        await AnalyzeMastersAsync(showFailureDialog: false);
                         ScheduleSyncOverlay(force: true, reason: "AutoAnalyzeAfterImageLoad");
                     }
                     catch (Exception ex)
@@ -6880,6 +6880,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 useLocalMatcher = await dispatcherOp.Task.ConfigureAwait(false);
             }
 
+            if (!useLocalMatcher)
+            {
+                AppendLog("[batch] master detection skipped: local matcher disabled (masters are local-only, no backend fallback).");
+                return (null, 0, null, 0);
+            }
+
             SWPoint? c1 = null;
             SWPoint? c2 = null;
             int s1 = 0;
@@ -6978,57 +6984,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (c1 is null || c2 is null)
             {
-                AppendLog("[batch] master detection: backend fallback");
-
-                if (c1 is null)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    var inferM1 = await BackendAPI
-                        .InferAsync(imagePath, _layout.Master1Pattern!, _preset, AppendLog)
-                        .ConfigureAwait(false);
-
-                    if (inferM1.ok && inferM1.result != null)
-                    {
-                        var result = inferM1.result;
-                        var (cx, cy) = _layout.Master1Pattern!.GetCenter();
-                        c1 = new SWPoint(cx, cy);
-                        s1 = 100;
-                        string thrText = result.threshold.HasValue
-                            ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
-                            : "n/a";
-                        bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
-                        AppendLog($"[batch] backend M1 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
-                    }
-                    else
-                    {
-                        AppendLog($"[batch] backend M1 failed: {inferM1.error ?? "unknown"}");
-                    }
-                }
-
-                if (c2 is null)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    var inferM2 = await BackendAPI
-                        .InferAsync(imagePath, _layout.Master2Pattern!, _preset, AppendLog)
-                        .ConfigureAwait(false);
-
-                    if (inferM2.ok && inferM2.result != null)
-                    {
-                        var result = inferM2.result;
-                        var (cx, cy) = _layout.Master2Pattern!.GetCenter();
-                        c2 = new SWPoint(cx, cy);
-                        s2 = 100;
-                        string thrText = result.threshold.HasValue
-                            ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
-                            : "n/a";
-                        bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
-                        AppendLog($"[batch] backend M2 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
-                    }
-                    else
-                    {
-                        AppendLog($"[batch] backend M2 failed: {inferM2.error ?? "unknown"}");
-                    }
-                }
+                AppendLog("[batch] master detection failed (local-only, no backend fallback).");
             }
 
             return (c1, s1, c2, s2);
@@ -11206,7 +11162,51 @@ namespace BrakeDiscInspector_GUI_ROI
         // ====== Analizar Master / ROI ======
         // --------- BOTÓN ANALIZAR MASTERS ---------
         // ===== En MainWindow.xaml.cs =====
-        private async Task AnalyzeMastersAsync()
+        private void ShowMasterDetectionFailure(
+            string reason,
+            SWPoint? m1Center,
+            SWPoint? m2Center,
+            double score1,
+            double score2,
+            double angle1,
+            double angle2,
+            double thrM1,
+            double thrM2,
+            bool showDialog)
+        {
+            string FormatCenter(SWPoint? pt) => pt.HasValue ? $"{pt.Value.X:0.##},{pt.Value.Y:0.##}" : "null";
+            string FormatAngle(double angle) => double.IsNaN(angle) ? "n/a" : $"{angle:0.##}";
+
+            var detail =
+                $"[ANALYZE_MASTER][FAIL] reason={reason} " +
+                $"M1(center={FormatCenter(m1Center)} angle={FormatAngle(angle1)} score={score1:0.###} thr={thrM1:0.###}) " +
+                $"M2(center={FormatCenter(m2Center)} angle={FormatAngle(angle2)} score={score2:0.###} thr={thrM2:0.###})";
+
+            AppendLog(detail);
+            GuiLog.Warn(detail);
+            VisConfLog.AnalyzeMaster(FormattableString.Invariant(
+                $"[VISCONF][ANALYZE_MASTER][FAIL] reason='{reason}' " +
+                $"M1_center='{FormatCenter(m1Center)}' M1_angle={FormatAngle(angle1)} M1_score={score1:0.###} M1_thr={thrM1:0.###} " +
+                $"M2_center='{FormatCenter(m2Center)}' M2_angle={FormatAngle(angle2)} M2_score={score2:0.###} M2_thr={thrM2:0.###}"));
+
+            var message =
+                "No se detectaron los Masters (M1/M2) correctamente; revisa ROIs de patrón y búsqueda y los thresholds " +
+                "ThrM1/ThrM2 del layout. Los Masters se detectan localmente y NO dependen del backend; por tanto no existe Fit OK para Masters.";
+
+            UI(() =>
+            {
+                if (showDialog)
+                {
+                    MessageBox.Show(message, "Analyze Masters", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+                else
+                {
+                    Snack(message);
+                }
+            });
+        }
+
+        private async Task AnalyzeMastersAsync(bool showFailureDialog)
         {
             if (!_mastersSeededForImage)
             {
@@ -11219,76 +11219,19 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            for (int attempt = 0; attempt < 2; attempt++)
+            try
             {
-                try
-                {
-                    await AnalyzeMastersCoreAsync();
-                    return;
-                }
-                catch (BackendMemoryNotFittedException ex)
-                {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[ANALYZE] backend memory not fitted: {ex.Detail ?? ex.Message}");
-
-                    if (attempt >= 1)
-                    {
-                        UI(() => MessageBox.Show(
-                            "No hay memoria preparada en el backend. Ejecuta Fit OK desde Dataset y vuelve a intentarlo.",
-                            "Memoria no preparada",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Warning));
-                        return;
-                    }
-
-                    var choice = MessageBoxResult.No;
-                    UI(() => choice = MessageBox.Show(
-                        "No hay memoria/baseline cargada para inferencia. ¿Quieres ajustarla ahora (Fit OK) y reintentar?",
-                        "Memoria no preparada",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Information));
-
-                    if (choice != MessageBoxResult.Yes)
-                    {
-                        UI(() => MessageBox.Show(
-                            "Operación cancelada. Ejecuta Fit OK desde la pestaña Dataset antes de volver a analizar.",
-                            "Memoria no preparada",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information));
-                        return;
-                    }
-
-                    bool fitted = await EnsureMasterBaselinesAsync();
-                    if (!fitted)
-                    {
-                        UI(() => MessageBox.Show(
-                            "No se pudo ajustar la memoria automáticamente. Revisa la carpeta del dataset OK y los logs.",
-                            "Fit OK",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Error));
-                        return;
-                    }
-
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[ANALYZE] Baseline ajustada, reintentando Analyze Masters...");
-                }
-                catch (BackendBadRequestException ex)
-                {
-                    var detail = ex.Detail ?? ex.Message;
-                    UI(() => MessageBox.Show($"Error del backend (400): {detail}", "Inferencia", MessageBoxButton.OK, MessageBoxImage.Warning));
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[ANALYZE] error inesperado: {ex}");
-                    UI(() => MessageBox.Show($"Analyze Masters error: {ex.Message}", "Analyze", MessageBoxButton.OK, MessageBoxImage.Error));
-                    return;
-                }
+                await AnalyzeMastersCoreAsync(showFailureDialog);
+            }
+            catch (Exception ex)
+            {
+                // CODEX: string interpolation compatibility.
+                AppendLog($"[ANALYZE] error inesperado: {ex}");
+                UI(() => MessageBox.Show($"Analyze Masters error: {ex.Message}", "Analyze", MessageBoxButton.OK, MessageBoxImage.Error));
             }
         }
 
-        private async Task AnalyzeMastersCoreAsync()
+        private async Task AnalyzeMastersCoreAsync(bool showFailureDialog)
         {
             // CODEX: string interpolation compatibility.
             AppendLog($"[ANALYZE] Begin AnalyzeMastersAsync");
@@ -11303,6 +11246,27 @@ namespace BrakeDiscInspector_GUI_ROI
             double angTolForLog = effectiveAnalyze.AngTolDeg;
             var analyzeImagePath = _currentImagePathWin ?? string.Empty;
             bool useLocalMatcher = effectiveAnalyze.UseLocalMatcher;
+            if (!useLocalMatcher)
+            {
+                AppendLog("[ANALYZE] Matcher local deshabilitado. Masters no usan backend; se requiere matcher local.");
+            }
+
+            if (_layout?.Master1Pattern == null || _layout?.Master2Pattern == null
+                || _layout?.Master1Search == null || _layout?.Master2Search == null)
+            {
+                ShowMasterDetectionFailure(
+                    "missing_master_rois",
+                    null,
+                    null,
+                    0,
+                    0,
+                    double.NaN,
+                    double.NaN,
+                    effectiveAnalyze.ThrM1,
+                    effectiveAnalyze.ThrM2,
+                    showFailureDialog);
+                return;
+            }
 
             var templatesReady = TryEnsureMasterTemplates("analyze-start", out var templateKey);
             var templateM1Size = _masterTemplateM1 != null ? $"{_masterTemplateM1.Width}x{_masterTemplateM1.Height}" : "0x0";
@@ -11345,199 +11309,174 @@ namespace BrakeDiscInspector_GUI_ROI
             long loadMs = 0;
             long matchMs = 0;
 
-            if (useLocalMatcher && !templatesReady)
+            if (!useLocalMatcher)
+            {
+                ShowMasterDetectionFailure(
+                    "local_matcher_disabled",
+                    c1,
+                    c2,
+                    s1,
+                    s2,
+                    a1,
+                    a2,
+                    effectiveAnalyze.ThrM1,
+                    effectiveAnalyze.ThrM2,
+                    showFailureDialog);
+                return;
+            }
+
+            if (!templatesReady)
             {
                 AppendLog("[analyze-master] Master templates not set. Capture master templates or load a layout with master references before analyzing.");
-                UI(() => Snack("Master templates not set. Load a master reference image or capture templates first."));
-                useLocalMatcher = false;
+                ShowMasterDetectionFailure(
+                    "templates_missing",
+                    c1,
+                    c2,
+                    s1,
+                    s2,
+                    a1,
+                    a2,
+                    effectiveAnalyze.ThrM1,
+                    effectiveAnalyze.ThrM2,
+                    showFailureDialog);
+                return;
             }
 
-            // 1) Intento local primero (opcional)
-            if (useLocalMatcher)
+            // 1) Intento local (masters siempre local-only)
+            // CODEX: string interpolation compatibility.
+            AppendLog($"[ANALYZE] Using local matcher for masters (local-only).");
+
+            var localImagePath = _currentImagePathWin;
+            var localAnalyze = effectiveAnalyze;
+            var localM1Pattern = _layout?.Master1Pattern?.Clone();
+            var localM2Pattern = _layout?.Master2Pattern?.Clone();
+            var localM1Search = _layout?.Master1Search?.Clone();
+            var localM2Search = _layout?.Master2Search?.Clone();
+
+            var localResult = await Task.Run(() =>
             {
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[ANALYZE] Using local matcher first...");
+                var logs = new List<string>();
+                SWPoint? m1 = null;
+                SWPoint? m2 = null;
+                double score1 = 0;
+                double score2 = 0;
+                double angle1 = double.NaN;
+                double angle2 = double.NaN;
+                long loadMsLocal = 0;
+                long matchMsLocal = 0;
+                bool disableLocal = false;
 
-                var localImagePath = _currentImagePathWin;
-                var localAnalyze = effectiveAnalyze;
-                var localM1Pattern = _layout?.Master1Pattern?.Clone();
-                var localM2Pattern = _layout?.Master2Pattern?.Clone();
-                var localM1Search = _layout?.Master1Search?.Clone();
-                var localM2Search = _layout?.Master2Search?.Clone();
-
-                var localResult = await Task.Run(() =>
+                try
                 {
-                    var logs = new List<string>();
-                    SWPoint? m1 = null;
-                    SWPoint? m2 = null;
-                    double score1 = 0;
-                    double score2 = 0;
-                    double angle1 = double.NaN;
-                    double angle2 = double.NaN;
-                    long loadMsLocal = 0;
-                    long matchMsLocal = 0;
-                    bool disableLocal = false;
-
+                    logs.Add("[FLOW] Usando matcher local");
+                    var loadSw = Stopwatch.StartNew();
+                    using var img = Cv.Cv2.ImRead(localImagePath);
+                    loadSw.Stop();
+                    loadMsLocal = loadSw.ElapsedMilliseconds;
+                    Mat? m1Override = null;
+                    Mat? m2Override = null;
                     try
                     {
-                        logs.Add("[FLOW] Usando matcher local");
-                        var loadSw = Stopwatch.StartNew();
-                        using var img = Cv.Cv2.ImRead(localImagePath);
-                        loadSw.Stop();
-                        loadMsLocal = loadSw.ElapsedMilliseconds;
-                        Mat? m1Override = null;
-                        Mat? m2Override = null;
-                        try
+                        if (_masterTemplateM1 != null)
+                            m1Override = _masterTemplateM1.Clone();
+                        if (_masterTemplateM2 != null)
+                            m2Override = _masterTemplateM2.Clone();
+
+                        var matchSw = Stopwatch.StartNew();
+                        var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, localM1Pattern, localM1Search,
+                            localAnalyze.FeatureM1, localAnalyze.ThrM1, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m1Override,
+                            LogToFileAndUI);
+                        if (res1.Center.HasValue)
                         {
-                            if (_masterTemplateM1 != null)
-                                m1Override = _masterTemplateM1.Clone();
-                            if (_masterTemplateM2 != null)
-                                m2Override = _masterTemplateM2.Clone();
-
-                            var matchSw = Stopwatch.StartNew();
-                            var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, localM1Pattern, localM1Search,
-                                localAnalyze.FeatureM1, localAnalyze.ThrM1, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m1Override,
-                                LogToFileAndUI);
-                            if (res1.Center.HasValue)
-                            {
-                                m1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
-                                score1 = res1.Score;
-                                angle1 = res1.AngleDeg;
-                                logs.Add($"[LOCAL] M1 hit score={res1.Score:0.###}");
-                            }
-                            else
-                            {
-                                logs.Add("[LOCAL] M1 no encontrado");
-                            }
-
-                            var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, localM2Pattern, localM2Search,
-                                localAnalyze.FeatureM2, localAnalyze.ThrM2, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m2Override,
-                                LogToFileAndUI);
-                            matchSw.Stop();
-                            matchMsLocal = matchSw.ElapsedMilliseconds;
-                            if (res2.Center.HasValue)
-                            {
-                                m2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
-                                score2 = res2.Score;
-                                angle2 = res2.AngleDeg;
-                                logs.Add($"[LOCAL] M2 hit score={res2.Score:0.###}");
-                            }
-                            else
-                            {
-                                logs.Add("[LOCAL] M2 no encontrado");
-                            }
+                            m1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
+                            score1 = res1.Score;
+                            angle1 = res1.AngleDeg;
+                            logs.Add($"[LOCAL] M1 hit score={res1.Score:0.###}");
                         }
-                        finally
+                        else
                         {
-                            m1Override?.Dispose();
-                            m2Override?.Dispose();
+                            logs.Add("[LOCAL] M1 no encontrado");
+                        }
+
+                        var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, localM2Pattern, localM2Search,
+                            localAnalyze.FeatureM2, localAnalyze.ThrM2, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m2Override,
+                            LogToFileAndUI);
+                        matchSw.Stop();
+                        matchMsLocal = matchSw.ElapsedMilliseconds;
+                        if (res2.Center.HasValue)
+                        {
+                            m2 = new SWPoint(res2.Center.Value.X, res2.Center.Value.Y);
+                            score2 = res2.Score;
+                            angle2 = res2.AngleDeg;
+                            logs.Add($"[LOCAL] M2 hit score={res2.Score:0.###}");
+                        }
+                        else
+                        {
+                            logs.Add("[LOCAL] M2 no encontrado");
                         }
                     }
-                    catch (DllNotFoundException ex)
+                    finally
                     {
-                        logs.Add($"[OpenCV] DllNotFound: {ex.Message}");
-                        disableLocal = true;
+                        m1Override?.Dispose();
+                        m2Override?.Dispose();
                     }
-                    catch (Exception ex)
-                    {
-                        logs.Add($"[local matcher] ERROR: {ex.Message}");
-                    }
-
-                    return (m1: m1, m2: m2, score1: score1, score2: score2, angle1: angle1, angle2: angle2, loadMs: loadMsLocal, matchMs: matchMsLocal, logs: logs, disableLocal: disableLocal);
-                });
-
-                foreach (var log in localResult.logs)
+                }
+                catch (DllNotFoundException ex)
                 {
-                    AppendLog(log);
+                    logs.Add($"[OpenCV] DllNotFound: {ex.Message}");
+                    disableLocal = true;
+                }
+                catch (Exception ex)
+                {
+                    logs.Add($"[local matcher] ERROR: {ex.Message}");
                 }
 
-                if (localResult.disableLocal)
-                {
-                    UI(() =>
-                    {
-                        Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
-                        ChkUseLocalMatcher.IsChecked = false;
-                    });
-                    useLocalMatcher = false;
-                }
+                return (m1: m1, m2: m2, score1: score1, score2: score2, angle1: angle1, angle2: angle2, loadMs: loadMsLocal, matchMs: matchMsLocal, logs: logs, disableLocal: disableLocal);
+            });
 
-                if (localResult.m1.HasValue)
-                {
-                    c1 = localResult.m1;
-                    s1 = localResult.score1;
-                    a1 = localResult.angle1;
-                }
-
-                if (localResult.m2.HasValue)
-                {
-                    c2 = localResult.m2;
-                    s2 = localResult.score2;
-                    a2 = localResult.angle2;
-                }
-
-                loadMs = localResult.loadMs;
-                matchMs = localResult.matchMs;
-                AppendLog($"[ANALYZE][timing] load_ms={loadMs} match_ms={matchMs}");
-            }
-
-            if (c1 is null || c2 is null)
+            foreach (var log in localResult.logs)
             {
-                if (!useLocalMatcher)
-                {
-                    AppendLog($"[FLOW] Matcher local deshabilitado; uso backend para detectar masters");
-
-                    if (c1 is null)
-                    {
-                        var inferM1 = await BackendAPI
-                            .InferAsync(_currentImagePathWin, _layout.Master1Pattern!, _preset, AppendLog);
-
-                        if (inferM1.ok && inferM1.result != null)
-                        {
-                            var result = inferM1.result;
-                            var (cx, cy) = _layout.Master1Pattern!.GetCenter();
-                            c1 = new SWPoint(cx, cy);
-                            s1 = 100;
-                            string thrText = result.threshold.HasValue
-                                ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
-                                : "n/a";
-                            bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
-                            AppendLog($"[FLOW] backend M1 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
-                        }
-                        else
-                        {
-                            AppendLog($"[FLOW] backend M1 failed: {inferM1.error ?? "unknown"}");
-                        }
-                    }
-
-                    if (c2 is null)
-                    {
-                        var inferM2 = await BackendAPI
-                            .InferAsync(_currentImagePathWin, _layout.Master2Pattern!, _preset, AppendLog);
-
-                        if (inferM2.ok && inferM2.result != null)
-                        {
-                            var result = inferM2.result;
-                            var (cx, cy) = _layout.Master2Pattern!.GetCenter();
-                            c2 = new SWPoint(cx, cy);
-                            s2 = 100;
-                            string thrText = result.threshold.HasValue
-                                ? result.threshold.Value.ToString("0.###", CultureInfo.InvariantCulture)
-                                : "n/a";
-                            bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
-                            AppendLog($"[FLOW] backend M2 score={result.score:0.###} thr={thrText} status={(pass ? "OK" : "NG")}");
-                        }
-                        else
-                        {
-                            AppendLog($"[FLOW] backend M2 failed: {inferM2.error ?? "unknown"}");
-                        }
-                    }
-                }
-                else
-                {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[FLOW] Matcher local no encontró alguno de los masters; sin fallback al backend (/infer desactivado)");
-                }
+                AppendLog(log);
             }
+
+            if (localResult.disableLocal)
+            {
+                UI(() =>
+                {
+                    Snack($"OpenCvSharp no está disponible. Desactivo 'matcher local'."); // CODEX: string interpolation compatibility.
+                    ChkUseLocalMatcher.IsChecked = false;
+                });
+                ShowMasterDetectionFailure(
+                    "opencv_missing",
+                    c1,
+                    c2,
+                    s1,
+                    s2,
+                    a1,
+                    a2,
+                    effectiveAnalyze.ThrM1,
+                    effectiveAnalyze.ThrM2,
+                    showFailureDialog);
+                return;
+            }
+
+            if (localResult.m1.HasValue)
+            {
+                c1 = localResult.m1;
+                s1 = localResult.score1;
+                a1 = localResult.angle1;
+            }
+
+            if (localResult.m2.HasValue)
+            {
+                c2 = localResult.m2;
+                s2 = localResult.score2;
+                a2 = localResult.angle2;
+            }
+
+            loadMs = localResult.loadMs;
+            matchMs = localResult.matchMs;
+            AppendLog($"[ANALYZE][timing] load_ms={loadMs} match_ms={matchMs}");
 
             var rawM1 = c1 ?? new SWPoint(double.NaN, double.NaN);
             var rawM2 = c2 ?? new SWPoint(double.NaN, double.NaN);
@@ -11548,9 +11487,18 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M1 not found", posTolForLog, angTolForLog);
                 LogAnalyzeMasterFailureDetailVisConf(analyzeImageKey, analyzeFileName, "M1 not found", "baseline_center");
-                UI(() => Snack($"No se ha encontrado Master 1 en su zona de búsqueda")); // CODEX: string interpolation compatibility.
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] c1 null");
+                ShowMasterDetectionFailure(
+                    "m1_not_found",
+                    c1,
+                    c2,
+                    s1,
+                    s2,
+                    a1,
+                    a2,
+                    effectiveAnalyze.ThrM1,
+                    effectiveAnalyze.ThrM2,
+                    showFailureDialog);
+                AppendLog($"[FLOW] c1 null"); // CODEX: string interpolation compatibility.
                 ViewModel?.TraceManual($"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=M1 not found");
                 return;
             }
@@ -11558,10 +11506,44 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 LogAnalyzeMasterFailureVisConf(analyzeImageKey, analyzeFileName, "M2 not found", posTolForLog, angTolForLog);
                 LogAnalyzeMasterFailureDetailVisConf(analyzeImageKey, analyzeFileName, "M2 not found", "baseline_center");
-                UI(() => Snack($"No se ha encontrado Master 2 en su zona de búsqueda")); // CODEX: string interpolation compatibility.
-                // CODEX: string interpolation compatibility.
-                AppendLog($"[FLOW] c2 null");
+                ShowMasterDetectionFailure(
+                    "m2_not_found",
+                    c1,
+                    c2,
+                    s1,
+                    s2,
+                    a1,
+                    a2,
+                    effectiveAnalyze.ThrM1,
+                    effectiveAnalyze.ThrM2,
+                    showFailureDialog);
+                AppendLog($"[FLOW] c2 null"); // CODEX: string interpolation compatibility.
                 ViewModel?.TraceManual($"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=M2 not found");
+                return;
+            }
+
+            double minScore1 = effectiveAnalyze.ThrM1 > 0
+                ? effectiveAnalyze.ThrM1
+                : (_workflowViewModel?.AnchorScoreMin ?? 85);
+            double minScore2 = effectiveAnalyze.ThrM2 > 0
+                ? effectiveAnalyze.ThrM2
+                : (_workflowViewModel?.AnchorScoreMin ?? 85);
+            bool scoresOk = s1 >= minScore1 && s2 >= minScore2;
+            if (!scoresOk)
+            {
+                ShowMasterDetectionFailure(
+                    "score_below_threshold",
+                    c1,
+                    c2,
+                    s1,
+                    s2,
+                    a1,
+                    a2,
+                    minScore1,
+                    minScore2,
+                    showFailureDialog);
+                ViewModel?.TraceManual(
+                    $"[manual-master] FAIL file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}' reason=score_below_threshold M1={s1:0.0}/{minScore1:0.0} M2={s2:0.0}/{minScore2:0.0}");
                 return;
             }
 
@@ -13319,7 +13301,7 @@ namespace BrakeDiscInspector_GUI_ROI
             SyncPresetFromUI();
 
             // 5) Lanzar análisis
-            _ = AnalyzeMastersAsync();
+            _ = AnalyzeMastersAsync(showFailureDialog: true);
         }
         // ====== Overlay persistente + Adorner ======
         private void OnRoiChanged(Shape shape, RoiModel roi)

@@ -5,6 +5,7 @@ import io
 import inspect
 import logging
 import threading
+from contextlib import nullcontext
 from typing import Any, Iterable, Optional, Tuple, Union, cast
 
 import numpy as np
@@ -74,7 +75,9 @@ class DinoV2Features:
         else:
             self.device = torch.device(device)
 
-        self.half = bool(half) and self.device.type == "cuda"
+        # 'half' se interpreta como "habilitar AMP/autocast en CUDA" (no convertir pesos a FP16 permanente)
+        self.use_amp = bool(half) and self.device.type == "cuda"
+        self.half = self.use_amp
         self.imagenet_norm = bool(imagenet_norm)
 
         # validar pool
@@ -86,8 +89,6 @@ class DinoV2Features:
         # --- modelo ---
         self.model: nn.Module = timm.create_model(self.model_name, pretrained=True)
         self.model.eval().to(self.device)
-        if self.half:
-            self.model.half()
 
         # patch size
         pe = getattr(self.model, "patch_embed", None)
@@ -99,8 +100,16 @@ class DinoV2Features:
 
         # normalización tipo ImageNet
         if self.imagenet_norm:
-            self.mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1, 3, 1, 1)
-            self.std  = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1, 3, 1, 1)
+            self.mean = torch.tensor(
+                [0.485, 0.456, 0.406],
+                device=self.device,
+                dtype=torch.float32,
+            ).view(1, 3, 1, 1)
+            self.std = torch.tensor(
+                [0.229, 0.224, 0.225],
+                device=self.device,
+                dtype=torch.float32,
+            ).view(1, 3, 1, 1)
         else:
             self.mean = torch.zeros((1, 3, 1, 1), device=self.device)
             self.std  = torch.ones((1, 3, 1, 1), device=self.device)
@@ -158,7 +167,8 @@ class DinoV2Features:
 
         arr = (np.asarray(pil).astype(np.float32) / 255.0)
         x = torch.from_numpy(arr).permute(2, 0, 1).unsqueeze(0).to(self.device)
-        x = x.half() if self.half else x.float()
+        # Mantener preprocesado siempre en FP32 (más estable).
+        x = x.float()
         x = (x - self.mean) / self.std
         return x
 
@@ -312,68 +322,74 @@ class DinoV2Features:
         x, _ = self._prepare_input_size(self.model, x)
         htok, wtok, expected_N = _expected_grid(x)
 
-        # 2) ¿Usamos intermedias?
-        if use_intermediate is None:
-            use_intermediate = bool(self.out_indices) and hasattr(self.model, "get_intermediate_layers")
+        amp_ctx = (
+            torch.autocast(device_type="cuda", dtype=torch.float16)
+            if self.use_amp and self.device.type == "cuda"
+            else nullcontext()
+        )
 
-        if use_intermediate:
-            try:
-                layers = self._call_get_intermediate_layers_compat(
-                    self.model,
-                    x,
-                    self.out_indices,
-                    want_cls=False,
-                    want_reshape=want_reshape,
-                )
-                if layers is not None:
-                    # Normalizar todas a (B,N,C)
-                    normed: list[torch.Tensor] = []
-                    for li, layer in enumerate(layers):
-                        if isinstance(layer, (tuple, list)) and len(layer) > 0 and torch.is_tensor(layer[0]):
-                            layer = layer[0]
-                        if not torch.is_tensor(layer):
-                            raise RuntimeError(f"Tipo inesperado en capa {li}: {type(layer)}")
-                        normed.append(_as_BxNC(layer, expected_N))
+        with amp_ctx:
+            # 2) ¿Usamos intermedias?
+            if use_intermediate is None:
+                use_intermediate = bool(self.out_indices) and hasattr(self.model, "get_intermediate_layers")
 
-                    # Combinar capas
-                    if combine == "concat":
-                        out = torch.cat(normed, dim=-1)       # (B,N, sumC)
-                    elif combine == "mean":
-                        stk = torch.stack(normed, dim=0)      # (L,B,N,C)
-                        out = stk.mean(dim=0)                 # (B,N,C)
-                    elif combine == "stack":
-                        stk = torch.stack(normed, dim=-1)     # (B,N,C,L)
-                        b, n, c, l = stk.shape
-                        out = stk.reshape(b, n, c * l)        # (B,N,C*L)
-                    else:
-                        raise ValueError("combine debe ser 'concat', 'mean' o 'stack'"
-
+            if use_intermediate:
+                try:
+                    layers = self._call_get_intermediate_layers_compat(
+                        self.model,
+                        x,
+                        self.out_indices,
+                        want_cls=False,
+                        want_reshape=want_reshape,
                     )
-                    return out[0]  # (N, C_out)
-            except Exception as ex:
-                # Fallback limpio a forward_features
-                log.debug("[features] fallback intermedias -> forward_features: %s", ex)
+                    if layers is not None:
+                        # Normalizar todas a (B,N,C)
+                        normed: list[torch.Tensor] = []
+                        for li, layer in enumerate(layers):
+                            if isinstance(layer, (tuple, list)) and len(layer) > 0 and torch.is_tensor(layer[0]):
+                                layer = layer[0]
+                            if not torch.is_tensor(layer):
+                                raise RuntimeError(f"Tipo inesperado en capa {li}: {type(layer)}")
+                            normed.append(_as_BxNC(layer, expected_N))
 
-        # 3) forward_features (fallback o seleccionado)
-        feats_any = self.model.forward_features(x)
-        if isinstance(feats_any, dict):
-            feats = cast(dict[str, Any], feats_any)
-            tokens_any: Any = None
-            # IMPORTANT: do NOT use `or` on torch.Tensor.
-            # `bool(tensor)` raises: RuntimeError: Boolean value of Tensor with more than one value is ambiguous
-            for k in ("x_norm_patchtokens", "x", "tokens"):
-                v = feats.get(k)
-                if torch.is_tensor(v):
-                    tokens_any = v
-                    break
-            if tokens_any is None:
-                cands = [v for v in feats.values() if isinstance(v, torch.Tensor)]
-                if not cands:
-                    raise RuntimeError("forward_features devolvió un dict sin tensores utilizables")
-                tokens_any = max(cands, key=lambda u: u.numel())
-            t = cast(torch.Tensor, tokens_any)
-        else:
-            t = cast(torch.Tensor, feats_any)
+                        # Combinar capas
+                        if combine == "concat":
+                            out = torch.cat(normed, dim=-1)       # (B,N, sumC)
+                        elif combine == "mean":
+                            stk = torch.stack(normed, dim=0)      # (L,B,N,C)
+                            out = stk.mean(dim=0)                 # (B,N,C)
+                        elif combine == "stack":
+                            stk = torch.stack(normed, dim=-1)     # (B,N,C,L)
+                            b, n, c, l = stk.shape
+                            out = stk.reshape(b, n, c * l)        # (B,N,C*L)
+                        else:
+                            raise ValueError("combine debe ser 'concat', 'mean' o 'stack'")
+
+                        return out[0]  # (N, C_out)
+                except Exception as ex:
+                    # Fallback limpio a forward_features
+                    log.debug("[features] fallback intermedias -> forward_features: %s", ex)
+
+            # 3) forward_features (fallback o seleccionado)
+            feats_any = self.model.forward_features(x)
+            if isinstance(feats_any, dict):
+                feats = cast(dict[str, Any], feats_any)
+                tokens_any: Any = None
+                # IMPORTANT: do NOT use `or` on torch.Tensor.
+                # `bool(tensor)` raises: RuntimeError: Boolean value of Tensor with more than one value is ambiguous
+                for k in ("x_norm_patchtokens", "x", "tokens"):
+                    v = feats.get(k)
+                    if torch.is_tensor(v):
+                        tokens_any = v
+                        break
+                if tokens_any is None:
+                    cands = [v for v in feats.values() if isinstance(v, torch.Tensor)]
+                    if not cands:
+                        raise RuntimeError("forward_features devolvió un dict sin tensores utilizables")
+                    tokens_any = max(cands, key=lambda u: u.numel())
+                t = cast(torch.Tensor, tokens_any)
+            else:
+                t = cast(torch.Tensor, feats_any)
 
         if t.ndim == 3:          # (B,N,C) posiblemente con CLS
             t = _as_BxNC(t, expected_N)
@@ -389,7 +405,8 @@ class DinoV2Features:
         return {
             "model_name": self.model_name,
             "device": str(self.device),
-            "half": bool(self.half),
+            "use_amp": bool(self.use_amp),
+            "half": bool(self.use_amp),
             "imagenet_norm": bool(self.imagenet_norm),
             "patch_size": int(self.patch),
             "input_size": int(self.input_size),
@@ -411,6 +428,14 @@ class DinoV2Features:
         with self._lock:
             x = self._preprocess(img)
             x, how = self._prepare_input_size(self.model, x)
+            model_param = next(self.model.parameters(), None)
+            model_dtype = model_param.dtype if model_param is not None else None
+            log.info(
+                "[features] dtypes: x=%s model=%s use_amp=%s",
+                x.dtype,
+                model_dtype,
+                self.use_amp,
+            )
             H, W = x.shape[-2:]
             h_tokens, w_tokens = H // self.patch, W // self.patch
 

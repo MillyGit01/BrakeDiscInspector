@@ -22,10 +22,9 @@ namespace BrakeDiscInspector_GUI_ROI
             if (ViewModel != null)
             {
                 VisConfLog.AnalyzeMaster(FormattableStringFactory.Create(
-                    "[VISCONF][ANALYZE_MASTER][BACKEND] image='{0}'",
+                    "[VISCONF][ANALYZE_MASTER][LOCAL] image='{0}'",
                     _currentImagePathWin));
-                await ViewModel.RepositionMastersAsync(_currentImagePathWin);
-                await ViewModel.RepositionInspectionRoisAsync(_currentImagePathWin);
+                await AnalyzeMastersAsync(showFailureDialog: true);
             }
 
             await Dispatcher.InvokeAsync(() => RedrawOverlay(), DispatcherPriority.Render);

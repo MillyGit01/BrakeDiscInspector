@@ -246,8 +246,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private Mat? _cachedM2Pattern;
         private string? _cachedM1PatternPath;
         private string? _cachedM2PatternPath;
+        private DateTime? _cachedM1PatternLastWriteUtc;
+        private long? _cachedM1PatternSize;
+        private DateTime? _cachedM2PatternLastWriteUtc;
+        private long? _cachedM2PatternSize;
         private bool _warnedMissingM1PatternPath;
         private bool _warnedMissingM2PatternPath;
+        private readonly object _masterPatternCacheLock = new();
 
         // CODEX: batch reposition flags
         private CancellationToken _currentBatchCt = CancellationToken.None;
@@ -5926,14 +5931,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private void InvalidateMasterPatternCache()
         {
-            _cachedM1Pattern?.Dispose();
-            _cachedM2Pattern?.Dispose();
-            _cachedM1Pattern = null;
-            _cachedM2Pattern = null;
-            _cachedM1PatternPath = null;
-            _cachedM2PatternPath = null;
-            _warnedMissingM1PatternPath = false;
-            _warnedMissingM2PatternPath = false;
+            lock (_masterPatternCacheLock)
+            {
+                _cachedM1Pattern?.Dispose();
+                _cachedM2Pattern?.Dispose();
+                _cachedM1Pattern = null;
+                _cachedM2Pattern = null;
+                _cachedM1PatternPath = null;
+                _cachedM2PatternPath = null;
+                _cachedM1PatternLastWriteUtc = null;
+                _cachedM1PatternSize = null;
+                _cachedM2PatternLastWriteUtc = null;
+                _cachedM2PatternSize = null;
+                _warnedMissingM1PatternPath = false;
+                _warnedMissingM2PatternPath = false;
+            }
         }
 
         private Mat? GetOrLoadPatternCached(string? path, string tag)
@@ -5946,52 +5958,99 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             var effectivePath = ResolvePatternPath(path, tag);
-            if (!File.Exists(effectivePath))
+            lock (_masterPatternCacheLock)
             {
-                WarnMissingPatternOnce(tag, $"pattern not found at '{effectivePath}'");
-                return null;
-            }
+                DateTime lastWriteUtc;
+                long size;
 
-            var cachedPath = isM1 ? _cachedM1PatternPath : _cachedM2PatternPath;
-            var cachedMat = isM1 ? _cachedM1Pattern : _cachedM2Pattern;
-
-            if (cachedMat != null && !cachedMat.Empty() &&
-                string.Equals(cachedPath, effectivePath, StringComparison.OrdinalIgnoreCase))
-            {
-                return cachedMat;
-            }
-
-            cachedMat?.Dispose();
-
-            try
-            {
-                var mat = Cv2.ImRead(effectivePath, ImreadModes.Grayscale);
-                if (mat.Empty())
+                try
                 {
-                    mat.Dispose();
-                    WarnMissingPatternOnce(tag, $"pattern empty at '{effectivePath}'");
+                    var fileInfo = new FileInfo(effectivePath);
+                    if (!fileInfo.Exists)
+                    {
+                        WarnMissingPatternOnce(tag, $"pattern not found at '{effectivePath}'");
+                        return null;
+                    }
+
+                    lastWriteUtc = fileInfo.LastWriteTimeUtc;
+                    size = fileInfo.Length;
+                }
+                catch (Exception ex)
+                {
+                    WarnMissingPatternOnce(tag, $"pattern not found at '{effectivePath}': {ex.Message}");
                     return null;
                 }
 
-                if (isM1)
+                var cachedPath = isM1 ? _cachedM1PatternPath : _cachedM2PatternPath;
+                var cachedMat = isM1 ? _cachedM1Pattern : _cachedM2Pattern;
+                var cachedLastWriteUtc = isM1 ? _cachedM1PatternLastWriteUtc : _cachedM2PatternLastWriteUtc;
+                var cachedSize = isM1 ? _cachedM1PatternSize : _cachedM2PatternSize;
+
+                if (cachedMat != null && !cachedMat.Empty() &&
+                    string.Equals(cachedPath, effectivePath, StringComparison.OrdinalIgnoreCase) &&
+                    cachedLastWriteUtc.HasValue && cachedLastWriteUtc.Value == lastWriteUtc &&
+                    cachedSize.HasValue && cachedSize.Value == size)
                 {
-                    _cachedM1Pattern = mat;
-                    _cachedM1PatternPath = effectivePath;
-                    _warnedMissingM1PatternPath = false;
-                }
-                else
-                {
-                    _cachedM2Pattern = mat;
-                    _cachedM2PatternPath = effectivePath;
-                    _warnedMissingM2PatternPath = false;
+                    return cachedMat;
                 }
 
-                return mat;
-            }
-            catch (Exception ex)
-            {
-                WarnMissingPatternOnce(tag, $"failed to load pattern: {ex.Message}");
-                return null;
+                if (cachedMat != null)
+                {
+                    cachedMat.Dispose();
+                    if (isM1)
+                    {
+                        _cachedM1Pattern = null;
+                        _cachedM1PatternLastWriteUtc = null;
+                        _cachedM1PatternSize = null;
+                    }
+                    else
+                    {
+                        _cachedM2Pattern = null;
+                        _cachedM2PatternLastWriteUtc = null;
+                        _cachedM2PatternSize = null;
+                    }
+                }
+
+                if (string.Equals(cachedPath, effectivePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    TraceBatch(FormattableString.Invariant(
+                        $"[master-cache] reload {(isM1 ? "M1" : "M2")} changed: '{effectivePath}'"));
+                }
+
+                try
+                {
+                    var mat = Cv2.ImRead(effectivePath, ImreadModes.Grayscale);
+                    if (mat.Empty())
+                    {
+                        mat.Dispose();
+                        WarnMissingPatternOnce(tag, $"pattern empty at '{effectivePath}'");
+                        return null;
+                    }
+
+                    if (isM1)
+                    {
+                        _cachedM1Pattern = mat;
+                        _cachedM1PatternPath = effectivePath;
+                        _cachedM1PatternLastWriteUtc = lastWriteUtc;
+                        _cachedM1PatternSize = size;
+                        _warnedMissingM1PatternPath = false;
+                    }
+                    else
+                    {
+                        _cachedM2Pattern = mat;
+                        _cachedM2PatternPath = effectivePath;
+                        _cachedM2PatternLastWriteUtc = lastWriteUtc;
+                        _cachedM2PatternSize = size;
+                        _warnedMissingM2PatternPath = false;
+                    }
+
+                    return mat;
+                }
+                catch (Exception ex)
+                {
+                    WarnMissingPatternOnce(tag, $"failed to load pattern: {ex.Message}");
+                    return null;
+                }
             }
         }
 

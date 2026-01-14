@@ -1058,7 +1058,7 @@
                                 Visibility="{Binding RoiPanelMode, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource RoiPanelModeToVisibility}, ConverterParameter=Inspection}"
                                 d:Visibility="Visible">
                         <StackPanel x:Name="InspectionDefaultPanel">
-                            <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,12,0,0">
+                            <GroupBox x:Name="InspectionRoisGroup" Header="Inspection ROIs" Margin="0,0,0,0">
                                 <StackPanel Margin="8,4,0,0">
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center" HorizontalAlignment="Left">
                                         <TextBlock Text="Inspection 1" Width="95" VerticalAlignment="Center"/>
@@ -1178,7 +1178,7 @@
                                         </ui:Button>
                                         <CheckBox Width="20"
                                                   Height="20"
-                                                  Margin="6,0,0,0"
+                                                  Margin="6,6,0,0"
                                                   VerticalAlignment="Center"
                                                   ToolTip="Enable/disable Inspection ROI 1"
                                                   IsChecked="{Binding DataContext.InspectionRois[0].Enabled,
@@ -1305,7 +1305,7 @@
                                         </ui:Button>
                                         <CheckBox Width="20"
                                                   Height="20"
-                                                  Margin="6,0,0,0"
+                                                  Margin="6,6,0,0"
                                                   VerticalAlignment="Center"
                                                   ToolTip="Enable/disable Inspection ROI 2"
                                                   IsChecked="{Binding DataContext.InspectionRois[1].Enabled,
@@ -1432,7 +1432,7 @@
                                         </ui:Button>
                                         <CheckBox Width="20"
                                                   Height="20"
-                                                  Margin="6,0,0,0"
+                                                  Margin="6,6,0,0"
                                                   VerticalAlignment="Center"
                                                   ToolTip="Enable/disable Inspection ROI 3"
                                                   IsChecked="{Binding DataContext.InspectionRois[2].Enabled,
@@ -1559,13 +1559,12 @@
                                         </ui:Button>
                                         <CheckBox Width="20"
                                                   Height="20"
-                                                  Margin="6,0,0,0"
                                                   VerticalAlignment="Center"
                                                   ToolTip="Enable/disable Inspection ROI 4"
                                                   IsChecked="{Binding DataContext.InspectionRois[3].Enabled,
                                                                       ElementName=WorkflowHost,
                                                                       Mode=TwoWay,
-                                                                      UpdateSourceTrigger=PropertyChanged}"/>
+                                                                      UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" Margin="6,6,0,0"/>
                                     </StackPanel>
 
                                     <workflow:WorkflowControl x:Name="WorkflowHost"

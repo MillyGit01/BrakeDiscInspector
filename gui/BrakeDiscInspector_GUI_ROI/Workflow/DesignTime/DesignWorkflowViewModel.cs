@@ -22,6 +22,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow.DesignTime
             CalibrateSelectedRoiCommand = new NoOpCommand();
             EvaluateSelectedRoiCommand = new NoOpCommand();
             RemoveSelectedCommand = new NoOpCommand();
+            RemoveSelectedPreviewCommand = new NoOpCommand();
             InferEnabledRoisCommand = new NoOpCommand();
 
             InspectionRois = new ObservableCollection<InspectionRoiConfig>
@@ -66,6 +67,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow.DesignTime
         public ICommand EvaluateSelectedRoiCommand { get; }
 
         public ICommand RemoveSelectedCommand { get; }
+
+        public ICommand RemoveSelectedPreviewCommand { get; }
 
         public ICommand InferEnabledRoisCommand { get; }
 

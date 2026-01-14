@@ -465,13 +465,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             OkSamples = new ObservableCollection<DatasetSample>();
             NgSamples = new ObservableCollection<DatasetSample>();
+            OkSamples.CollectionChanged += (_, __) =>
+            {
+                TrainFitCommand.RaiseCanExecuteChanged();
+                CalibrateCommand.RaiseCanExecuteChanged();
+            };
+            NgSamples.CollectionChanged += (_, __) =>
+            {
+                CalibrateCommand.RaiseCanExecuteChanged();
+            };
 
             AddOkFromCurrentRoiCommand = CreateCommand(_ => AddSampleAsync(isNg: false));
             AddNgFromCurrentRoiCommand = CreateCommand(_ => AddSampleAsync(isNg: true));
             RemoveSelectedCommand = CreateCommand(_ => RemoveSelectedAsync(), _ => !IsBusy && (SelectedOkSample != null || SelectedNgSample != null));
             OpenDatasetFolderCommand = CreateCommand(_ => OpenDatasetFolderAsync(), _ => !IsBusy);
-            TrainFitCommand = CreateCommand(_ => TrainAsync(), _ => !IsBusy && OkSamples.Count > 0);
-            CalibrateCommand = CreateCommand(_ => CalibrateAsync(), _ => !IsBusy && OkSamples.Count > 0);
+            TrainFitCommand = CreateCommand(_ => TrainAsync(), _ => !IsBusy && OkSamples.Count >= 10);
+            CalibrateCommand = CreateCommand(_ => CalibrateAsync(), _ => !IsBusy && OkSamples.Count >= 10 && NgSamples.Count >= 1);
             InferFromCurrentRoiCommand = CreateCommand(_ => InferCurrentAsync(), _ => !IsBusy);
             RefreshDatasetCommand = CreateCommand(_ => RefreshDatasetAsync(), _ => !IsBusy);
             RefreshHealthCommand = new AsyncCommand(_ => RefreshHealthAsync());
@@ -554,7 +563,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }, _ => _isBatchRunning);
 
             BrowseDatasetCommand = CreateCommand(_ => BrowseDatasetAsync(), _ => !IsBusy && SelectedInspectionRoi != null);
-            TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
+            TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null && SelectedInspectionRoi.DatasetOkCount >= 10);
             CalibrateSelectedRoiCommand = CreateCommand(async _ => await CalibrateSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && CanCalibrateSelectedRoi());
             EvaluateSelectedRoiCommand = CreateCommand(_ => EvaluateSelectedRoiAsync(), _ => !IsBusy && SelectedInspectionRoi != null && SelectedInspectionRoi.Enabled);
             var inferEnabledCommand = CreateCommand(_ => InferEnabledRoisAsync(), _ => !IsBusy && HasAnyEnabledInspectionRoi());
@@ -2496,8 +2505,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             if (e.PropertyName == nameof(InspectionRoiConfig.DatasetOkCount)
+                || e.PropertyName == nameof(InspectionRoiConfig.DatasetKoCount)
                 || e.PropertyName == nameof(InspectionRoiConfig.IsDatasetLoading))
             {
+                TrainSelectedRoiCommand.RaiseCanExecuteChanged();
                 CalibrateSelectedRoiCommand.RaiseCanExecuteChanged();
             }
 
@@ -2786,7 +2797,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return false;
             }
 
-            return roi.DatasetOkCount > 0;
+            return roi.DatasetOkCount >= 10 && roi.DatasetKoCount >= 1;
         }
 
         private async Task RunExclusiveAsync(Func<Task> action)
@@ -3417,6 +3428,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private async Task TrainAsync()
         {
             EnsureRoleRoi();
+            if (OkSamples.Count < 10)
+            {
+                await ShowMessageAsync("Se requieren al menos 10 OK para entrenar.", "Train");
+                return;
+            }
             _log("[fit] training from backend dataset");
             _showBusyDialog?.Invoke("Training...");
             _updateBusyProgress?.Invoke(null);
@@ -3448,6 +3464,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private async Task CalibrateAsync()
         {
             EnsureRoleRoi();
+            if (OkSamples.Count < 10)
+            {
+                await ShowMessageAsync("Se requieren al menos 10 OK para calibrar.", "Calibrate");
+                return;
+            }
+            if (NgSamples.Count < 1)
+            {
+                await ShowMessageAsync("No NG samples available for calibration.", "Calibrate");
+                return;
+            }
             _showBusyDialog?.Invoke("Calibrating...");
             _updateBusyProgress?.Invoke(null);
 
@@ -4062,6 +4088,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 return false;
             }
+            if (roi.DatasetOkCount < 10)
+            {
+                await ShowMessageAsync("Se requieren al menos 10 OK para entrenar.", "Train");
+                return false;
+            }
             GuiLog.Info($"[train] START roi='{roi.DisplayName}' (backend dataset)");
 
             _showBusyDialog?.Invoke("Training...");
@@ -4123,6 +4154,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (roi == null)
             {
                 await ShowMessageAsync("Select an Inspection ROI first.", "Calibrate");
+                return;
+            }
+            if (roi.DatasetOkCount < 10)
+            {
+                await ShowMessageAsync("Se requieren al menos 10 OK para calibrar.", "Calibrate");
+                return;
+            }
+            if (roi.DatasetKoCount < 1)
+            {
+                await ShowMessageAsync("No NG samples available for calibration.", "Calibrate");
                 return;
             }
 
@@ -4245,26 +4286,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     if (await EnsureFitEndpointAsync().ConfigureAwait(false))
                     {
-                        var okPaths = OkSamples?
-                            .Where(s => !s.IsNg
-                                        && s.Metadata != null
-                                        && !string.IsNullOrWhiteSpace(s.Metadata.roi_id)
-                                        && string.Equals(
-                                            NormalizeInspectionKeyFromMetadata(s.Metadata.roi_id) ?? string.Empty,
-                                            roi.ModelKey,
-                                            StringComparison.OrdinalIgnoreCase))
-                            .Select(s => s.ImagePath)
-                            .Where(path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList()
-                            ?? new List<string>();
-
-                        if (okPaths.Count > 0)
+                        var okCount = OkSamples?.Count ?? 0;
+                        if (okCount >= 10)
                         {
                             try
                             {
-                                _log($"[fit] auto-fit tras LoadModel → {okPaths.Count} OK samples, roi={roi.ModelKey}");
-                                var fit = await _client.FitOkAsync(RoleId, roi.ModelKey, MmPerPx, okPaths, roi.TrainMemoryFit)
+                                _log($"[fit] auto-fit tras LoadModel → {okCount} OK samples (dataset), roi={roi.ModelKey}");
+                                var fit = await _client.FitOkFromDatasetAsync(RoleId, roi.ModelKey, MmPerPx, roi.TrainMemoryFit)
                                                        .ConfigureAwait(false);
 
                                 _lastFitResultsByRoi[roi] = fit;
@@ -4278,7 +4306,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         }
                         else
                         {
-                            _log("[fit] auto-fit omitido: no hay OK samples para este ROI.");
+                            _log("[fit] auto-fit omitido: no hay suficientes OK samples para este ROI.");
                         }
                     }
                     else
@@ -4731,32 +4759,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             catch (BackendMemoryNotFittedException)
             {
-                var okPaths = OkSamples?
-                    .Where(s => !s.IsNg && s.Metadata?.roi_id != null)
-                    .Where(s =>
-                    {
-                        var normalized = NormalizeInspectionKeyFromMetadata(s.Metadata!.roi_id);
-                        if (!string.IsNullOrWhiteSpace(normalized))
-                        {
-                            return string.Equals(normalized, resolvedRoiId, StringComparison.OrdinalIgnoreCase);
-                        }
-
-                        return string.Equals(s.Metadata.roi_id.Trim(), resolvedRoiId, StringComparison.OrdinalIgnoreCase);
-                    })
-                    .Select(s => s.ImagePath)
-                    .Where(path => !string.IsNullOrWhiteSpace(path))
-                    .Distinct()
-                    .ToList() ?? new List<string>();
-
-                if (okPaths.Count == 0)
-                {
-                    await ResetAfterFailureAsync("Falta memoria OK para este ROI y no hay OK samples disponibles.", "Evaluate ROI").ConfigureAwait(false);
-                    return;
-                }
-
                 try
                 {
-                    await _client.FitOkAsync(RoleId, RoiId, MmPerPx, okPaths, memoryFit: false, datasetPath: null, ct).ConfigureAwait(false);
+                    if (OkSamples.Count < 10)
+                    {
+                        await ResetAfterFailureAsync("Faltan OK samples (mínimo 10) para entrenar desde dataset.", "Evaluate ROI").ConfigureAwait(false);
+                        return;
+                    }
+
+                    await _client.FitOkFromDatasetAsync(RoleId, RoiId, MmPerPx, memoryFit: false, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

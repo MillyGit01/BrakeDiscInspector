@@ -62,6 +62,10 @@ Fits/updates PatchCore memory for a given `(role_id, roi_id)`.
   - `use_dataset` (bool-string, optional) – when `true`, train from backend dataset storage (no images required).
   - `recipe_id` (string, optional) – overrides recipe context.
   - `model_key` (string, optional) – logical model slot under the recipe. If omitted, defaults to `roi_id`.
+- **Notes:**
+  - By default, training is only allowed from datasets (`BDI_TRAIN_DATASET_ONLY=1`); set the env var to `0` to re-enable image uploads.
+  - `mm_per_px` is locked per recipe; mismatches return HTTP 409.
+  - When `use_dataset=true`, the dataset must contain at least 10 OK samples (configurable via `BDI_MIN_OK_SAMPLES`).
 - **Response (200):**
 ```json
 {
@@ -75,7 +79,8 @@ Fits/updates PatchCore memory for a given `(role_id, roi_id)`.
 }
 ```
 - **Error responses:**
-  - `400` for malformed requests (e.g., no images, token grid mismatch across images).
+  - `400` for malformed requests (e.g., no images, token grid mismatch across images), insufficient OK samples, or dataset-only deployments.
+  - `409` when `mm_per_px` does not match the recipe lock.
   - `500` for unexpected failures.
 
 ---
@@ -148,6 +153,7 @@ Runs inference on a single ROI crop.
 - `regions` are provided for visualization only.
 - **Error responses:**
   - `400` if memory is missing, token grid mismatches, or inputs are invalid.
+  - `409` when `mm_per_px` does not match the recipe lock.
   - `500` for unexpected failures.
 
 ---
@@ -214,6 +220,8 @@ Read/list operations apply recipe fallback to `"default"` when the recipe-specif
   - `images` (file[], required)
   - `metas` (string[], optional) – JSON strings aligned to `images[]`. Length must be `0` or `len(images)`.
   - `recipe_id` (string, optional)
+- **Notes:**
+  - If `metas[].mm_per_px` is provided, it is validated and locked per recipe; mismatches return HTTP 409.
 - **Response (200):**
 ```json
 { "status": "ok", "saved": ["20250101-120000-000001.png"], "request_id": "…", "recipe_id": "default" }
@@ -321,6 +329,8 @@ Runs inference over the backend dataset with per-sample `mm_per_px` from metadat
 ## `POST /calibrate_dataset`
 
 Calibrates the threshold using backend dataset samples (per-sample `mm_per_px`).
+
+NG samples are required by default (`require_ng=true`).
 
 - **Content type:** `application/json`.
 - **Body:**

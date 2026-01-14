@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import sys
 import types
@@ -90,18 +91,78 @@ def test_fit_ok_persists_memory(tmp_path, monkeypatch):
 
     _reset_backend_state(tmp_path, monkeypatch)
 
-    files = [("images", ("roi.png", _png_bytes(), "image/png"))]
-    data = {"role_id": "Master", "roi_id": "Pattern", "mm_per_px": "0.25", "memory_fit": "false"}
+    for _ in range(10):
+        app_mod.store.save_dataset_image("Master", "Pattern", "ok", _png_bytes(), ".png", recipe_id="default")
 
-    resp = client.post("/fit_ok", data=data, files=files)
+    data = {
+        "role_id": "Master",
+        "roi_id": "Pattern",
+        "mm_per_px": "0.25",
+        "memory_fit": "false",
+        "use_dataset": "true",
+    }
+
+    resp = client.post("/fit_ok", data=data)
     assert resp.status_code == 200, resp.text
     payload = resp.json()
-    assert payload["n_embeddings"] == 3
+    assert payload["n_embeddings"] == 30
     assert payload["coreset_size"] == 2
     assert payload["token_shape"] == [2, 2]
 
     mem_path = app_mod.store.resolve_memory_path_existing("Master", "Pattern", recipe_id="default", model_key="Pattern")
     assert mem_path is not None and mem_path.exists(), "memory file should be saved"
+
+
+def test_fit_ok_requires_min_ok_samples(tmp_path, monkeypatch):
+    client = TestClient(app_mod.app)
+
+    class DummyExtractor:
+        def extract(self, image):
+            emb = np.ones((3, 4), dtype=np.float32)
+            return emb, (2, 2)
+
+    monkeypatch.setattr(app_mod, "_extractor", DummyExtractor())
+
+    _reset_backend_state(tmp_path, monkeypatch)
+
+    for _ in range(9):
+        app_mod.store.save_dataset_image("Master", "Pattern", "ok", _png_bytes(), ".png", recipe_id="default")
+
+    data = {
+        "role_id": "Master",
+        "roi_id": "Pattern",
+        "mm_per_px": "0.25",
+        "memory_fit": "false",
+        "use_dataset": "true",
+    }
+
+    resp = client.post("/fit_ok", data=data)
+    assert resp.status_code == 400, resp.text
+    payload = resp.json()
+    assert "Insufficient OK samples" in payload.get("error", "")
+
+
+def test_fit_ok_mm_per_px_mismatch_returns_conflict(tmp_path, monkeypatch):
+    client = TestClient(app_mod.app)
+    _reset_backend_state(tmp_path, monkeypatch)
+
+    meta = json.dumps({"mm_per_px": 0.2})
+    data = {"role_id": "Master", "roi_id": "Pattern", "metas": meta}
+    files = [("images", ("sample.png", _png_bytes(), "image/png"))]
+    resp = client.post("/datasets/ok/upload", data=data, files=files)
+    assert resp.status_code == 200, resp.text
+
+    fit_data = {
+        "role_id": "Master",
+        "roi_id": "Pattern",
+        "mm_per_px": "0.25",
+        "use_dataset": "true",
+    }
+    resp = client.post("/fit_ok", data=fit_data)
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    detail = body.get("detail", {})
+    assert "mm_per_px mismatch" in detail.get("error", "")
 
 
 def test_calibrate_ng_persists_file(tmp_path, monkeypatch):

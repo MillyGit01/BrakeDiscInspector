@@ -168,6 +168,8 @@ except Exception:
 ensure_dir(MODELS_DIR)
 store = ModelStore(MODELS_DIR)
 
+MM_PER_PX_EPS = 1e-6
+
 # --- GPU requirement ---
 REQUIRE_CUDA = os.getenv("BDI_REQUIRE_CUDA", "1").strip() == "1"
 if REQUIRE_CUDA and not torch.cuda.is_available():
@@ -368,6 +370,28 @@ def _validate_mm_per_px(value: float) -> float:
     return mm
 
 
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _ensure_recipe_mm_per_px(request_id: str, recipe_id: str, mm_per_px: float) -> float:
+    try:
+        return store.ensure_recipe_mm_per_px(recipe_id, mm_per_px, tol=MM_PER_PX_EPS)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": str(exc),
+                "request_id": request_id,
+                "recipe_id": recipe_id,
+            },
+        )
+
+
 def _parse_shape_value(raw: Any) -> Optional[Dict[str, Any]]:
     if raw is None:
         return None
@@ -423,6 +447,10 @@ def fit_ok(
     try:
         request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
         model_key_effective = model_key or roi_id
+        mm_per_px = _validate_mm_per_px(mm_per_px)
+        training_settings = SETTINGS.get("training", {}) or {}
+        min_ok_samples = int(training_settings.get("min_ok_samples", 10))
+        train_dataset_only = _is_truthy(training_settings.get("dataset_only", "1"))
         slog(
             "fit_ok.request",
             role_id=role_id,
@@ -435,20 +463,46 @@ def fit_ok(
             use_dataset=bool(use_dataset),
         )
         t0 = time.time()
+        if train_dataset_only and not use_dataset:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "Training only supported from dataset (use_dataset=true) in this deployment.",
+                    "request_id": request_id,
+                    "recipe_id": recipe_resolved,
+                },
+            )
         if not use_dataset and not images:
             return JSONResponse(
                 status_code=400,
-                content={"error": "No images provided", "request_id": request_id},
+                content={"error": "No images provided", "request_id": request_id, "recipe_id": recipe_resolved},
             )
 
         all_emb: List[np.ndarray] = []
         token_hw: tuple[int, int] | None = None
+        _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_per_px)
 
         if use_dataset:
             listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
             ok_files = listing.get("classes", {}).get("ok", {}).get("files", [])
             if not ok_files:
-                return JSONResponse(status_code=400, content={"error": "No OK dataset samples found", "request_id": request_id})
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "No OK dataset samples found",
+                        "request_id": request_id,
+                        "recipe_id": recipe_resolved,
+                    },
+                )
+            if len(ok_files) < min_ok_samples:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": f"Insufficient OK samples: need at least {min_ok_samples}, found {len(ok_files)}",
+                        "request_id": request_id,
+                        "recipe_id": recipe_resolved,
+                    },
+                )
 
             for fn in ok_files:
                 p = store.resolve_dataset_file_existing(role_id, roi_id, "ok", fn, recipe_id=recipe_resolved)
@@ -480,7 +534,10 @@ def fit_ok(
                 all_emb.append(emb)
 
         if not all_emb:
-            return JSONResponse(status_code=400, content={"error": "No valid images", "request_id": request_id})
+            return JSONResponse(
+                status_code=400,
+                content={"error": "No valid images", "request_id": request_id, "recipe_id": recipe_resolved},
+            )
 
         E = np.concatenate(all_emb, axis=0)  # (N, D)
 
@@ -660,6 +717,8 @@ def infer(
     try:
         request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
         model_key_effective = model_key or roi_id
+        mm_per_px = _validate_mm_per_px(mm_per_px)
+        _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_per_px)
         slog(
             "infer.request",
             role_id=role_id,
@@ -1065,14 +1124,18 @@ async def datasets_ok_upload(
         raise HTTPException(status_code=400, detail="metas length must match images length")
     saved = []
     for i, up in enumerate(images):
+        meta_obj: dict[str, Any] = {}
+        if metas is not None and i < len(metas) and metas[i]:
+            meta_obj = json.loads(metas[i])
+
+        if "mm_per_px" in meta_obj:
+            mm_value = _validate_mm_per_px(meta_obj["mm_per_px"])
+            _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_value)
+
         data = await up.read()
         ext = Path(up.filename or "x.png").suffix or ".png"
         path = store.save_dataset_image(role_id, roi_id, "ok", data, ext, recipe_id=recipe_resolved)
         saved.append(Path(path).name)
-
-        meta_obj: dict[str, Any] = {}
-        if metas is not None and i < len(metas) and metas[i]:
-            meta_obj = json.loads(metas[i])
 
         meta_obj.setdefault("role_id", role_id)
         meta_obj.setdefault("roi_id", roi_id)
@@ -1080,9 +1143,6 @@ async def datasets_ok_upload(
         meta_obj.setdefault("filename", path.name)
         meta_obj.setdefault("recipe_id", recipe_resolved)
         meta_obj.setdefault("created_at_utc", datetime.datetime.utcnow().isoformat() + "Z")
-
-        if "mm_per_px" in meta_obj:
-            _validate_mm_per_px(meta_obj["mm_per_px"])
 
         store.save_dataset_meta(role_id, roi_id, "ok", path.name, meta_obj, recipe_id=recipe_resolved)
     slog(
@@ -1114,14 +1174,18 @@ async def datasets_ng_upload(
         raise HTTPException(status_code=400, detail="metas length must match images length")
     saved = []
     for i, up in enumerate(images):
+        meta_obj: dict[str, Any] = {}
+        if metas is not None and i < len(metas) and metas[i]:
+            meta_obj = json.loads(metas[i])
+
+        if "mm_per_px" in meta_obj:
+            mm_value = _validate_mm_per_px(meta_obj["mm_per_px"])
+            _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_value)
+
         data = await up.read()
         ext = Path(up.filename or "x.png").suffix or ".png"
         path = store.save_dataset_image(role_id, roi_id, "ng", data, ext, recipe_id=recipe_resolved)
         saved.append(Path(path).name)
-
-        meta_obj: dict[str, Any] = {}
-        if metas is not None and i < len(metas) and metas[i]:
-            meta_obj = json.loads(metas[i])
 
         meta_obj.setdefault("role_id", role_id)
         meta_obj.setdefault("roi_id", roi_id)
@@ -1129,9 +1193,6 @@ async def datasets_ng_upload(
         meta_obj.setdefault("filename", path.name)
         meta_obj.setdefault("recipe_id", recipe_resolved)
         meta_obj.setdefault("created_at_utc", datetime.datetime.utcnow().isoformat() + "Z")
-
-        if "mm_per_px" in meta_obj:
-            _validate_mm_per_px(meta_obj["mm_per_px"])
 
         store.save_dataset_meta(role_id, roi_id, "ng", path.name, meta_obj, recipe_id=recipe_resolved)
     slog(

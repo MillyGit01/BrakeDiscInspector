@@ -18,6 +18,8 @@ The backend located in `backend/` exposes the same endpoints implemented in `bac
   - `BDI_MODELS_DIR`: directory for embeddings/calibration (default `models`).
   - `BDI_REQUIRE_CUDA`: when `1` (default), the backend fails to start if CUDA is unavailable. Set to `0` for CI/tests.
   - `BDI_CORESET_RATE`, `BDI_SCORE_PERCENTILE`, `BDI_AREA_MM2_THR`: override inference defaults.
+  - `BDI_MIN_OK_SAMPLES`: minimum OK samples required when training from datasets (default `10`).
+  - `BDI_TRAIN_DATASET_ONLY`: when `1` (default), `/fit_ok` rejects image uploads and requires `use_dataset=true`.
   - `BDI_CORS_ORIGINS`: comma-separated list for CORS (`*` by default).
   - `BDI_BACKEND_BASEURL` is consumed by the GUI client, not the server.
 - Optional `configs/app.yaml` is parsed by `backend/config.py` if `pyyaml` is installed; it merges shallowly with the defaults.
@@ -40,6 +42,8 @@ File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_
 - `GET /health`: returns `{status, device, model, version, request_id, recipe_id}`; device is `cuda` when `torch.cuda.is_available()`. Includes `reason: cuda_not_available` on CPU-only hosts.
 - `POST /fit_ok`:
   - Input: multipart form with `role_id`, `roi_id`, `mm_per_px`, optional `memory_fit` flag, optional `use_dataset` flag, and multiple `images` (PNG/JPG ROI crops).
+  - Training from datasets enforces `BDI_MIN_OK_SAMPLES` and is the only allowed mode when `BDI_TRAIN_DATASET_ONLY=1`.
+  - `mm_per_px` is locked per recipe; mismatches return HTTP 409.
   - For each image `_extractor.extract` is called; the embeddings are concatenated, a coreset is built via `PatchCoreMemory.build` and persisted through `ModelStore.save_memory`. If FAISS is installed its serialised index is also saved.
   - Output: JSON with `n_embeddings`, `coreset_size`, `token_shape`, `coreset_rate_requested`, `coreset_rate_applied`, `request_id`, `recipe_id`.
 - `POST /calibrate_ng`:
@@ -47,6 +51,7 @@ File names use urlsafe base64 encoding of `role_id`/`roi_id` (`ModelStore._base_
   - Uses `choose_threshold`, writes the result via `ModelStore.save_calib` and returns `{threshold, ok_mean, ng_mean?, p99_ok?, p5_ng?, mm_per_px, area_mm2_thr, score_percentile, request_id, recipe_id}`.
 - `POST /infer`:
   - Multipart form with `role_id`, `roi_id`, `mm_per_px`, single `image`, optional `shape` JSON string. The server decodes the image with OpenCV, verifies the token grid matches the stored memory, reconstructs the coreset (optionally loading FAISS) and runs `InferenceEngine.run`.
+  - `mm_per_px` is locked per recipe; mismatches return HTTP 409.
   - Response: `{score, threshold?, token_shape, heatmap_png_base64?, regions[], request_id, recipe_id}`. `heatmap_png_base64` is the grayscale PNG produced by encoding `heatmap_u8`. The GUI always sends the ROI mask (`shape`) and `mm_per_px`, so `roi_mask.py` uses the exact crop geometry while `infer` converts `area_px` to `area_mm2` for the returned regions.
   - Errors: `400` for missing memory or token mismatch (message in the `error` field); `500` responses include `{error, trace, request_id, recipe_id}`.
 - `GET /manifest`: query `role_id`, `roi_id` and returns `ModelStore` availability plus calibration and dataset counts.

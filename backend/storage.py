@@ -95,6 +95,59 @@ class ModelStore:
             ensure_dir(base)
         return base
 
+    def _recipe_dir(self, recipe_id: Optional[str], *, create: bool = True) -> Path:
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        base = self.root / "recipes" / recipe_safe
+        if create:
+            ensure_dir(base)
+        return base
+
+    def _recipe_meta_path(self, recipe_id: Optional[str], *, create: bool = True) -> Path:
+        return self._recipe_dir(recipe_id, create=create) / "recipe_meta.json"
+
+    def load_recipe_meta(self, recipe_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        path = self._recipe_meta_path(recipe_id, create=False)
+        if not path.exists():
+            return None
+        return load_json(path, default=None)
+
+    def save_recipe_meta(self, recipe_id: Optional[str], meta: Dict[str, Any]) -> Path:
+        path = self._recipe_meta_path(recipe_id, create=True)
+        save_json(path, meta)
+        return path
+
+    def ensure_recipe_mm_per_px(self, recipe_id: Optional[str], mm_per_px: float, *, tol: float | None = None) -> float:
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        mm_value = float(mm_per_px)
+        meta = self.load_recipe_meta(recipe_safe)
+        if meta is None:
+            meta = {
+                "mm_per_px": mm_value,
+                "created_at_utc": datetime.utcnow().isoformat() + "Z",
+            }
+            self.save_recipe_meta(recipe_safe, meta)
+            return mm_value
+
+        expected = meta.get("mm_per_px")
+        if expected is None:
+            meta["mm_per_px"] = mm_value
+            meta.setdefault("created_at_utc", datetime.utcnow().isoformat() + "Z")
+            self.save_recipe_meta(recipe_safe, meta)
+            return mm_value
+
+        expected_value = float(expected)
+        if tol is None:
+            matches = expected_value == mm_value
+        else:
+            matches = abs(expected_value - mm_value) <= tol * max(1.0, abs(expected_value), abs(mm_value))
+
+        if not matches:
+            raise ValueError(
+                f"mm_per_px mismatch for recipe '{recipe_safe}': expected {expected_value}, got {mm_value}"
+            )
+
+        return expected_value
+
     def _find_recipe_dir_case_insensitive(self, recipe_safe: str) -> Optional[str]:
         """Return existing recipe directory name on disk matching recipe_safe ignoring case."""
         recipes_root = self.root / "recipes"

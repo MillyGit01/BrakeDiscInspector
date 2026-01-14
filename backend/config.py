@@ -27,6 +27,10 @@ DEFAULTS: Dict[str, Any] = {
         "score_percentile": int(_env("BDI_SCORE_PERCENTILE", "BRAKEDISC_SCORE_PERCENTILE", "99")),
         "area_mm2_thr": float(_env("BDI_AREA_MM2_THR", "BRAKEDISC_AREA_MM2_THR", "1.0")),
     },
+    "training": {
+        "min_ok_samples": int(_env("BDI_MIN_OK_SAMPLES", None, "10")),
+        "dataset_only": _env("BDI_TRAIN_DATASET_ONLY", None, "1"),
+    },
 }
 
 def load_settings(config_path: str | os.PathLike[str] | None = None) -> Dict[str, Any]:

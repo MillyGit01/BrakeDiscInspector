@@ -4902,7 +4902,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private void InitUI()
         {
             ComboFeature.SelectedIndex = 0;
-            ComboMasterRoiRole.ItemsSource = new[] { "ROI Master 1", "ROI Inspección Master 1" };
+            ComboMasterRoiRole.ItemsSource = new[] { "ROI Master 1", "ROI Inspection Master 1" };
             ComboMasterRoiRole.SelectedIndex = 0;
 
 
@@ -4916,7 +4916,7 @@ namespace BrakeDiscInspector_GUI_ROI
             ComboM2Shape.SelectedIndex = 0;
 
 
-            ComboM2Role.ItemsSource = new[] { "ROI Master 2", "ROI Inspección Master 2" };
+            ComboM2Role.ItemsSource = new[] { "ROI Master 2", "ROI Inspection Master 2" };
             ComboM2Role.SelectedIndex = 0;
 
             InitRoiVisibilityControls();

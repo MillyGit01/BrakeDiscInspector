@@ -6602,21 +6602,18 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         continue;
                     }
 
-                    byte alpha = value;
-
                     if (value >= cutoffByte)
                     {
                         outBuffer[offset + 0] = 0;
                         outBuffer[offset + 1] = 0;
-                        outBuffer[offset + 2] = alpha;
-                        outBuffer[offset + 3] = alpha;
+                        outBuffer[offset + 2] = 255;
+                        outBuffer[offset + 3] = 255;
                     }
                     else
                     {
                         outBuffer[offset + 0] = 0;
-                        outBuffer[offset + 1] = alpha;
                         outBuffer[offset + 2] = 0;
-                        outBuffer[offset + 3] = alpha;
+                        outBuffer[offset + 3] = 0;
                     }
                 }
             }
@@ -6828,16 +6825,81 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             };
         }
 
+        private static byte[]? BuildRegionMaskPngBytes(int width, int height, InferRegion[] regions)
+        {
+            if (width <= 0 || height <= 0 || regions == null || regions.Length == 0)
+            {
+                return null;
+            }
+
+            var buffer = new byte[width * height];
+
+            foreach (var region in regions)
+            {
+                if (region == null || region.w <= 0 || region.h <= 0)
+                {
+                    continue;
+                }
+
+                int left = (int)Math.Floor(region.x);
+                int top = (int)Math.Floor(region.y);
+                int right = (int)Math.Ceiling(region.x + region.w);
+                int bottom = (int)Math.Ceiling(region.y + region.h);
+
+                left = Math.Clamp(left, 0, width);
+                right = Math.Clamp(right, 0, width);
+                top = Math.Clamp(top, 0, height);
+                bottom = Math.Clamp(bottom, 0, height);
+
+                if (right <= left || bottom <= top)
+                {
+                    continue;
+                }
+
+                for (int y = top; y < bottom; y++)
+                {
+                    int rowOffset = y * width;
+                    for (int x = left; x < right; x++)
+                    {
+                        buffer[rowOffset + x] = 255;
+                    }
+                }
+            }
+
+            var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Gray8, null);
+            wb.WritePixels(new Int32Rect(0, 0, width, height), buffer, width, 0);
+            wb.Freeze();
+
+            using var ms = new MemoryStream();
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(wb));
+            encoder.Save(ms);
+            return ms.ToArray();
+        }
+
         private void UpdateHeatmapFromResult(GlobalInferResult result, int roiIndex)
         {
-            if (result == null || string.IsNullOrWhiteSpace(result.heatmap_png_base64))
+            if (result == null)
             {
-                InvokeOnUi(ClearBatchHeatmap);
+                InvokeOnUi(() => SetBatchHeatmapForRoi(null, roiIndex));
                 return;
             }
 
             try
             {
+                bool isNg = result.threshold.HasValue && result.score > result.threshold.Value;
+                if (!isNg)
+                {
+                    InvokeOnUi(() => SetBatchHeatmapForRoi(null, roiIndex));
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(result.heatmap_png_base64))
+                {
+                    InvokeOnUi(() => SetBatchHeatmapForRoi(null, roiIndex));
+                    return;
+                }
+
                 var heatmapBytes = Convert.FromBase64String(result.heatmap_png_base64);
                 var (w, h) = GetImageSizeSafe(heatmapBytes);
                 GuiLog.Info($"[heatmap] recv file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' roi={roiIndex} bytes={heatmapBytes.Length} hash={ComputeHashTag(heatmapBytes)} dims={w}x{h}");
@@ -6846,21 +6908,31 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     try
                     {
-                        SetBatchHeatmapForRoi(heatmapBytes, roiIndex);
+                        var payload = heatmapBytes;
+                        if (result.regions != null && result.regions.Length > 0 && w > 0 && h > 0)
+                        {
+                            var regionMask = BuildRegionMaskPngBytes(w, h, result.regions);
+                            if (regionMask != null && regionMask.Length > 0)
+                            {
+                                payload = regionMask;
+                            }
+                        }
+
+                        SetBatchHeatmapForRoi(payload, roiIndex);
                         LogImg("hm:set-after-update", BatchHeatmapSource);
                         LogHeatmapState("hm:after-update");
                     }
                     catch (Exception ex)
                     {
                         GuiLog.Error($"[heatmap] failed to decode batch heatmap", ex); // CODEX: FormattableString compatibility.
-                        ClearBatchHeatmap();
+                        SetBatchHeatmapForRoi(null, roiIndex);
                     }
                 });
             }
             catch (FormatException ex)
             {
                 _log($"[batch] invalid heatmap payload: {ex.Message}");
-                InvokeOnUi(ClearBatchHeatmap);
+                InvokeOnUi(() => SetBatchHeatmapForRoi(null, roiIndex));
             }
         }
 

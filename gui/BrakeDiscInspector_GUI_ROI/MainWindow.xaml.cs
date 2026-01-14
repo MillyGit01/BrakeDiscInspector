@@ -7135,24 +7135,53 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
 
                     CacheHeatmapGrayFromBitmapSource(heatmapSource);
-                    RebuildHeatmapOverlayFromCache();
-                    SyncHeatmapBitmapFromOverlay();
 
-                    if (_lastHeatmapBmp != null)
+                    if (!_lastIsNg)
                     {
-                        LogHeatmap($"Heatmap Source: {_lastHeatmapBmp.PixelWidth}x{_lastHeatmapBmp.PixelHeight}, Fmt={_lastHeatmapBmp.Format}");
-                    }
-                    else
-                    {
-                        LogHeatmap("Heatmap Source: <null>");
+                        ClearHeatmapOverlay();
+                        return;
                     }
 
-                    // OPTIONAL: bump overlay opacity a bit (visual only)
-                    if (HeatmapOverlay != null)
+                    BitmapSource? overlay = null;
+                    var regions = _workflowViewModel?.Regions;
+                    if (regions != null && regions.Count > 0)
                     {
-                        HeatmapOverlay.Visibility = Visibility.Visible;
-                        HeatmapOverlay.Opacity = _heatmapOverlayOpacity;
+                        overlay = BuildRedMaskFromRegions(heatmapSource.PixelWidth, heatmapSource.PixelHeight, regions);
                     }
+
+                    if (overlay == null && _lastHeatmapGray != null && _lastHeatmapW > 0 && _lastHeatmapH > 0)
+                    {
+                        int cutoffPercent = _workflowViewModel?.HeatmapCutoffPercent ?? 0;
+                        int cutoffByte = Math.Clamp((int)(cutoffPercent * 255 / 100.0), 0, 255);
+                        int stride = _lastHeatmapW * 4;
+                        var outBuffer = new byte[_lastHeatmapW * _lastHeatmapH * 4];
+                        for (int i = 0; i < _lastHeatmapGray.Length; i++)
+                        {
+                            byte value = _lastHeatmapGray[i];
+                            if (value > 0 && value >= cutoffByte)
+                            {
+                                int offset = i * 4;
+                                outBuffer[offset + 2] = 255;
+                                outBuffer[offset + 3] = 255;
+                            }
+                        }
+
+                        var wb = new WriteableBitmap(_lastHeatmapW, _lastHeatmapH, 96, 96, PixelFormats.Pbgra32, null);
+                        wb.WritePixels(new Int32Rect(0, 0, _lastHeatmapW, _lastHeatmapH), outBuffer, stride, 0);
+                        wb.Freeze();
+                        overlay = wb;
+                    }
+
+                    if (overlay == null)
+                    {
+                        ClearHeatmapOverlay();
+                        return;
+                    }
+
+                    _lastHeatmapBmp = overlay;
+                    HeatmapOverlay.Source = overlay;
+                    HeatmapOverlay.Visibility = Visibility.Visible;
+                    HeatmapOverlay.Opacity = _heatmapOverlayOpacity;
 
                     UpdateHeatmapOverlayLayoutAndClip();
 
@@ -7183,18 +7212,20 @@ namespace BrakeDiscInspector_GUI_ROI
             DiskStatusHUD.Visibility = Visibility.Visible;
             if (ok.Value)
             {
-                DiskStatusText.Text = "✅  DISK OK";
+                DiskStatusText.Text = "OK";
+                DiskStatusText.Foreground = Brushes.White;
                 if (DiskStatusPanel != null)
                 {
-                    DiskStatusPanel.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#39FF14");
+                    DiskStatusPanel.Background = (Brush)new BrushConverter().ConvertFromString("#2ECC71");
                 }
             }
             else
             {
-                DiskStatusText.Text = "❌  DISK NOK";
+                DiskStatusText.Text = "NG";
+                DiskStatusText.Foreground = Brushes.White;
                 if (DiskStatusPanel != null)
                 {
-                    DiskStatusPanel.BorderBrush = Brushes.Red;
+                    DiskStatusPanel.Background = Brushes.Red;
                 }
             }
         }
@@ -7375,6 +7406,56 @@ namespace BrakeDiscInspector_GUI_ROI
             _lastHeatmapGray = gray;
             _lastHeatmapW = w;
             _lastHeatmapH = h;
+        }
+
+        private static BitmapSource? BuildRedMaskFromRegions(int width, int height, IEnumerable<Region> regions)
+        {
+            if (width <= 0 || height <= 0 || regions == null)
+            {
+                return null;
+            }
+
+            int stride = width * 4;
+            var buffer = new byte[height * stride];
+
+            foreach (var region in regions)
+            {
+                if (region == null || region.w <= 0 || region.h <= 0)
+                {
+                    continue;
+                }
+
+                int left = (int)Math.Floor(region.x);
+                int top = (int)Math.Floor(region.y);
+                int right = (int)Math.Ceiling(region.x + region.w);
+                int bottom = (int)Math.Ceiling(region.y + region.h);
+
+                left = Math.Clamp(left, 0, width);
+                right = Math.Clamp(right, 0, width);
+                top = Math.Clamp(top, 0, height);
+                bottom = Math.Clamp(bottom, 0, height);
+
+                if (right <= left || bottom <= top)
+                {
+                    continue;
+                }
+
+                for (int y = top; y < bottom; y++)
+                {
+                    int rowStart = y * stride + left * 4;
+                    for (int x = left; x < right; x++)
+                    {
+                        int offset = rowStart + (x - left) * 4;
+                        buffer[offset + 2] = 255;
+                        buffer[offset + 3] = 255;
+                    }
+                }
+            }
+
+            var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
+            wb.WritePixels(new Int32Rect(0, 0, width, height), buffer, stride, 0);
+            wb.Freeze();
+            return wb;
         }
 
         private static byte[] CopyGrayBytes(BitmapSource src)
@@ -9505,6 +9586,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     heatmap.Source = null;
                     heatmap.Visibility = Visibility.Collapsed;
+                    if (BatchRoiOutline != null)
+                    {
+                        BatchRoiOutline.Visibility = Visibility.Collapsed;
+                    }
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:idx0", roiIndex, null);
                     return;
                 }
@@ -9514,8 +9599,29 @@ namespace BrakeDiscInspector_GUI_ROI
                 {
                     heatmap.Source = null;
                     heatmap.Visibility = Visibility.Collapsed;
+                    if (BatchRoiOutline != null)
+                    {
+                        BatchRoiOutline.Visibility = Visibility.Collapsed;
+                    }
                     vm.TraceBatchHeatmapPlacement($"ui:{reason}:disabled", roiIndex, null);
                     return;
+                }
+
+                WRect? canvasRect = vm.GetInspectionRoiCanvasRect(roiIndex); // CODEX: capture explicit WPF rect type to avoid ambiguity.
+                if (BatchRoiOutline != null)
+                {
+                    if (canvasRect == null)
+                    {
+                        BatchRoiOutline.Visibility = Visibility.Collapsed;
+                    }
+                    else
+                    {
+                        BatchRoiOutline.Visibility = Visibility.Visible;
+                        BatchRoiOutline.Width = Math.Max(1.0, canvasRect.Value.Width);
+                        BatchRoiOutline.Height = Math.Max(1.0, canvasRect.Value.Height);
+                        Canvas.SetLeft(BatchRoiOutline, canvasRect.Value.Left);
+                        Canvas.SetTop(BatchRoiOutline, canvasRect.Value.Top);
+                    }
                 }
 
                 var src = vm.BatchHeatmapRoiIndex == roiIndex ? vm.BatchHeatmapSource : null;
@@ -9539,7 +9645,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                WRect? canvasRect = vm.GetInspectionRoiCanvasRect(roiIndex); // CODEX: capture explicit WPF rect type to avoid ambiguity.
                 if (canvasRect == null)
                 {
                     heatmap.Source = null;

@@ -27,21 +27,21 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Orientation="Horizontal">
+        <StackPanel Orientation="Horizontal" Margin="0,10,0,10">
             <TextBlock Text="Name" Width="70" VerticalAlignment="Center"/>
             <TextBox Text="{Binding Name}" Width="200" Margin="0,0,12,0"/>
         </StackPanel>
 
         <CheckBox Grid.Row="1" Content="Enabled" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,8,0,0"/>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,10">
             <TextBlock Text="ModelKey" Width="70" VerticalAlignment="Center"/>
             <TextBox Text="{Binding ModelKey}" Width="220" Margin="0,0,12,0"/>
         </StackPanel>
 
         <CheckBox Grid.Row="3" Content="Memory fit" IsChecked="{Binding TrainMemoryFit}" VerticalAlignment="Center" Margin="0,8,0,0"/>
 
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,8,0,0">
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,10,0,10">
             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                 <TextBlock Text="Anchor master:" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <ComboBox Width="90"
@@ -57,7 +57,7 @@
             </StackPanel>
         </StackPanel>
 
-        <StackPanel Grid.Row="5" Margin="0,8,0,0">
+        <StackPanel Grid.Row="5" Margin="0,10,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -91,7 +91,7 @@
         </StackPanel>
 
         <StackPanel Grid.Row="6" Orientation="Horizontal" Margin="0,8,0,0">
-            <TextBlock Text="{Binding DatasetStatus}">
+            <TextBlock Text="{Binding DatasetStatus}" FontSize="16">
                 <TextBlock.Style>
                     <Style TargetType="TextBlock">
                         <Setter Property="FontWeight" Value="SemiBold"/>
@@ -105,17 +105,13 @@
                 </TextBlock.Style>
             </TextBlock>
             <TextBlock Text="  "/>
-            <TextBlock Text="{Binding DatasetCountsText}"/>
+            <TextBlock Text="{Binding DatasetCountsText}" FontSize="16"/>
         </StackPanel>
-
-        <ProgressBar Grid.Row="7" Height="4" Margin="0,4,0,0"
-                     IsIndeterminate="True"
-                     Visibility="{Binding IsDatasetLoading, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
         <StackPanel Grid.Row="8" Margin="0,8,0,0">
             <w:DatasetPreviewStripView Title="OK dataset"
                                        ItemsSource="{Binding OkPreview}"
-                                       SelectedItem="{Binding SelectedOkPreviewItem, Mode=TwoWay}"/>
+                                       SelectedItem="{Binding SelectedOkPreviewItem, Mode=TwoWay}" Margin="0,10,0,0"/>
             <w:DatasetPreviewStripView Title="NG dataset"
                                        ItemsSource="{Binding NgPreview}"
                                        SelectedItem="{Binding SelectedNgPreviewItem, Mode=TwoWay}"

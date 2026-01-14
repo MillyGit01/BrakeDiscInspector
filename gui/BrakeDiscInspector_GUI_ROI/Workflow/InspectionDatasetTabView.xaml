@@ -130,7 +130,7 @@
             </ui:Button>
             <ui:Button Padding="12,4"
                        Margin="0,0,8,0"
-                      Command="{Binding DataContext.RemoveSelectedCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
+                      Command="{Binding DataContext.RemoveSelectedPreviewCommand, RelativeSource={RelativeSource Mode=FindAncestor, AncestorType={x:Type w:InspectionDatasetTabsControl}}}">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Delete24}" Margin="0,0,8,0"/>
                     <TextBlock Text="Delete Selected" VerticalAlignment="Center"/>

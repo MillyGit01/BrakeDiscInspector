@@ -478,6 +478,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             AddOkFromCurrentRoiCommand = CreateCommand(_ => AddSampleAsync(isNg: false));
             AddNgFromCurrentRoiCommand = CreateCommand(_ => AddSampleAsync(isNg: true));
             RemoveSelectedCommand = CreateCommand(_ => RemoveSelectedAsync(), _ => !IsBusy && (SelectedOkSample != null || SelectedNgSample != null));
+            RemoveSelectedPreviewCommand = CreateCommand(_ => RemoveSelectedPreviewAsync(), _ => CanRemoveSelectedPreview());
             OpenDatasetFolderCommand = CreateCommand(_ => OpenDatasetFolderAsync(), _ => !IsBusy);
             TrainFitCommand = CreateCommand(_ => TrainAsync(), _ => !IsBusy && OkSamples.Count >= 10);
             CalibrateCommand = CreateCommand(_ => CalibrateAsync(), _ => !IsBusy && OkSamples.Count >= 10 && NgSamples.Count >= 1);
@@ -1308,6 +1309,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
                     UpdateSelectedRoiState();
                     OpenDatasetFolderCommand.RaiseCanExecuteChanged();
+                    RemoveSelectedPreviewCommand.RaiseCanExecuteChanged();
 
                     if (value != null)
                     {
@@ -2514,6 +2516,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (ReferenceEquals(sender, SelectedInspectionRoi))
             {
+                if (e.PropertyName == nameof(InspectionRoiConfig.SelectedOkPreviewItem)
+                    || e.PropertyName == nameof(InspectionRoiConfig.SelectedNgPreviewItem))
+                {
+                    RemoveSelectedPreviewCommand.RaiseCanExecuteChanged();
+                }
+
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
                 OnPropertyChanged(nameof(ActiveInspectionRoiModel));
                 OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
@@ -2557,6 +2565,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public AsyncCommand AddOkFromCurrentRoiCommand { get; }
         public AsyncCommand AddNgFromCurrentRoiCommand { get; }
         public AsyncCommand RemoveSelectedCommand { get; }
+        public AsyncCommand RemoveSelectedPreviewCommand { get; }
         public AsyncCommand DeleteSelectedCommand => RemoveSelectedCommand;
         public AsyncCommand OpenDatasetFolderCommand { get; }
         public AsyncCommand TrainFitCommand { get; }
@@ -2823,6 +2832,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             AddOkFromCurrentRoiCommand.RaiseCanExecuteChanged();
             AddNgFromCurrentRoiCommand.RaiseCanExecuteChanged();
             RemoveSelectedCommand.RaiseCanExecuteChanged();
+            RemoveSelectedPreviewCommand.RaiseCanExecuteChanged();
             OpenDatasetFolderCommand.RaiseCanExecuteChanged();
             TrainFitCommand.RaiseCanExecuteChanged();
             CalibrateCommand.RaiseCanExecuteChanged();
@@ -3335,6 +3345,79 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             await RefreshDatasetAsync().ConfigureAwait(false);
+        }
+
+        private bool CanRemoveSelectedPreview()
+        {
+            var roi = SelectedInspectionRoi;
+            return !IsBusy
+                   && roi != null
+                   && (roi.SelectedOkPreviewItem != null || roi.SelectedNgPreviewItem != null);
+        }
+
+        private async Task RemoveSelectedPreviewAsync()
+        {
+            var roi = SelectedInspectionRoi;
+            if (roi == null)
+            {
+                return;
+            }
+
+            var selectedOk = roi.SelectedOkPreviewItem;
+            var selectedNg = roi.SelectedNgPreviewItem;
+            if (selectedOk == null && selectedNg == null)
+            {
+                return;
+            }
+
+            if (selectedOk != null)
+            {
+                var filename = Path.GetFileName(selectedOk.Path);
+                if (string.IsNullOrWhiteSpace(filename))
+                {
+                    ShowSnackbar("No se pudo determinar el archivo OK seleccionado.");
+                    return;
+                }
+
+                try
+                {
+                    await _client.DeleteDatasetFileAsync(RoleId, roi.ModelKey, isNg: false, filename).ConfigureAwait(false);
+                    _log($"[dataset] removed preview OK sample {filename}");
+                    InvokeOnUi(() => roi.SelectedOkPreviewItem = null);
+                }
+                catch (Exception ex)
+                {
+                    _log($"[dataset] failed to delete preview OK sample {filename}: {ex.Message}");
+                    ShowSnackbar($"Error al borrar OK: {ex.Message}");
+                    return;
+                }
+            }
+
+            if (selectedNg != null)
+            {
+                var filename = Path.GetFileName(selectedNg.Path);
+                if (string.IsNullOrWhiteSpace(filename))
+                {
+                    ShowSnackbar("No se pudo determinar el archivo NG seleccionado.");
+                    return;
+                }
+
+                try
+                {
+                    await _client.DeleteDatasetFileAsync(RoleId, roi.ModelKey, isNg: true, filename).ConfigureAwait(false);
+                    _log($"[dataset] removed preview NG sample {filename}");
+                    InvokeOnUi(() => roi.SelectedNgPreviewItem = null);
+                }
+                catch (Exception ex)
+                {
+                    _log($"[dataset] failed to delete preview NG sample {filename}: {ex.Message}");
+                    ShowSnackbar($"Error al borrar NG: {ex.Message}");
+                    return;
+                }
+            }
+
+            await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
+            await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
         }
 
         private async Task OpenDatasetFolderAsync()

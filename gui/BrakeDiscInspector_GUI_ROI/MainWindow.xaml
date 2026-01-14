@@ -1687,6 +1687,12 @@
                                 VerticalAlignment="Center"
                                 IsHitTestVisible="False"
                                 Panel.ZIndex="1">
+                            <Rectangle x:Name="BatchRoiOutline"
+                                       StrokeThickness="2"
+                                       Stroke="White"
+                                       Fill="Transparent"
+                                       Visibility="Collapsed"
+                                       SnapsToDevicePixels="True"/>
                             <!-- Heatmap del ROI: se posiciona y escala desde código -->
                             <Image x:Name="HeatmapImage"
                                    Stretch="Fill"
@@ -2150,16 +2156,21 @@
               Visibility="Collapsed"
               IsHitTestVisible="False">
                 <Border x:Name="DiskStatusPanel"
-                  Background="#CC000000"
-                  BorderBrush="#39FF14"
-                  BorderThickness="1.5"
+                  Width="48"
+                  Height="48"
+                  Background="Transparent"
+                  BorderBrush="Transparent"
+                  BorderThickness="0"
                   CornerRadius="0"
-                  Padding="8">
+                  Padding="0">
                     <TextBlock x:Name="DiskStatusText"
                        Text=""
                        FontFamily="Segoe UI"
-                       FontWeight="Bold"
-                       FontSize="22"
+                       FontWeight="Black"
+                       FontSize="20"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       TextAlignment="Center"
                        Foreground="White"/>
                 </Border>
             </Grid>

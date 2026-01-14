@@ -11185,9 +11185,7 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog(detail);
             GuiLog.Warn(detail);
             VisConfLog.AnalyzeMaster(FormattableString.Invariant(
-                $"[VISCONF][ANALYZE_MASTER][FAIL] reason='{reason}' " +
-                $"M1_center='{FormatCenter(m1Center)}' M1_angle={FormatAngle(angle1)} M1_score={score1:0.###} M1_thr={thrM1:0.###} " +
-                $"M2_center='{FormatCenter(m2Center)}' M2_angle={FormatAngle(angle2)} M2_score={score2:0.###} M2_thr={thrM2:0.###}"));
+                $"[VISCONF][ANALYZE_MASTER][FAIL] reason='{reason}' M1_center='{FormatCenter(m1Center)}' M1_angle={FormatAngle(angle1)} M1_score={score1:0.###} M1_thr={thrM1:0.###} M2_center='{FormatCenter(m2Center)}' M2_angle={FormatAngle(angle2)} M2_score={score2:0.###} M2_thr={thrM2:0.###}"));
 
             var message =
                 "No se detectaron los Masters (M1/M2) correctamente; revisa ROIs de patrón y búsqueda y los thresholds " +

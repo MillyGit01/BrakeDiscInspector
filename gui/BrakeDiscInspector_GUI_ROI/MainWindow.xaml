@@ -1176,6 +1176,15 @@
                                                 </Style>
                                             </ui:Button.Style>
                                         </ui:Button>
+                                        <CheckBox Width="20"
+                                                  Height="20"
+                                                  Margin="6,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Enable/disable Inspection ROI 1"
+                                                  IsChecked="{Binding DataContext.InspectionRois[0].Enabled,
+                                                                      ElementName=WorkflowHost,
+                                                                      Mode=TwoWay,
+                                                                      UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
 
                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
@@ -1294,6 +1303,15 @@
                                                 </Style>
                                             </ui:Button.Style>
                                         </ui:Button>
+                                        <CheckBox Width="20"
+                                                  Height="20"
+                                                  Margin="6,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Enable/disable Inspection ROI 2"
+                                                  IsChecked="{Binding DataContext.InspectionRois[1].Enabled,
+                                                                      ElementName=WorkflowHost,
+                                                                      Mode=TwoWay,
+                                                                      UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
 
                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
@@ -1412,6 +1430,15 @@
                                                 </Style>
                                             </ui:Button.Style>
                                         </ui:Button>
+                                        <CheckBox Width="20"
+                                                  Height="20"
+                                                  Margin="6,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Enable/disable Inspection ROI 3"
+                                                  IsChecked="{Binding DataContext.InspectionRois[2].Enabled,
+                                                                      ElementName=WorkflowHost,
+                                                                      Mode=TwoWay,
+                                                                      UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
 
                                     <StackPanel Orientation="Horizontal" Margin="0,4,0,12" Width="446" HorizontalAlignment="Left">
@@ -1530,6 +1557,15 @@
                                                 </Style>
                                             </ui:Button.Style>
                                         </ui:Button>
+                                        <CheckBox Width="20"
+                                                  Height="20"
+                                                  Margin="6,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Enable/disable Inspection ROI 4"
+                                                  IsChecked="{Binding DataContext.InspectionRois[3].Enabled,
+                                                                      ElementName=WorkflowHost,
+                                                                      Mode=TwoWay,
+                                                                      UpdateSourceTrigger=PropertyChanged}"/>
                                     </StackPanel>
 
                                     <workflow:WorkflowControl x:Name="WorkflowHost"

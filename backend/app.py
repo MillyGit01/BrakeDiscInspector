@@ -992,6 +992,7 @@ def fit_ok(
     Acumula OKs para construir la memoria PatchCore (coreset + kNN).
     Guarda (role_id, roi_id): memoria (embeddings), token grid y, si hay FAISS, el índice.
     """
+    t0: Optional[float] = None
     try:
         request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
         model_key_effective = model_key or roi_id
@@ -1218,7 +1219,7 @@ def fit_ok(
             recipe_id=recipe_id2,
             error_type=type(e).__name__,
             error_message=str(e),
-            elapsed_ms=int(1000 * (time.time() - t0)) if "t0" in locals() else None,
+            elapsed_ms=int(1000 * (time.time() - t0)) if t0 is not None else None,
         )
         return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
@@ -1359,6 +1360,7 @@ def infer(
     recipe_id: Optional[str] = Form(None),
     model_key: Optional[str] = Form(None),
 ):
+    t0: Optional[float] = None
     try:
         request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
         model_key_effective = model_key or roi_id
@@ -1572,7 +1574,7 @@ def infer(
             recipe_id=recipe_id2,
             error_type=type(e).__name__,
             error_message=str(e),
-            elapsed_ms=int(1000 * (time.time() - t0)) if "t0" in locals() else None,
+            elapsed_ms=int(1000 * (time.time() - t0)) if t0 is not None else None,
         )
         return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 

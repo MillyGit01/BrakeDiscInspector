@@ -171,15 +171,20 @@ def resolve_gui_logs_dir() -> Path:
     override = os.environ.get("BDI_GUI_LOG_DIR")
     if override:
         return Path(override).expanduser().resolve()
-    if os.name == "nt":
-        base = os.environ.get("LOCALAPPDATA")
-        base_path = Path(base) if base else Path.home() / "AppData" / "Local"
-        return (base_path / "BrakeDiscInspector" / "logs").resolve()
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        if os.name == "nt":
+            return (Path(local_appdata) / "BrakeDiscInspector" / "logs").resolve()
+        translated = None
+        if ":" in local_appdata:
+            translated = _windows_to_wsl_path(local_appdata)
+        if translated is not None:
+            return (translated / "BrakeDiscInspector" / "logs").resolve()
     if is_wsl():
         base = try_get_windows_localappdata_in_wsl()
         if base is not None:
             return (base / "BrakeDiscInspector" / "logs").resolve()
-    return _linux_fallback_logs_dir()
+    return (Path(__file__).resolve().parent / "logs").resolve()
 
 
 _DIAG_LOGGER: logging.Logger | None = None
@@ -189,7 +194,7 @@ _DIAG_LOG_DIR: Path | None = None
 def _pick_writable_log_dir(primary: Path) -> Path | None:
     candidates = []
     seen = set()
-    for candidate in (primary, _linux_fallback_logs_dir(), (Path.cwd() / "logs").resolve()):
+    for candidate in (primary, (Path(__file__).resolve().parent / "logs").resolve()):
         if candidate in seen:
             continue
         candidates.append(candidate)
@@ -252,6 +257,176 @@ def diag(event: str, **fields: Any) -> None:
         _DIAG_LOGGER.info(json.dumps(payload, ensure_ascii=False))
     except Exception:
         return
+
+
+def _artifact_fallback_reason(
+    *,
+    expected_path: Path,
+    resolved_path: Path,
+    role_id: str,
+    roi_id: str,
+    recipe_id_effective: str,
+    model_key_effective: str,
+    artifact: str,
+) -> tuple[str | None, str | None]:
+    if resolved_path == expected_path:
+        return None, None
+
+    if recipe_id_effective != "default":
+        default_path_lookup = {
+            "memory": store.expected_memory_path,
+            "index": store.expected_index_path,
+            "calib": store.expected_calib_path,
+        }
+        default_path = default_path_lookup[artifact](
+            role_id,
+            roi_id,
+            recipe_id="default",
+            model_key=model_key_effective,
+            create=False,
+        )
+        if resolved_path == default_path:
+            return artifact, "default_recipe_fallback"
+
+    alt_recipe_dir = store._find_recipe_dir_case_insensitive(recipe_id_effective)
+    if alt_recipe_dir and alt_recipe_dir != recipe_id_effective:
+        alt_base = store.root / "recipes" / alt_recipe_dir / store._sanitize_model_key(model_key_effective)
+        filename_lookup = {
+            "memory": f"{store._base_name(role_id, roi_id)}.npz",
+            "index": f"{store._base_name(role_id, roi_id)}_index.faiss",
+            "calib": f"{store._base_name(role_id, roi_id)}_calib.json",
+        }
+        alt_path = alt_base / filename_lookup[artifact]
+        if resolved_path == alt_path:
+            return artifact, "case_insensitive_recipe_dir"
+
+    legacy_lookup = {
+        "memory": (store.root / f"{store._legacy_flat_base_name(role_id, roi_id)}.npz"),
+        "index": (store.root / f"{store._legacy_flat_base_name(role_id, roi_id)}_index.faiss"),
+        "calib": (store.root / f"{store._legacy_flat_base_name(role_id, roi_id)}_calib.json"),
+    }
+    if resolved_path == legacy_lookup[artifact]:
+        return artifact, "legacy_flat"
+
+    legacy_dir_lookup = {
+        "memory": store._legacy_dir(role_id, roi_id) / "memory.npz",
+        "index": store._legacy_dir(role_id, roi_id) / "index.faiss",
+        "calib": store._legacy_dir(role_id, roi_id) / "calib.json",
+    }
+    if resolved_path == legacy_dir_lookup[artifact]:
+        return artifact, "legacy_dir"
+
+    return artifact, "other"
+
+
+def _diag_artifacts(
+    *,
+    store: ModelStore,
+    request_id: str,
+    role_id: str,
+    roi_id: str,
+    recipe_id_raw: str | None,
+    model_key_raw: str | None,
+) -> dict[str, Any]:
+    recipe_id_effective = store._sanitize_recipe_id(recipe_id_raw)
+    model_key_effective = model_key_raw or roi_id
+
+    expected_memory = store.expected_memory_path(
+        role_id,
+        roi_id,
+        recipe_id=recipe_id_effective,
+        model_key=model_key_effective,
+        create=False,
+    )
+    expected_index = store.expected_index_path(
+        role_id,
+        roi_id,
+        recipe_id=recipe_id_effective,
+        model_key=model_key_effective,
+        create=False,
+    )
+    expected_calib = store.expected_calib_path(
+        role_id,
+        roi_id,
+        recipe_id=recipe_id_effective,
+        model_key=model_key_effective,
+        create=False,
+    )
+
+    resolved_memory = store.resolve_memory_path_existing(
+        role_id,
+        roi_id,
+        recipe_id=recipe_id_effective,
+        model_key=model_key_effective,
+    )
+    resolved_index = store.resolve_index_path_existing(
+        role_id,
+        roi_id,
+        recipe_id=recipe_id_effective,
+        model_key=model_key_effective,
+    )
+    resolved_calib = store.resolve_calib_path_existing(
+        role_id,
+        roi_id,
+        recipe_id=recipe_id_effective,
+        model_key=model_key_effective,
+    )
+
+    fallback_from = None
+    fallback_reason = None
+    if resolved_memory is not None and resolved_memory != expected_memory:
+        fallback_from, fallback_reason = _artifact_fallback_reason(
+            expected_path=expected_memory,
+            resolved_path=resolved_memory,
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_effective=recipe_id_effective,
+            model_key_effective=model_key_effective,
+            artifact="memory",
+        )
+    elif resolved_index is not None and resolved_index != expected_index:
+        fallback_from, fallback_reason = _artifact_fallback_reason(
+            expected_path=expected_index,
+            resolved_path=resolved_index,
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_effective=recipe_id_effective,
+            model_key_effective=model_key_effective,
+            artifact="index",
+        )
+    elif resolved_calib is not None and resolved_calib != expected_calib:
+        fallback_from, fallback_reason = _artifact_fallback_reason(
+            expected_path=expected_calib,
+            resolved_path=resolved_calib,
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_effective=recipe_id_effective,
+            model_key_effective=model_key_effective,
+            artifact="calib",
+        )
+
+    payload = {
+        "request_id": request_id,
+        "role_id": role_id,
+        "roi_id": roi_id,
+        "recipe_id_raw": recipe_id_raw,
+        "recipe_id_effective": recipe_id_effective,
+        "model_key_raw": model_key_raw,
+        "model_key_effective": model_key_effective,
+        "expected_memory_path": str(expected_memory),
+        "resolved_memory_path": str(resolved_memory) if resolved_memory is not None else None,
+        "memory_exists": bool(resolved_memory and resolved_memory.exists()),
+        "expected_index_path": str(expected_index),
+        "resolved_index_path": str(resolved_index) if resolved_index is not None else None,
+        "index_exists": bool(resolved_index and resolved_index.exists()),
+        "expected_calib_path": str(expected_calib),
+        "resolved_calib_path": str(resolved_calib) if resolved_calib is not None else None,
+        "calib_exists": bool(resolved_calib and resolved_calib.exists()),
+    }
+    if fallback_from and fallback_reason:
+        payload["fallback_from"] = fallback_from
+        payload["fallback_reason"] = fallback_reason
+    return payload
 
 
 def _attach_request_context(
@@ -397,10 +572,14 @@ MM_PER_PX_EPS = 1e-6
 def _startup_diag():
     _init_diag_logger()
     resolved_log_dir = str(_DIAG_LOG_DIR) if _DIAG_LOG_DIR is not None else "disabled"
+    resolved_log_file = (
+        str((_DIAG_LOG_DIR / "backend_diagnostics.jsonl").resolve()) if _DIAG_LOG_DIR is not None else "disabled"
+    )
     print(f"[diag] backend diagnostics log dir: {resolved_log_dir}", flush=True)
     slog(
         "startup",
         resolved_log_dir=resolved_log_dir,
+        resolved_log_file=resolved_log_file,
         cwd=os.getcwd(),
         models_dir=str(MODELS_DIR.resolve()),
         env_BDI_GUI_LOG_DIR=os.getenv("BDI_GUI_LOG_DIR"),
@@ -411,6 +590,7 @@ def _startup_diag():
         "startup",
         cwd=os.getcwd(),
         resolved_log_dir=resolved_log_dir,
+        resolved_log_file=resolved_log_file,
         models_dir=str(MODELS_DIR.resolve()),
         env_BDI_GUI_LOG_DIR=os.getenv("BDI_GUI_LOG_DIR"),
         env_LOCALAPPDATA=os.getenv("LOCALAPPDATA"),
@@ -709,6 +889,26 @@ def fit_ok(
             roi_id=roi_id,
             model_key=model_key_effective,
         )
+        raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
+        diag(
+            "fit_ok.request.diag",
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key_effective,
+        )
+        diag(
+            "roi.artifacts",
+            **_diag_artifacts(
+                store=store,
+                request_id=request_id,
+                role_id=role_id,
+                roi_id=roi_id,
+                recipe_id_raw=raw_recipe_id,
+                model_key_raw=model_key,
+            ),
+        )
         mm_per_px = _validate_mm_per_px(mm_per_px)
         training_settings = SETTINGS.get("training", {}) or {}
         min_ok_samples = int(training_settings.get("min_ok_samples", 10))
@@ -814,7 +1014,7 @@ def fit_ok(
         if token_hw is None:
             raise ValueError("No valid OK images received; token grid (token_hw) is undefined.")
 
-        store.save_memory(
+        memory_path_written = store.save_memory(
             role_id,
             roi_id,
             mem.emb,
@@ -828,11 +1028,20 @@ def fit_ok(
         )
 
         # Persistir índice FAISS si está disponible
+        index_path_written: str | None = None
         try:
             import faiss  # type: ignore
             if mem.index is not None:
                 buf = faiss.serialize_index(mem.index)
-                store.save_index_blob(role_id, roi_id, bytes(buf), recipe_id=recipe_resolved, model_key=model_key_effective)
+                index_path_written = str(
+                    store.save_index_blob(
+                        role_id,
+                        roi_id,
+                        bytes(buf),
+                        recipe_id=recipe_resolved,
+                        model_key=model_key_effective,
+                    )
+                )
         except Exception:
             pass
 
@@ -840,13 +1049,6 @@ def fit_ok(
         _invalidate_memory_cache(recipe_resolved, model_key_effective, role_id, roi_id)
         _invalidate_calib_cache(recipe_resolved, model_key_effective, role_id, roi_id)
 
-        expected_path = store.expected_memory_path(
-            role_id,
-            roi_id,
-            recipe_id=recipe_resolved,
-            model_key=model_key_effective,
-            create=False,
-        )
         diag(
             "fit_ok.saved",
             recipe_id=recipe_resolved,
@@ -854,8 +1056,11 @@ def fit_ok(
             roi_id=roi_id,
             model_key=model_key_effective,
             request_id=request_id,
-            expected_npz=str(expected_path),
-            exists=expected_path.exists(),
+            memory_path_written=str(memory_path_written),
+            index_path_written=index_path_written,
+            token_hw=[int(token_hw[0]), int(token_hw[1])],
+            n_embeddings=int(E.shape[0]),
+            coreset_size=int(mem.emb.shape[0]),
         )
 
         response = {
@@ -959,8 +1164,18 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
             "request_id": request_id,
             "recipe_id": recipe_resolved,
         }
-        store.save_calib(role_id, roi_id, calib, recipe_id=recipe_resolved, model_key=model_key)
+        calib_path_written = store.save_calib(role_id, roi_id, calib, recipe_id=recipe_resolved, model_key=model_key)
         _invalidate_calib_cache(recipe_resolved, model_key, role_id, roi_id)
+        diag(
+            "calibrate.saved",
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key,
+            calib_path_written=str(calib_path_written),
+            threshold=float(t),
+        )
 
         slog(
             "calibrate_ng.response",
@@ -1015,6 +1230,18 @@ def infer(
         )
         mm_per_px = _validate_mm_per_px(mm_per_px)
         _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_per_px)
+        raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
+        diag(
+            "roi.artifacts",
+            **_diag_artifacts(
+                store=store,
+                request_id=request_id,
+                role_id=role_id,
+                roi_id=roi_id,
+                recipe_id_raw=raw_recipe_id,
+                model_key_raw=model_key,
+            ),
+        )
         slog(
             "infer.request",
             role_id=role_id,
@@ -1042,11 +1269,13 @@ def infer(
             )
             expected_dir = expected_path.parent
             dir_listing: list[str] = []
+            list_error = None
             if expected_dir.exists():
                 try:
-                    dir_listing = sorted([p.name for p in expected_dir.iterdir()])
-                except OSError:
+                    dir_listing = sorted([p.name for p in expected_dir.iterdir()])[:20]
+                except OSError as exc:
                     dir_listing = []
+                    list_error = str(exc)
             diag(
                 "infer.memory_missing",
                 recipe_id=recipe_resolved,
@@ -1054,10 +1283,11 @@ def infer(
                 roi_id=roi_id,
                 model_key=model_key_effective,
                 request_id=request_id,
-                expected_npz=str(expected_path),
-                exists=expected_path.exists(),
+                expected_memory_path=str(expected_path),
+                memory_exists=expected_path.exists(),
                 expected_dir=str(expected_dir),
                 dir_listing=dir_listing,
+                list_error=list_error,
             )
             return JSONResponse(
                 status_code=400,
@@ -1570,8 +1800,33 @@ def datasets_list(request: Request, role_id: str, roi_id: str, recipe_id: Option
         role_id=role_id,
         roi_id=roi_id,
     )
+    raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
+    diag(
+        "roi.artifacts",
+        **_diag_artifacts(
+            store=store,
+            request_id=request_id,
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_raw=raw_recipe_id,
+            model_key_raw=None,
+        ),
+    )
     slog("datasets.list.request", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id)
     data = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
+    class_counts = {
+        name: len(meta.get("files", []) or [])
+        for name, meta in (data.get("classes") or {}).items()
+        if isinstance(meta, dict)
+    }
+    diag(
+        "datasets.list.summary",
+        request_id=request_id,
+        role_id=role_id,
+        roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        class_counts=class_counts,
+    )
     data["request_id"] = request_id
     data["recipe_id"] = recipe_resolved
     slog(
@@ -1687,7 +1942,31 @@ def state(
         model_key=model_key_effective,
     )
     mem_present = store.load_memory(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
-    calib_present = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
+    calib = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective)
+    calib_present = calib is not None
+    raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
+    diag(
+        "roi.artifacts",
+        **_diag_artifacts(
+            store=store,
+            request_id=request_id,
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_raw=raw_recipe_id,
+            model_key_raw=model_key,
+        ),
+    )
+    diag(
+        "state.response.summary",
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+        model_key=model_key_effective,
+        has_memory=bool(mem_present),
+        has_calib=bool(calib_present),
+        threshold=calib.get("threshold") if calib_present else None,
+    )
     return {
         "status": "ok",
         "memory_fitted": bool(mem_present),

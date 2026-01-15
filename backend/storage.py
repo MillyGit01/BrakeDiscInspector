@@ -205,6 +205,30 @@ class ModelStore:
     ) -> Path:
         model_key_effective = model_key or roi_id
         return self._memory_path(role_id, roi_id, recipe_id, model_key_effective, create=create)
+
+    def expected_index_path(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+        create: bool = False,
+    ) -> Path:
+        model_key_effective = model_key or roi_id
+        return self._index_path(role_id, roi_id, recipe_id, model_key_effective, create=create)
+
+    def expected_calib_path(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+        create: bool = False,
+    ) -> Path:
+        model_key_effective = model_key or roi_id
+        return self._calib_path(role_id, roi_id, recipe_id, model_key_effective, create=create)
     # --- Resolve existing artifact paths (recipe-aware with fallback) ---
 
     def resolve_memory_path_existing(
@@ -365,7 +389,9 @@ class ModelStore:
         }
         if metadata:
             payload["metadata"] = json.dumps(metadata)
-        np.savez_compressed(self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id), **payload)
+        path = self._memory_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        np.savez_compressed(path, **payload)
+        return path
 
     def load_memory(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         """
@@ -382,9 +408,11 @@ class ModelStore:
             return None
         return self._load_memory_from_path(path)
 
-    def save_index_blob(self, role_id: str, roi_id: str, blob: bytes, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
+    def save_index_blob(self, role_id: str, roi_id: str, blob: bytes, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None) -> Path:
         ensure_dir(self.root)
-        self._index_path(role_id, roi_id, recipe_id, model_key or roi_id).write_bytes(blob)
+        path = self._index_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        path.write_bytes(blob)
+        return path
 
     def load_index_blob(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None) -> Optional[bytes]:
         path = self.resolve_index_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
@@ -392,8 +420,10 @@ class ModelStore:
             return None
         return path.read_bytes()
 
-    def save_calib(self, role_id: str, roi_id: str, data: dict, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
-        save_json(self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id), data)
+    def save_calib(self, role_id: str, roi_id: str, data: dict, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None) -> Path:
+        path = self._calib_path(role_id, roi_id, recipe_id, model_key or roi_id)
+        save_json(path, data)
+        return path
 
     def load_calib(self, role_id: str, roi_id: str, default=None, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
         path = self.resolve_calib_path_existing(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)

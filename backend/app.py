@@ -36,19 +36,12 @@ if __package__ in (None, ""):
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
 
-    from backend.features import DinoV2Features  # type: ignore[no-redef]
-    from backend.patchcore import PatchCoreMemory  # type: ignore[no-redef]
-    from backend.storage import ModelStore  # type: ignore[no-redef]
-    from backend.infer import InferenceEngine  # type: ignore[no-redef]
-    from backend.calib import choose_threshold  # type: ignore[no-redef]
-    from backend.utils import ensure_dir, base64_from_bytes  # type: ignore[no-redef]
-else:
-    from .features import DinoV2Features
-    from .patchcore import PatchCoreMemory
-    from .storage import ModelStore
-    from .infer import InferenceEngine
-    from .calib import choose_threshold
-    from .utils import ensure_dir, base64_from_bytes
+from backend.features import DinoV2Features
+from backend.patchcore import PatchCoreMemory
+from backend.storage import ModelStore
+from backend.infer import InferenceEngine
+from backend.calib import choose_threshold
+from backend.utils import ensure_dir, base64_from_bytes
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +110,21 @@ def resolve_gui_logs_dir() -> Path:
         return base_path / "BrakeDiscInspector" / "logs"
     # For WSL/Linux, set BDI_GUI_LOG_DIR to the Windows logs path to match the GUI folder.
     return Path.home() / ".local" / "share" / "BrakeDiscInspector" / "logs"
+
+
+def _expected_memory_path(
+    store: ModelStore,
+    role_id: str,
+    roi_id: str,
+    *,
+    recipe_id: Optional[str],
+    model_key: Optional[str],
+) -> Path:
+    model_key_effective = model_key or roi_id
+    return (
+        store.resolve_models_dir(recipe_id, model_key_effective, create=False)
+        / f"{store._base_name(role_id, roi_id)}.npz"
+    )
 
 
 _DIAG_LOGGER: logging.Logger | None = None
@@ -725,12 +733,12 @@ def fit_ok(
         _invalidate_memory_cache(recipe_resolved, model_key_effective, role_id, roi_id)
         _invalidate_calib_cache(recipe_resolved, model_key_effective, role_id, roi_id)
 
-        expected_path = store.expected_memory_path(
+        expected_path = _expected_memory_path(
+            store,
             role_id,
             roi_id,
             recipe_id=recipe_resolved,
             model_key=model_key_effective,
-            create=False,
         )
         diag(
             "fit_ok.saved",
@@ -918,12 +926,12 @@ def infer(
         # 2) Cargar memoria/coreset (cacheado por worker)
         cached = _get_patchcore_memory_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         if cached is None:
-            expected_path = store.expected_memory_path(
+            expected_path = _expected_memory_path(
+                store,
                 role_id,
                 roi_id,
                 recipe_id=recipe_resolved,
                 model_key=model_key_effective,
-                create=False,
             )
             expected_dir = expected_path.parent
             dir_listing: list[str] = []

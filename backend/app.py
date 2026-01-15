@@ -104,9 +104,7 @@ app.add_middleware(
 
 
 def slog(event: str, **kw):
-    rec = {"ts": time.time(), "event": event}
-    rec.update(kw)
-    print(json.dumps(rec, ensure_ascii=False), flush=True)
+    diag_emit(event, **kw)
 
 
 def _linux_fallback_logs_dir() -> Path:
@@ -239,6 +237,7 @@ def _init_diag_logger() -> None:
         logger.setLevel(logging.INFO)
         if logger.handlers:
             logger.handlers.clear()
+        handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
         logger.propagate = False
         _DIAG_LOGGER = logger
@@ -249,10 +248,10 @@ def _init_diag_logger() -> None:
         _DIAG_LOG_DIR = None
 
 
-def diag(event: str, **fields: Any) -> None:
+def diag_emit(event: str, **fields: Any) -> None:
     if _DIAG_LOGGER is None:
         return
-    payload = {"ts": time.time(), "event": event, **fields}
+    payload = {"ts": time.time(), "event": event, "pid": os.getpid(), **fields}
     try:
         _DIAG_LOGGER.info(json.dumps(payload, ensure_ascii=False))
     except Exception:
@@ -507,7 +506,7 @@ async def diag_http_middleware(request: Request, call_next):
             safe_request_id, safe_recipe_id = _resolve_request_context_safe(request)
             request_id = request_id or safe_request_id
             recipe_id = recipe_id or safe_recipe_id
-        diag(
+        diag_emit(
             "http",
             method=request.method,
             path=request.url.path,
@@ -532,7 +531,7 @@ async def diag_http_middleware(request: Request, call_next):
         request_id = request_id or safe_request_id
         recipe_id = recipe_id or safe_recipe_id
 
-    diag(
+    diag_emit(
         "http",
         method=request.method,
         path=request.url.path,
@@ -586,7 +585,7 @@ def _startup_diag():
         env_LOCALAPPDATA=os.getenv("LOCALAPPDATA"),
         is_wsl=is_wsl(),
     )
-    diag(
+    diag_emit(
         "startup",
         cwd=os.getcwd(),
         resolved_log_dir=resolved_log_dir,
@@ -837,6 +836,30 @@ def _parse_shape_value(raw: Any) -> Optional[Dict[str, Any]]:
         return json.loads(raw)
     return raw  # best-effort for unexpected types
 
+
+def _roi_index_guess(roi_id: str) -> Optional[int]:
+    value = (roi_id or "").strip().lower()
+    for prefix in ("inspection-", "inspection_", "inspection "):
+        if value.startswith(prefix):
+            tail = value[len(prefix):]
+            if tail.isdigit():
+                return int(tail)
+    return None
+
+
+def _dataset_summary(role_id: str, roi_id: str, *, recipe_id: str) -> dict[str, Any]:
+    listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_id)
+    classes = listing.get("classes") or {}
+    ok_files = classes.get("ok", {}).get("files", []) if isinstance(classes.get("ok"), dict) else []
+    ng_files = classes.get("ng", {}).get("files", []) if isinstance(classes.get("ng"), dict) else []
+    base = store.resolve_dataset_base_existing(role_id, roi_id, recipe_id=recipe_id)
+    return {
+        "dataset_base": str(base) if base is not None else None,
+        "dataset_classes": list(classes.keys()),
+        "dataset_ok_count": len(ok_files),
+        "dataset_ng_count": len(ng_files),
+    }
+
 @app.get("/health")
 def health(request: Request):
     try:
@@ -890,55 +913,72 @@ def fit_ok(
             model_key=model_key_effective,
         )
         raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
-        diag(
-            "fit_ok.request.diag",
-            request_id=request_id,
+        dataset_info = _dataset_summary(role_id, roi_id, recipe_id=recipe_resolved)
+        expected_memory = store.expected_memory_path(
+            role_id,
+            roi_id,
             recipe_id=recipe_resolved,
-            role_id=role_id,
-            roi_id=roi_id,
             model_key=model_key_effective,
+            create=False,
         )
-        diag(
-            "roi.artifacts",
-            **_diag_artifacts(
-                store=store,
-                request_id=request_id,
-                role_id=role_id,
-                roi_id=roi_id,
-                recipe_id_raw=raw_recipe_id,
-                model_key_raw=model_key,
-            ),
+        expected_index = store.expected_index_path(
+            role_id,
+            roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            create=False,
+        )
+        expected_calib = store.expected_calib_path(
+            role_id,
+            roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            create=False,
         )
         mm_per_px = _validate_mm_per_px(mm_per_px)
         training_settings = SETTINGS.get("training", {}) or {}
         min_ok_samples = int(training_settings.get("min_ok_samples", 10))
         train_dataset_only = _is_truthy(training_settings.get("dataset_only", "1"))
-        slog(
+        diag_emit(
             "fit_ok.request",
+            request_id=request_id,
+            recipe_id=recipe_resolved,
             role_id=role_id,
             roi_id=roi_id,
-            recipe_id=recipe_resolved,
             model_key=model_key_effective,
-            request_id=request_id,
             n_files=len(images or []),
             memory_fit=bool(memory_fit),
             use_dataset=bool(use_dataset),
+            dataset_base=dataset_info["dataset_base"],
+            dataset_ok_count=dataset_info["dataset_ok_count"],
+            dataset_ng_count=dataset_info["dataset_ng_count"],
+            dataset_classes=dataset_info["dataset_classes"],
+            expected_memory_path=str(expected_memory),
+            expected_index_path=str(expected_index),
+            expected_calib_path=str(expected_calib),
         )
         t0 = time.time()
+
+        def _fit_ok_error(message: str, *, status_code: int = 400):
+            diag_emit(
+                "fit_ok.error",
+                request_id=request_id,
+                recipe_id=recipe_resolved,
+                role_id=role_id,
+                roi_id=roi_id,
+                model_key=model_key_effective,
+                error_type="bad_request",
+                error_message=message,
+                elapsed_ms=int(1000 * (time.time() - t0)),
+            )
+            return JSONResponse(
+                status_code=status_code,
+                content={"error": message, "request_id": request_id, "recipe_id": recipe_resolved},
+            )
         if train_dataset_only and not use_dataset:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "Training only supported from dataset (use_dataset=true) in this deployment.",
-                    "request_id": request_id,
-                    "recipe_id": recipe_resolved,
-                },
-            )
+            return _fit_ok_error("Training only supported from dataset (use_dataset=true) in this deployment.")
         if not use_dataset and not images:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "No images provided", "request_id": request_id, "recipe_id": recipe_resolved},
-            )
+            return _fit_ok_error("No images provided")
 
         all_emb: List[np.ndarray] = []
         token_hw: tuple[int, int] | None = None
@@ -948,22 +988,10 @@ def fit_ok(
             listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
             ok_files = listing.get("classes", {}).get("ok", {}).get("files", [])
             if not ok_files:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": "No OK dataset samples found",
-                        "request_id": request_id,
-                        "recipe_id": recipe_resolved,
-                    },
-                )
+                return _fit_ok_error("No OK dataset samples found")
             if len(ok_files) < min_ok_samples:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "error": f"Insufficient OK samples: need at least {min_ok_samples}, found {len(ok_files)}",
-                        "request_id": request_id,
-                        "recipe_id": recipe_resolved,
-                    },
+                return _fit_ok_error(
+                    f"Insufficient OK samples: need at least {min_ok_samples}, found {len(ok_files)}"
                 )
 
             for fn in ok_files:
@@ -975,10 +1003,7 @@ def fit_ok(
                 if token_hw is None:
                     token_hw = token_hw_local
                 elif (int(token_hw_local[0]), int(token_hw_local[1])) != (int(token_hw[0]), int(token_hw[1])):
-                    return JSONResponse(
-                        status_code=400,
-                        content={"error": f"Token grid mismatch: got {token_hw_local}, expected {token_hw}", "request_id": request_id},
-                    )
+                    return _fit_ok_error(f"Token grid mismatch: got {token_hw_local}, expected {token_hw}")
                 token_hw = token_hw_local
                 all_emb.append(emb)
         else:
@@ -988,18 +1013,12 @@ def fit_ok(
                 if token_hw is None:
                     token_hw = token_hw_local
                 elif (int(token_hw_local[0]), int(token_hw_local[1])) != (int(token_hw[0]), int(token_hw[1])):
-                    return JSONResponse(
-                        status_code=400,
-                        content={"error": f"Token grid mismatch: got {token_hw_local}, expected {token_hw}", "request_id": request_id},
-                    )
+                    return _fit_ok_error(f"Token grid mismatch: got {token_hw_local}, expected {token_hw}")
                 token_hw = token_hw_local
                 all_emb.append(emb)
 
         if not all_emb:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "No valid images", "request_id": request_id, "recipe_id": recipe_resolved},
-            )
+            return _fit_ok_error("No valid images")
 
         E = np.concatenate(all_emb, axis=0)  # (N, D)
 
@@ -1049,20 +1068,6 @@ def fit_ok(
         _invalidate_memory_cache(recipe_resolved, model_key_effective, role_id, roi_id)
         _invalidate_calib_cache(recipe_resolved, model_key_effective, role_id, roi_id)
 
-        diag(
-            "fit_ok.saved",
-            recipe_id=recipe_resolved,
-            role_id=role_id,
-            roi_id=roi_id,
-            model_key=model_key_effective,
-            request_id=request_id,
-            memory_path_written=str(memory_path_written),
-            index_path_written=index_path_written,
-            token_hw=[int(token_hw[0]), int(token_hw[1])],
-            n_embeddings=int(E.shape[0]),
-            coreset_size=int(mem.emb.shape[0]),
-        )
-
         response = {
             "n_embeddings": int(E.shape[0]),
             "coreset_size": int(mem.emb.shape[0]),
@@ -1072,23 +1077,33 @@ def fit_ok(
             "request_id": request_id,
             "recipe_id": recipe_resolved,
         }
-        slog(
+        diag_emit(
             "fit_ok.response",
+            request_id=request_id,
+            recipe_id=recipe_resolved,
             role_id=role_id,
             roi_id=roi_id,
-            recipe_id=recipe_resolved,
             model_key=model_key_effective,
-            request_id=request_id,
             elapsed_ms=int(1000 * (time.time() - t0)),
             n_embeddings=int(E.shape[0]),
             coreset_size=int(mem.emb.shape[0]),
+            fitted_after=True,
+            memory_path_written=str(memory_path_written) if memory_path_written is not None else None,
+            index_path_written=index_path_written,
         )
         return response
     except HTTPException:
         raise
     except Exception as e:
         request_id2, recipe_id2 = _resolve_request_context_safe(request, recipe_id)
-        slog("fit_ok.error", request_id=request_id2, recipe_id=recipe_id2, error=str(e), trace=traceback.format_exc())
+        diag_emit(
+            "fit_ok.error",
+            request_id=request_id2,
+            recipe_id=recipe_id2,
+            error_type=type(e).__name__,
+            error_message=str(e),
+            elapsed_ms=int(1000 * (time.time() - t0)) if "t0" in locals() else None,
+        )
         return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
 @app.post("/calibrate_ng")
@@ -1166,7 +1181,7 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
         }
         calib_path_written = store.save_calib(role_id, roi_id, calib, recipe_id=recipe_resolved, model_key=model_key)
         _invalidate_calib_cache(recipe_resolved, model_key, role_id, roi_id)
-        diag(
+        diag_emit(
             "calibrate.saved",
             request_id=request_id,
             recipe_id=recipe_resolved,
@@ -1230,25 +1245,18 @@ def infer(
         )
         mm_per_px = _validate_mm_per_px(mm_per_px)
         _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_per_px)
-        raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
-        diag(
-            "roi.artifacts",
-            **_diag_artifacts(
-                store=store,
-                request_id=request_id,
-                role_id=role_id,
-                roi_id=roi_id,
-                recipe_id_raw=raw_recipe_id,
-                model_key_raw=model_key,
-            ),
-        )
-        slog(
-            "infer.request",
-            role_id=role_id,
-            roi_id=roi_id,
+        expected_memory_path = store.expected_memory_path(
+            role_id,
+            roi_id,
             recipe_id=recipe_resolved,
             model_key=model_key_effective,
-            request_id=request_id,
+            create=False,
+        )
+        resolved_memory_path = store.resolve_memory_path_existing(
+            role_id,
+            roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
         )
         t0 = time.time()
 
@@ -1256,17 +1264,26 @@ def infer(
 
         # 1) Imagen ROI canónica
         img = _read_image_file(image)
+        calib = _get_calib_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
+        thr = calib.get("threshold") if calib else None
+        diag_emit(
+            "infer.request",
+            request_id=request_id,
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            image_shape=list(img.shape),
+            mm_per_px=float(mm_per_px),
+            threshold=(float(thr) if thr is not None else None),
+            expected_memory_path=str(expected_memory_path),
+            resolved_memory_path=str(resolved_memory_path) if resolved_memory_path is not None else None,
+        )
 
         # 2) Cargar memoria/coreset (cacheado por worker)
         cached = _get_patchcore_memory_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         if cached is None:
-            expected_path = store.expected_memory_path(
-                role_id,
-                roi_id,
-                recipe_id=recipe_resolved,
-                model_key=model_key_effective,
-                create=False,
-            )
+            expected_path = expected_memory_path
             expected_dir = expected_path.parent
             dir_listing: list[str] = []
             list_error = None
@@ -1276,19 +1293,29 @@ def infer(
                 except OSError as exc:
                     dir_listing = []
                     list_error = str(exc)
-            diag(
-                "infer.memory_missing",
-                recipe_id=recipe_resolved,
-                role_id=role_id,
-                roi_id=roi_id,
-                model_key=model_key_effective,
-                request_id=request_id,
-                expected_memory_path=str(expected_path),
-                memory_exists=expected_path.exists(),
-                expected_dir=str(expected_dir),
-                dir_listing=dir_listing,
-                list_error=list_error,
-            )
+            dataset_info = _dataset_summary(role_id, roi_id, recipe_id=recipe_resolved)
+            diag_payload = {
+                "request_id": request_id,
+                "recipe_id": recipe_resolved,
+                "role_id": role_id,
+                "roi_id": roi_id,
+                "model_key": model_key_effective,
+                "expected_memory_path": str(expected_path),
+                "resolved_memory_path": str(resolved_memory_path) if resolved_memory_path is not None else None,
+                "memory_exists": expected_path.exists(),
+                "expected_dir": str(expected_dir),
+                "dir_listing": dir_listing,
+                "list_error": list_error,
+                "roi_index_guess": _roi_index_guess(roi_id),
+                "dataset_base": dataset_info["dataset_base"],
+                "dataset_ok_count": dataset_info["dataset_ok_count"],
+                "dataset_ng_count": dataset_info["dataset_ng_count"],
+                "dataset_classes": dataset_info["dataset_classes"],
+                "hint": "call fit_ok",
+            }
+            if dataset_info["dataset_ok_count"] < 10:
+                diag_payload["reason"] = "insufficient_ok_samples"
+            diag_emit("infer.not_fitted", **diag_payload)
             return JSONResponse(
                 status_code=400,
                 content={
@@ -1300,7 +1327,7 @@ def infer(
         mem, token_hw_mem, metadata = cached
 
         # 3) Calibración (opcional, también cacheada)
-        calib = _get_calib_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
+        calib = calib or _get_calib_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         thr = calib.get("threshold") if calib else None
         area_mm2_thr = calib.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)) if calib else SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)
         p_score = calib.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)) if calib else SETTINGS.get("inference", {}).get("score_percentile", 99)
@@ -1386,13 +1413,13 @@ def infer(
             "request_id": request_id,
             "recipe_id": recipe_resolved,
         }
-        slog(
+        diag_emit(
             "infer.response",
+            request_id=request_id,
             role_id=role_id,
             roi_id=roi_id,
             recipe_id=recipe_resolved,
             model_key=model_key_effective,
-            request_id=request_id,
             elapsed_ms=int(1000 * (time.time() - t0)),
             score=float(score),
             threshold=(float(thr) if thr is not None else None),
@@ -1403,7 +1430,14 @@ def infer(
         raise
     except Exception as e:
         request_id2, recipe_id2 = _resolve_request_context_safe(request, recipe_id)
-        slog("infer.error", request_id=request_id2, recipe_id=recipe_id2, error=str(e), trace=traceback.format_exc())
+        diag_emit(
+            "infer.error",
+            request_id=request_id2,
+            recipe_id=recipe_id2,
+            error_type=type(e).__name__,
+            error_message=str(e),
+            elapsed_ms=int(1000 * (time.time() - t0)) if "t0" in locals() else None,
+        )
         return JSONResponse(status_code=500, content={"error": str(e), "request_id": request_id2, "recipe_id": recipe_id2})
 
 
@@ -1800,43 +1834,34 @@ def datasets_list(request: Request, role_id: str, roi_id: str, recipe_id: Option
         role_id=role_id,
         roi_id=roi_id,
     )
-    raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
-    diag(
-        "roi.artifacts",
-        **_diag_artifacts(
-            store=store,
-            request_id=request_id,
-            role_id=role_id,
-            roi_id=roi_id,
-            recipe_id_raw=raw_recipe_id,
-            model_key_raw=None,
-        ),
+    diag_emit(
+        "datasets.list.request",
+        request_id=request_id,
+        role_id=role_id,
+        roi_id=roi_id,
+        recipe_id=recipe_resolved,
     )
-    slog("datasets.list.request", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id)
     data = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
     class_counts = {
         name: len(meta.get("files", []) or [])
         for name, meta in (data.get("classes") or {}).items()
         if isinstance(meta, dict)
     }
-    diag(
-        "datasets.list.summary",
+    dataset_info = _dataset_summary(role_id, roi_id, recipe_id=recipe_resolved)
+    diag_emit(
+        "datasets.list.response",
         request_id=request_id,
         role_id=role_id,
         roi_id=roi_id,
         recipe_id=recipe_resolved,
+        dataset_base=dataset_info["dataset_base"],
+        dataset_ok_count=dataset_info["dataset_ok_count"],
+        dataset_ng_count=dataset_info["dataset_ng_count"],
+        classes=dataset_info["dataset_classes"],
         class_counts=class_counts,
     )
     data["request_id"] = request_id
     data["recipe_id"] = recipe_resolved
-    slog(
-        "datasets.list.response",
-        role_id=role_id,
-        roi_id=roi_id,
-        recipe_id=recipe_resolved,
-        request_id=request_id,
-        classes=list((data.get("classes") or {}).keys()),
-    )
     return data
 
 
@@ -1941,32 +1966,67 @@ def state(
         roi_id=roi_id,
         model_key=model_key_effective,
     )
+    diag_emit(
+        "state.request",
+        request_id=request_id,
+        role_id=role_id,
+        roi_id=roi_id,
+        recipe_id=recipe_resolved,
+        model_key=model_key_effective,
+    )
     mem_present = store.load_memory(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
     calib = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective)
     calib_present = calib is not None
-    raw_recipe_id = recipe_id or request.headers.get("X-Recipe-Id")
-    diag(
-        "roi.artifacts",
-        **_diag_artifacts(
-            store=store,
-            request_id=request_id,
-            role_id=role_id,
-            roi_id=roi_id,
-            recipe_id_raw=raw_recipe_id,
-            model_key_raw=model_key,
-        ),
-    )
-    diag(
-        "state.response.summary",
-        request_id=request_id,
+    dataset_info = _dataset_summary(role_id, roi_id, recipe_id=recipe_resolved)
+    expected_memory_path = store.expected_memory_path(
+        role_id,
+        roi_id,
         recipe_id=recipe_resolved,
-        role_id=role_id,
-        roi_id=roi_id,
         model_key=model_key_effective,
-        has_memory=bool(mem_present),
-        has_calib=bool(calib_present),
-        threshold=calib.get("threshold") if calib_present else None,
+        create=False,
     )
+    resolved_memory = store.resolve_memory_path_existing(
+        role_id,
+        roi_id,
+        recipe_id=recipe_resolved,
+        model_key=model_key_effective,
+    )
+    resolved_index = store.resolve_index_path_existing(
+        role_id,
+        roi_id,
+        recipe_id=recipe_resolved,
+        model_key=model_key_effective,
+    )
+    resolved_calib = store.resolve_calib_path_existing(
+        role_id,
+        roi_id,
+        recipe_id=recipe_resolved,
+        model_key=model_key_effective,
+    )
+    models_dir = store.resolve_models_dir(recipe_resolved, model_key_effective, create=False)
+    diag_payload = {
+        "request_id": request_id,
+        "recipe_id": recipe_resolved,
+        "role_id": role_id,
+        "roi_id": roi_id,
+        "model_key": model_key_effective,
+        "fitted": bool(mem_present),
+        "has_calib": bool(calib_present),
+        "threshold": calib.get("threshold") if calib_present else None,
+        "expected_memory_path": str(expected_memory_path),
+        "resolved_memory_path": str(resolved_memory) if resolved_memory is not None else None,
+        "resolved_index_path": str(resolved_index) if resolved_index is not None else None,
+        "resolved_calib_path": str(resolved_calib) if resolved_calib is not None else None,
+        "models_dir": str(models_dir) if models_dir.exists() else None,
+        "roi_index_guess": _roi_index_guess(roi_id),
+        "dataset_base": dataset_info["dataset_base"],
+        "dataset_ok_count": dataset_info["dataset_ok_count"],
+        "dataset_ng_count": dataset_info["dataset_ng_count"],
+        "dataset_classes": dataset_info["dataset_classes"],
+    }
+    if dataset_info["dataset_ok_count"] < 10:
+        diag_payload["reason"] = "insufficient_ok_samples"
+    diag_emit("state.response", **diag_payload)
     return {
         "status": "ok",
         "memory_fitted": bool(mem_present),

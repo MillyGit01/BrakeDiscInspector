@@ -193,6 +193,18 @@ class ModelStore:
         create: bool = True,
     ) -> Path:
         return self.resolve_models_dir(recipe_id, model_key, create=create) / f"{self._base_name(role_id, roi_id)}_calib.json"
+
+    def expected_memory_path(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+        create: bool = False,
+    ) -> Path:
+        model_key_effective = model_key or roi_id
+        return self._memory_path(role_id, roi_id, recipe_id, model_key_effective, create=create)
     # --- Resolve existing artifact paths (recipe-aware with fallback) ---
 
     def resolve_memory_path_existing(

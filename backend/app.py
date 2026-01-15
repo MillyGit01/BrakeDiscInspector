@@ -12,6 +12,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from logging.handlers import RotatingFileHandler
 
 import numpy as np
 import cv2
@@ -106,6 +107,75 @@ def slog(event: str, **kw):
     print(json.dumps(rec, ensure_ascii=False), flush=True)
 
 
+def resolve_gui_logs_dir() -> Path:
+    override = os.environ.get("BDI_GUI_LOG_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA")
+        base_path = Path(base) if base else Path.home() / "AppData" / "Local"
+        return base_path / "BrakeDiscInspector" / "logs"
+    # For WSL/Linux, set BDI_GUI_LOG_DIR to the Windows logs path to match the GUI folder.
+    return Path.home() / ".local" / "share" / "BrakeDiscInspector" / "logs"
+
+
+_DIAG_LOGGER: logging.Logger | None = None
+_DIAG_LOG_DIR: Path | None = None
+
+
+def _init_diag_logger() -> None:
+    global _DIAG_LOGGER, _DIAG_LOG_DIR
+    if _DIAG_LOGGER is not None:
+        return
+    try:
+        log_dir = resolve_gui_logs_dir()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(
+            log_dir / "backend_diagnostics.jsonl",
+            maxBytes=5 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8",
+        )
+        logger = logging.getLogger("backend.diagnostics")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
+        logger.propagate = False
+        _DIAG_LOGGER = logger
+        _DIAG_LOG_DIR = log_dir
+    except Exception:
+        _DIAG_LOGGER = None
+        _DIAG_LOG_DIR = None
+
+
+def diag(event: str, **fields: Any) -> None:
+    if _DIAG_LOGGER is None:
+        return
+    payload = {"ts": time.time(), "event": event, **fields}
+    try:
+        _DIAG_LOGGER.info(json.dumps(payload, ensure_ascii=False))
+    except Exception:
+        return
+
+
+def _attach_request_context(
+    request: Request,
+    *,
+    request_id: str,
+    recipe_id: str,
+    role_id: str | None = None,
+    roi_id: str | None = None,
+    model_key: str | None = None,
+) -> None:
+    request.state.request_id = request_id
+    request.state.recipe_id = recipe_id
+    if role_id is not None:
+        request.state.role_id = role_id
+    if roi_id is not None:
+        request.state.roi_id = roi_id
+    if model_key is not None:
+        request.state.model_key = model_key
+
+
 def _resolve_request_context(request: Request, recipe_from_payload: str | None = None) -> tuple[str, str]:
     # Resolve request_id and recipe_id for routing/storage.
     # If recipe_id is invalid/reserved (e.g. 'last'), raise HTTPException(400).
@@ -149,6 +219,61 @@ def _resolve_request_context_safe(request: Request, recipe_from_payload: str | N
 
     return request_id, recipe_id_s
 
+@app.middleware("http")
+async def diag_http_middleware(request: Request, call_next):
+    start = time.time()
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed_ms = int(1000 * (time.time() - start))
+        request_id = getattr(request.state, "request_id", None)
+        recipe_id = getattr(request.state, "recipe_id", None)
+        role_id = getattr(request.state, "role_id", None)
+        roi_id = getattr(request.state, "roi_id", None)
+        model_key = getattr(request.state, "model_key", None)
+        if request_id is None or recipe_id is None:
+            safe_request_id, safe_recipe_id = _resolve_request_context_safe(request)
+            request_id = request_id or safe_request_id
+            recipe_id = recipe_id or safe_recipe_id
+        diag(
+            "http",
+            method=request.method,
+            path=request.url.path,
+            status_code=500,
+            recipe_id=recipe_id,
+            request_id=request_id,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key,
+            elapsed_ms=elapsed_ms,
+        )
+        raise
+
+    elapsed_ms = int(1000 * (time.time() - start))
+    request_id = getattr(request.state, "request_id", None)
+    recipe_id = getattr(request.state, "recipe_id", None)
+    role_id = getattr(request.state, "role_id", None)
+    roi_id = getattr(request.state, "roi_id", None)
+    model_key = getattr(request.state, "model_key", None)
+    if request_id is None or recipe_id is None:
+        safe_request_id, safe_recipe_id = _resolve_request_context_safe(request)
+        request_id = request_id or safe_request_id
+        recipe_id = recipe_id or safe_recipe_id
+
+    diag(
+        "http",
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        recipe_id=recipe_id,
+        request_id=request_id,
+        role_id=role_id,
+        roi_id=roi_id,
+        model_key=model_key,
+        elapsed_ms=elapsed_ms,
+    )
+    return response
+
 MODELS_DIR = Path(
     _env_str("BDI_MODELS_DIR", default="models", legacy_names=("BRAKEDISC_MODELS_DIR",))
 )
@@ -169,6 +294,19 @@ ensure_dir(MODELS_DIR)
 store = ModelStore(MODELS_DIR)
 
 MM_PER_PX_EPS = 1e-6
+
+
+@app.on_event("startup")
+def _startup_diag():
+    _init_diag_logger()
+    diag(
+        "startup",
+        cwd=os.getcwd(),
+        resolved_log_dir=str(_DIAG_LOG_DIR) if _DIAG_LOG_DIR is not None else None,
+        models_dir=str(MODELS_DIR.resolve()),
+        env_BDI_GUI_LOG_DIR=os.getenv("BDI_GUI_LOG_DIR"),
+        env_LOCALAPPDATA=os.getenv("LOCALAPPDATA"),
+    )
 
 # --- GPU requirement ---
 REQUIRE_CUDA = os.getenv("BDI_REQUIRE_CUDA", "1").strip() == "1"
@@ -414,6 +552,7 @@ def health(request: Request):
         cuda_available = False
 
     request_id, recipe_id = _resolve_request_context(request)
+    _attach_request_context(request, request_id=request_id, recipe_id=recipe_id)
     # CPU-only deployments are valid: report OK while surfacing CUDA absence separately.
     status = "ok"
     resp = {
@@ -447,6 +586,14 @@ def fit_ok(
     try:
         request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
         model_key_effective = model_key or roi_id
+        _attach_request_context(
+            request,
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key_effective,
+        )
         mm_per_px = _validate_mm_per_px(mm_per_px)
         training_settings = SETTINGS.get("training", {}) or {}
         min_ok_samples = int(training_settings.get("min_ok_samples", 10))
@@ -578,6 +725,24 @@ def fit_ok(
         _invalidate_memory_cache(recipe_resolved, model_key_effective, role_id, roi_id)
         _invalidate_calib_cache(recipe_resolved, model_key_effective, role_id, roi_id)
 
+        expected_path = store.expected_memory_path(
+            role_id,
+            roi_id,
+            recipe_id=recipe_resolved,
+            model_key=model_key_effective,
+            create=False,
+        )
+        diag(
+            "fit_ok.saved",
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key_effective,
+            request_id=request_id,
+            expected_npz=str(expected_path),
+            exists=expected_path.exists(),
+        )
+
         response = {
             "n_embeddings": int(E.shape[0]),
             "coreset_size": int(mem.emb.shape[0]),
@@ -626,6 +791,14 @@ async def calibrate_ng(payload: Dict[str, Any], request: Request):
         model_key_from_payload = _raw_model_key if isinstance(_raw_model_key, str) else None
 
         model_key = model_key_from_payload or roi_id
+        _attach_request_context(
+            request,
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key,
+        )
         mm_per_px = float(payload.get("mm_per_px", 0.2))
         ok_scores = _scores_1d_finite(payload.get("ok_scores"))
         ng_scores = _scores_1d_finite(payload.get("ng_scores")) if "ng_scores" in payload else None
@@ -717,6 +890,14 @@ def infer(
     try:
         request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
         model_key_effective = model_key or roi_id
+        _attach_request_context(
+            request,
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key_effective,
+        )
         mm_per_px = _validate_mm_per_px(mm_per_px)
         _ensure_recipe_mm_per_px(request_id, recipe_resolved, mm_per_px)
         slog(
@@ -737,6 +918,32 @@ def infer(
         # 2) Cargar memoria/coreset (cacheado por worker)
         cached = _get_patchcore_memory_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         if cached is None:
+            expected_path = store.expected_memory_path(
+                role_id,
+                roi_id,
+                recipe_id=recipe_resolved,
+                model_key=model_key_effective,
+                create=False,
+            )
+            expected_dir = expected_path.parent
+            dir_listing: list[str] = []
+            if expected_dir.exists():
+                try:
+                    dir_listing = sorted([p.name for p in expected_dir.iterdir()])
+                except OSError:
+                    dir_listing = []
+            diag(
+                "infer.memory_missing",
+                recipe_id=recipe_resolved,
+                role_id=role_id,
+                roi_id=roi_id,
+                model_key=model_key_effective,
+                request_id=request_id,
+                expected_npz=str(expected_path),
+                exists=expected_path.exists(),
+                expected_dir=str(expected_dir),
+                dir_listing=dir_listing,
+            )
             return JSONResponse(
                 status_code=400,
                 content={
@@ -865,6 +1072,14 @@ def infer_dataset(payload: Dict[str, Any], request: Request):
         role_id = payload["role_id"]
         roi_id = payload["roi_id"]
         model_key = payload.get("model_key") or roi_id
+        _attach_request_context(
+            request,
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key,
+        )
         labels = payload.get("labels") or ["ok", "ng"]
         include_heatmap = bool(payload.get("include_heatmap", False))
         default_mm_per_px = payload.get("default_mm_per_px")
@@ -997,6 +1212,14 @@ def calibrate_dataset(payload: Dict[str, Any], request: Request):
         role_id = payload["role_id"]
         roi_id = payload["roi_id"]
         model_key = payload.get("model_key") or roi_id
+        _attach_request_context(
+            request,
+            request_id=request_id,
+            recipe_id=recipe_resolved,
+            role_id=role_id,
+            roi_id=roi_id,
+            model_key=model_key,
+        )
         score_percentile = int(payload.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)))
         area_mm2_thr = float(payload.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)))
         default_mm_per_px = payload.get("default_mm_per_px")
@@ -1118,6 +1341,13 @@ async def datasets_ok_upload(
     recipe_id: Optional[str] = Form(None),
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     slog("datasets.upload.request", label="ok", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id, n_files=len(images))
     t0 = time.time()
     if metas is not None and len(metas) not in (0, len(images)):
@@ -1168,6 +1398,13 @@ async def datasets_ng_upload(
     recipe_id: Optional[str] = Form(None),
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     slog("datasets.upload.request", label="ng", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id, n_files=len(images))
     t0 = time.time()
     if metas is not None and len(metas) not in (0, len(images)):
@@ -1211,6 +1448,13 @@ async def datasets_ng_upload(
 @app.get("/datasets/list")
 def datasets_list(request: Request, role_id: str, roi_id: str, recipe_id: Optional[str] = None):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     slog("datasets.list.request", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, request_id=request_id)
     data = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
     data["request_id"] = request_id
@@ -1236,6 +1480,13 @@ def datasets_get_file(
     recipe_id: Optional[str] = None,
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     p = store.resolve_dataset_file_existing(role_id, roi_id, label, filename, recipe_id=recipe_resolved)
     if p is None:
         raise HTTPException(status_code=404, detail="file not found")
@@ -1252,6 +1503,13 @@ def datasets_get_meta(
     recipe_id: Optional[str] = None,
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     meta = store.load_dataset_meta(role_id, roi_id, label, filename, recipe_id=recipe_resolved, default=None)
     if meta is None:
         raise HTTPException(status_code=404, detail="meta not found")
@@ -1270,6 +1528,14 @@ def manifest(
 ):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
     model_key_effective = model_key or roi_id
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+        model_key=model_key_effective,
+    )
     slog("manifest.request", role_id=role_id, roi_id=roi_id, recipe_id=recipe_resolved, model_key=model_key_effective, request_id=request_id)
     data = store.manifest(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
     data["request_id"] = request_id
@@ -1297,6 +1563,14 @@ def state(
     """Lightweight readiness/status endpoint used by the GUI (optional)."""
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
     model_key_effective = model_key or roi_id
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+        model_key=model_key_effective,
+    )
     mem_present = store.load_memory(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
     calib_present = store.load_calib(role_id, roi_id, default=None, recipe_id=recipe_resolved, model_key=model_key_effective) is not None
     return {
@@ -1314,6 +1588,13 @@ def state(
 @app.delete("/datasets/file")
 def datasets_delete_file(request: Request, role_id: str, roi_id: str, label: str, filename: str, recipe_id: Optional[str] = None):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     ok = store.delete_dataset_file(role_id, roi_id, label, filename, recipe_id=recipe_resolved)
     slog(
         "datasets.delete",
@@ -1331,6 +1612,13 @@ def datasets_delete_file(request: Request, role_id: str, roi_id: str, label: str
 @app.delete("/datasets/clear")
 def datasets_clear_class(request: Request, role_id: str, roi_id: str, label: str, recipe_id: Optional[str] = None):
     request_id, recipe_resolved = _resolve_request_context(request, recipe_id)
+    _attach_request_context(
+        request,
+        request_id=request_id,
+        recipe_id=recipe_resolved,
+        role_id=role_id,
+        roi_id=roi_id,
+    )
     n = store.clear_dataset_class(role_id, roi_id, label, recipe_id=recipe_resolved)
     slog(
         "datasets.clear",

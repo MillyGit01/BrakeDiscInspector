@@ -1,4 +1,5 @@
 from __future__ import annotations
+import time
 import numpy as np
 import cv2
 from typing import Tuple, Optional, Dict, Any, List
@@ -61,8 +62,10 @@ class InferenceEngine:
               - token_shape: [Ht, Wt]
               - params: metadatos de ejecución
         """
+        t0 = time.perf_counter()
         # 1) Embeddings del ROI canónico
         emb, (Ht, Wt) = self.extractor.extract(img_bgr)
+        t1 = time.perf_counter()
 
         # Validación de grid si se solicita
         if token_shape_expected is not None:
@@ -73,6 +76,7 @@ class InferenceEngine:
 
         # 2) Distancias kNN por parche (min-dist al coreset)
         d = self.memory.knn_min_dist(emb)  # (N,)
+        t2 = time.perf_counter()
         heat = d.reshape(Ht, Wt).astype(np.float32)
 
         # 3) Reescalar a tamaño del ROI (para overlay)
@@ -137,6 +141,12 @@ class InferenceEngine:
             "heatmap_u8": heat_u8_masked,   # la API lo convertirá a PNG base64
             "regions": regions,
             "token_shape": [int(Ht), int(Wt)],
+            "timings_ms": {
+                "preprocess": 0,
+                "encode": int((t1 - t0) * 1000),
+                "search": int((t2 - t1) * 1000),
+                "post": int((time.perf_counter() - t2) * 1000),
+            },
             "params": {
                 "extractor": self.extractor.model_name,
                 "input_size": int(self.extractor.input_size),
@@ -154,4 +164,3 @@ class InferenceEngine:
 def contour_to_list(contour: np.ndarray) -> List[List[int]]:
     pts = contour.reshape(-1, 2)
     return [[int(x), int(y)] for x, y in pts]
-

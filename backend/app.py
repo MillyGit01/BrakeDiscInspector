@@ -291,7 +291,7 @@ except Exception:
         }
     }
 ensure_dir(MODELS_DIR)
-store = ModelStore(MODELS_DIR)
+store: ModelStore = ModelStore(MODELS_DIR)
 
 MM_PER_PX_EPS = 1e-6
 

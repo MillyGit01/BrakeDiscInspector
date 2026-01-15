@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import subprocess
 import sys
 import traceback
 import time
@@ -107,6 +109,64 @@ def slog(event: str, **kw):
     print(json.dumps(rec, ensure_ascii=False), flush=True)
 
 
+def _linux_fallback_logs_dir() -> Path:
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
+    return (base / "BrakeDiscInspector" / "logs").resolve()
+
+
+def is_wsl() -> bool:
+    if os.environ.get("WSL_DISTRO_NAME") or os.environ.get("WSL_INTEROP"):
+        return True
+    try:
+        version_text = Path("/proc/version").read_text(encoding="utf-8").lower()
+    except Exception:
+        return False
+    return "microsoft" in version_text
+
+
+def _windows_to_wsl_path(raw_path: str) -> Path | None:
+    cleaned = raw_path.strip().strip('"')
+    if not cleaned:
+        return None
+    cleaned = cleaned.replace("\\", "/")
+    if ":" not in cleaned:
+        return None
+    drive, rest = cleaned.split(":", 1)
+    if not drive:
+        return None
+    rest = rest.lstrip("/")
+    if not rest:
+        return None
+    return Path(f"/mnt/{drive.lower()}/{rest}")
+
+
+def try_get_windows_localappdata_in_wsl() -> Path | None:
+    try:
+        output = subprocess.check_output(
+            ["cmd.exe", "/c", "echo %LOCALAPPDATA%"],
+            timeout=2,
+            text=True,
+        ).strip()
+    except Exception:
+        return None
+    if not output or output.startswith("%") or (":\\" not in output and ":/" not in output):
+        return None
+    output = output.strip().strip('"')
+    if shutil.which("wslpath"):
+        try:
+            translated = subprocess.check_output(
+                ["wslpath", "-u", output],
+                timeout=2,
+                text=True,
+            ).strip()
+            if translated:
+                return Path(translated)
+        except Exception:
+            pass
+    return _windows_to_wsl_path(output)
+
+
 def resolve_gui_logs_dir() -> Path:
     override = os.environ.get("BDI_GUI_LOG_DIR")
     if override:
@@ -114,13 +174,42 @@ def resolve_gui_logs_dir() -> Path:
     if os.name == "nt":
         base = os.environ.get("LOCALAPPDATA")
         base_path = Path(base) if base else Path.home() / "AppData" / "Local"
-        return base_path / "BrakeDiscInspector" / "logs"
-    # For WSL/Linux, set BDI_GUI_LOG_DIR to the Windows logs path to match the GUI folder.
-    return Path.home() / ".local" / "share" / "BrakeDiscInspector" / "logs"
+        return (base_path / "BrakeDiscInspector" / "logs").resolve()
+    if is_wsl():
+        base = try_get_windows_localappdata_in_wsl()
+        if base is not None:
+            return (base / "BrakeDiscInspector" / "logs").resolve()
+    return _linux_fallback_logs_dir()
 
 
 _DIAG_LOGGER: logging.Logger | None = None
 _DIAG_LOG_DIR: Path | None = None
+
+
+def _pick_writable_log_dir(primary: Path) -> Path | None:
+    candidates = []
+    seen = set()
+    for candidate in (primary, _linux_fallback_logs_dir(), (Path.cwd() / "logs").resolve()):
+        if candidate in seen:
+            continue
+        candidates.append(candidate)
+        seen.add(candidate)
+
+    for log_dir in candidates:
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            print(f"[warn] failed to create log dir {log_dir}: {exc}", flush=True)
+            continue
+        log_path = log_dir / "backend_diagnostics.jsonl"
+        try:
+            with open(log_path, "a", encoding="utf-8"):
+                pass
+        except Exception as exc:
+            print(f"[warn] failed to open diagnostics log file {log_path}: {exc}", flush=True)
+            continue
+        return log_dir
+    return None
 
 
 def _init_diag_logger() -> None:
@@ -128,8 +217,13 @@ def _init_diag_logger() -> None:
     if _DIAG_LOGGER is not None:
         return
     try:
-        log_dir = resolve_gui_logs_dir()
-        log_dir.mkdir(parents=True, exist_ok=True)
+        requested_dir = resolve_gui_logs_dir()
+        log_dir = _pick_writable_log_dir(requested_dir)
+        if log_dir is None:
+            _DIAG_LOGGER = None
+            _DIAG_LOG_DIR = None
+            print("[warn] diagnostics file logging disabled: no writable log directory found", flush=True)
+            return
         handler = RotatingFileHandler(
             log_dir / "backend_diagnostics.jsonl",
             maxBytes=5 * 1024 * 1024,
@@ -138,11 +232,14 @@ def _init_diag_logger() -> None:
         )
         logger = logging.getLogger("backend.diagnostics")
         logger.setLevel(logging.INFO)
+        if logger.handlers:
+            logger.handlers.clear()
         logger.addHandler(handler)
         logger.propagate = False
         _DIAG_LOGGER = logger
         _DIAG_LOG_DIR = log_dir
-    except Exception:
+    except Exception as exc:
+        print(f"[warn] diagnostics logger initialization failed: {exc}", flush=True)
         _DIAG_LOGGER = None
         _DIAG_LOG_DIR = None
 
@@ -299,14 +396,32 @@ MM_PER_PX_EPS = 1e-6
 @app.on_event("startup")
 def _startup_diag():
     _init_diag_logger()
-    diag(
+    resolved_log_dir = str(_DIAG_LOG_DIR) if _DIAG_LOG_DIR is not None else "disabled"
+    print(f"[diag] backend diagnostics log dir: {resolved_log_dir}", flush=True)
+    slog(
         "startup",
+        resolved_log_dir=resolved_log_dir,
         cwd=os.getcwd(),
-        resolved_log_dir=str(_DIAG_LOG_DIR) if _DIAG_LOG_DIR is not None else None,
         models_dir=str(MODELS_DIR.resolve()),
         env_BDI_GUI_LOG_DIR=os.getenv("BDI_GUI_LOG_DIR"),
         env_LOCALAPPDATA=os.getenv("LOCALAPPDATA"),
+        is_wsl=is_wsl(),
     )
+    diag(
+        "startup",
+        cwd=os.getcwd(),
+        resolved_log_dir=resolved_log_dir,
+        models_dir=str(MODELS_DIR.resolve()),
+        env_BDI_GUI_LOG_DIR=os.getenv("BDI_GUI_LOG_DIR"),
+        env_LOCALAPPDATA=os.getenv("LOCALAPPDATA"),
+        is_wsl=is_wsl(),
+    )
+
+# Manual validation checklist (WSL + override):
+# 1) python app.py -> expect [diag] log dir: /mnt/c/Users/<user>/AppData/Local/BrakeDiscInspector/logs
+# 2) ls -la "/mnt/c/Users/<user>/AppData/Local/BrakeDiscInspector/logs/backend_diagnostics.jsonl"
+# 3) Call an endpoint (e.g. /datasets/list) and confirm JSONL grows.
+# 4) export BDI_GUI_LOG_DIR="/tmp/bdi_logs_test" && python app.py -> verify log file creation.
 
 # --- GPU requirement ---
 REQUIRE_CUDA = os.getenv("BDI_REQUIRE_CUDA", "1").strip() == "1"

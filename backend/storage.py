@@ -10,6 +10,7 @@ from datetime import datetime
 import numpy as np
 
 from .utils import ensure_dir, load_json, save_json
+from .diagnostics import diag_event
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 
@@ -240,35 +241,49 @@ class ModelStore:
         model_key: Optional[str] = None,
     ) -> Optional[Path]:
         model_key_effective = model_key or roi_id
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        probed: list[dict[str, Any]] = []
         new_path = self._memory_path(role_id, roi_id, recipe_id, model_key_effective, create=False)
+        probed.append({"path": str(new_path), "exists": new_path.exists()})
         if new_path.exists():
             return new_path
 
         # Backwards-compat: if recipe folder exists with different casing, try it before fallback.
         if recipe_id:
-            recipe_safe = self._sanitize_recipe_id(recipe_id)
             if recipe_safe != "default":
                 alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
                 if alt_recipe_dir and alt_recipe_dir != recipe_safe:
                     alt_base = self.root / "recipes" / alt_recipe_dir / self._sanitize_model_key(model_key_effective)
                     alt_path = alt_base / f"{self._base_name(role_id, roi_id)}.npz"
+                    probed.append({"path": str(alt_path), "exists": alt_path.exists()})
                     if alt_path.exists():
                         return alt_path
 
         # fallback: default recipe path
-        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+        if recipe_id and recipe_safe != "default":
             default_path = self._memory_path(role_id, roi_id, "default", model_key_effective, create=False)
+            probed.append({"path": str(default_path), "exists": default_path.exists()})
             if default_path.exists():
                 return default_path
 
         flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}.npz"
+        probed.append({"path": str(flat_legacy_path), "exists": flat_legacy_path.exists()})
         if flat_legacy_path.exists():
             return flat_legacy_path
 
         legacy_path = self._legacy_dir(role_id, roi_id) / "memory.npz"
+        probed.append({"path": str(legacy_path), "exists": legacy_path.exists()})
         if legacy_path.exists():
             return legacy_path
 
+        diag_event(
+            "storage.resolve_memory.not_found",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_effective=recipe_safe,
+            model_key_effective=self._sanitize_model_key(model_key_effective),
+            probed_paths=probed,
+        )
         return None
 
     def resolve_index_path_existing(
@@ -280,33 +295,47 @@ class ModelStore:
         model_key: Optional[str] = None,
     ) -> Optional[Path]:
         model_key_effective = model_key or roi_id
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        probed: list[dict[str, Any]] = []
         new_path = self._index_path(role_id, roi_id, recipe_id, model_key_effective, create=False)
+        probed.append({"path": str(new_path), "exists": new_path.exists()})
         if new_path.exists():
             return new_path
 
         if recipe_id:
-            recipe_safe = self._sanitize_recipe_id(recipe_id)
             if recipe_safe != "default":
                 alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
                 if alt_recipe_dir and alt_recipe_dir != recipe_safe:
                     alt_base = self.root / "recipes" / alt_recipe_dir / self._sanitize_model_key(model_key_effective)
                     alt_path = alt_base / f"{self._base_name(role_id, roi_id)}_index.faiss"
+                    probed.append({"path": str(alt_path), "exists": alt_path.exists()})
                     if alt_path.exists():
                         return alt_path
 
-        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+        if recipe_id and recipe_safe != "default":
             default_path = self._index_path(role_id, roi_id, "default", model_key_effective, create=False)
+            probed.append({"path": str(default_path), "exists": default_path.exists()})
             if default_path.exists():
                 return default_path
 
         flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_index.faiss"
+        probed.append({"path": str(flat_legacy_path), "exists": flat_legacy_path.exists()})
         if flat_legacy_path.exists():
             return flat_legacy_path
 
         legacy_path = self._legacy_dir(role_id, roi_id) / "index.faiss"
+        probed.append({"path": str(legacy_path), "exists": legacy_path.exists()})
         if legacy_path.exists():
             return legacy_path
 
+        diag_event(
+            "storage.resolve_index.not_found",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_effective=recipe_safe,
+            model_key_effective=self._sanitize_model_key(model_key_effective),
+            probed_paths=probed,
+        )
         return None
 
     def resolve_calib_path_existing(
@@ -318,33 +347,47 @@ class ModelStore:
         model_key: Optional[str] = None,
     ) -> Optional[Path]:
         model_key_effective = model_key or roi_id
+        recipe_safe = self._sanitize_recipe_id(recipe_id)
+        probed: list[dict[str, Any]] = []
         new_path = self._calib_path(role_id, roi_id, recipe_id, model_key_effective, create=False)
+        probed.append({"path": str(new_path), "exists": new_path.exists()})
         if new_path.exists():
             return new_path
 
         if recipe_id:
-            recipe_safe = self._sanitize_recipe_id(recipe_id)
             if recipe_safe != "default":
                 alt_recipe_dir = self._find_recipe_dir_case_insensitive(recipe_safe)
                 if alt_recipe_dir and alt_recipe_dir != recipe_safe:
                     alt_base = self.root / "recipes" / alt_recipe_dir / self._sanitize_model_key(model_key_effective)
                     alt_path = alt_base / f"{self._base_name(role_id, roi_id)}_calib.json"
+                    probed.append({"path": str(alt_path), "exists": alt_path.exists()})
                     if alt_path.exists():
                         return alt_path
 
-        if recipe_id and self._sanitize_recipe_id(recipe_id) != "default":
+        if recipe_id and recipe_safe != "default":
             default_path = self._calib_path(role_id, roi_id, "default", model_key_effective, create=False)
+            probed.append({"path": str(default_path), "exists": default_path.exists()})
             if default_path.exists():
                 return default_path
 
         flat_legacy_path = self.root / f"{self._legacy_flat_base_name(role_id, roi_id)}_calib.json"
+        probed.append({"path": str(flat_legacy_path), "exists": flat_legacy_path.exists()})
         if flat_legacy_path.exists():
             return flat_legacy_path
 
         legacy_path = self._legacy_dir(role_id, roi_id) / "calib.json"
+        probed.append({"path": str(legacy_path), "exists": legacy_path.exists()})
         if legacy_path.exists():
             return legacy_path
 
+        diag_event(
+            "storage.resolve_calib.not_found",
+            role_id=role_id,
+            roi_id=roi_id,
+            recipe_id_effective=recipe_safe,
+            model_key_effective=self._sanitize_model_key(model_key_effective),
+            probed_paths=probed,
+        )
         return None
 
 

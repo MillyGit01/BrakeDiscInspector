@@ -6635,7 +6635,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return NormalizeDpiTo96(bmp);
         }
 
-        private static WriteableBitmap ApplyRedGreenPalette(BitmapSource grayLike, int cutoffPercent)
+        private static WriteableBitmap ApplyGreenPalette(BitmapSource grayLike, int cutoffPercent)
         {
             if (grayLike == null)
             {
@@ -6662,6 +6662,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var outBuffer = new byte[strideOut * height];
 
             int cutoffByte = Math.Clamp((int)(cutoffPercent * 255 / 100.0), 0, 255);
+            int denom = Math.Max(1, 255 - cutoffByte);
 
             for (int y = 0; y < height; y++)
             {
@@ -6674,24 +6675,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (value == 0)
                     {
-                        outBuffer[offset + 0] = 0;
-                        outBuffer[offset + 1] = 0;
-                        outBuffer[offset + 2] = 0;
                         outBuffer[offset + 3] = 0;
                         continue;
                     }
 
                     if (value >= cutoffByte)
                     {
-                        outBuffer[offset + 0] = 0;
-                        outBuffer[offset + 1] = 0;
-                        outBuffer[offset + 2] = 255;
-                        outBuffer[offset + 3] = 255;
+                        double t = (value - cutoffByte) / (double)denom;
+                        t = Math.Clamp(t, 0.0, 1.0);
+                        t = Math.Pow(t, 0.85);
+                        byte alpha = (byte)Math.Round(255.0 * t);
+                        outBuffer[offset + 0] = 113;
+                        outBuffer[offset + 1] = 204;
+                        outBuffer[offset + 2] = 46;
+                        outBuffer[offset + 3] = alpha;
                     }
                     else
                     {
-                        outBuffer[offset + 0] = 0;
-                        outBuffer[offset + 2] = 0;
                         outBuffer[offset + 3] = 0;
                     }
                 }
@@ -6904,58 +6904,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             };
         }
 
-        private static byte[]? BuildRegionMaskPngBytes(int width, int height, InferRegion[] regions)
-        {
-            if (width <= 0 || height <= 0 || regions == null || regions.Length == 0)
-            {
-                return null;
-            }
-
-            var buffer = new byte[width * height];
-
-            foreach (var region in regions)
-            {
-                if (region == null || region.w <= 0 || region.h <= 0)
-                {
-                    continue;
-                }
-
-                int left = (int)Math.Floor(region.x);
-                int top = (int)Math.Floor(region.y);
-                int right = (int)Math.Ceiling(region.x + region.w);
-                int bottom = (int)Math.Ceiling(region.y + region.h);
-
-                left = Math.Clamp(left, 0, width);
-                right = Math.Clamp(right, 0, width);
-                top = Math.Clamp(top, 0, height);
-                bottom = Math.Clamp(bottom, 0, height);
-
-                if (right <= left || bottom <= top)
-                {
-                    continue;
-                }
-
-                for (int y = top; y < bottom; y++)
-                {
-                    int rowOffset = y * width;
-                    for (int x = left; x < right; x++)
-                    {
-                        buffer[rowOffset + x] = 255;
-                    }
-                }
-            }
-
-            var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Gray8, null);
-            wb.WritePixels(new Int32Rect(0, 0, width, height), buffer, width, 0);
-            wb.Freeze();
-
-            using var ms = new MemoryStream();
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(wb));
-            encoder.Save(ms);
-            return ms.ToArray();
-        }
-
         private void UpdateHeatmapFromResult(GlobalInferResult result, int roiIndex)
         {
             if (result == null)
@@ -6966,8 +6914,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                bool isNg = result.threshold.HasValue && result.score > result.threshold.Value;
-                if (!isNg)
+                bool hasThreshold = result.threshold.HasValue && result.threshold.Value > 0;
+                bool isNg = hasThreshold && result.score > result.threshold.Value;
+                if (hasThreshold && !isNg)
                 {
                     InvokeOnUi(() => SetBatchHeatmapForRoi(null, roiIndex));
                     return;
@@ -6987,17 +6936,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     try
                     {
-                        var payload = heatmapBytes;
-                        if (result.regions != null && result.regions.Length > 0 && w > 0 && h > 0)
-                        {
-                            var regionMask = BuildRegionMaskPngBytes(w, h, result.regions);
-                            if (regionMask != null && regionMask.Length > 0)
-                            {
-                                payload = regionMask;
-                            }
-                        }
-
-                        SetBatchHeatmapForRoi(payload, roiIndex);
+                        SetBatchHeatmapForRoi(heatmapBytes, roiIndex);
                         LogImg("hm:set-after-update", BatchHeatmapSource);
                         LogHeatmapState("hm:after-update");
                     }
@@ -7031,7 +6970,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 var decoded = DecodeImageTo96Dpi(_lastHeatmapPngBytes!);
-                _lastHeatmapBitmap = ApplyRedGreenPalette(decoded, HeatmapCutoffPercent);
+                _lastHeatmapBitmap = ApplyGreenPalette(decoded, HeatmapCutoffPercent);
                 BatchHeatmapSource = _lastHeatmapBitmap;
                 OnPropertyChanged(nameof(BatchHeatmapSource));
                 LogImg("hm:decoded96", decoded);

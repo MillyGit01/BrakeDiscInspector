@@ -10,6 +10,7 @@
         xmlns:conv="clr-namespace:BrakeDiscInspector_GUI_ROI.Converters"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         x:Class="BrakeDiscInspector_GUI_ROI.MainWindow"
+        x:Name="RootWindow"
         Title="BrakeDiscInspector"
         WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
@@ -2206,7 +2207,7 @@
                       Maximum="1"
                       TickFrequency="0.05"
                       IsSnapToTickEnabled="True"
-                      Value="{Binding HeatmapOverlayOpacity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                      Value="{Binding HeatmapOverlayOpacity, ElementName=RootWindow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     </StackPanel>
                 </Border>
             </Grid>

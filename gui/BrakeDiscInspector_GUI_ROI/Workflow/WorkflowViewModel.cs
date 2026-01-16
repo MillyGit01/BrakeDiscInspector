@@ -657,7 +657,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public void AlignDatasetPathsWithCurrentLayout()
         {
-            _log("[dataset] align skipped: dataset source of truth is backend");
+            if (_layout == null)
+            {
+                _log("[dataset] align skipped: no layout loaded");
+                return;
+            }
+
+            var recipeRoot = RecipePathHelper.GetLayoutFolder(_currentLayoutName);
+            MasterLayoutManager.AlignInspectionDatasetPaths(_layout, recipeRoot, null);
         }
 
         public ObservableCollection<DatasetSample> OkSamples { get; }

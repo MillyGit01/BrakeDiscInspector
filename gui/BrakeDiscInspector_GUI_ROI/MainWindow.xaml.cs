@@ -13939,7 +13939,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 AnchorMaster = cfg.AnchorMaster,
                 BaseImgW = cfg.BaseImgW,
                 BaseImgH = cfg.BaseImgH,
-                HasFitOk = cfg.HasFitOk,
                 DatasetReady = cfg.DatasetReady,
                 Threshold = cfg.Threshold,
                 LastScore = cfg.LastScore,

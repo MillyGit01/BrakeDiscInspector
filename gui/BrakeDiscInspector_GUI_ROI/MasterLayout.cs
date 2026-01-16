@@ -166,6 +166,7 @@ namespace BrakeDiscInspector_GUI_ROI
             try
             {
                 var raw = File.ReadAllText(filePath, Encoding.UTF8);
+                var hasLegacyFitOk = raw.Contains("\"HasFitOk\"", StringComparison.Ordinal);
                 var json = (raw ?? string.Empty)
                     .Replace("\0", string.Empty)
                     .TrimStart('\uFEFF', ' ', '\t', '\r', '\n');
@@ -185,6 +186,21 @@ namespace BrakeDiscInspector_GUI_ROI
                 EnsureInspectionRoiDefaults(layout);
                 EnsureOptionDefaults(layout);
                 TraceInspectionRois("load", layout);
+
+                if (hasLegacyFitOk)
+                {
+                    SanitizeForSave(layout);
+                    try
+                    {
+                        var migratedJson = JsonSerializer.Serialize(layout, s_opts);
+                        File.WriteAllText(filePath, migratedJson, Encoding.UTF8);
+                        Debug.WriteLine($"[layout:migrate] removed legacy HasFitOk from {filePath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[layout:migrate] failed to rewrite {filePath}: {ex.Message}");
+                    }
+                }
 
                 layout.Master2Pattern ??= new RoiModel { Role = RoiRole.Master2Pattern };
                 layout.Master2Search ??= new RoiModel { Role = RoiRole.Master2Search };

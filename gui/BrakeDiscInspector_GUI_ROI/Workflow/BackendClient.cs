@@ -657,8 +657,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             try
             {
-                var fitted = await QueryFitStateAsync(roleId, roiId, ct).ConfigureAwait(false);
-                if (fitted == true)
+                var state = await GetStateAsync(roleId, roiId, ct: ct).ConfigureAwait(false);
+                if (state?.memory_fitted == true)
                 {
                     return true;
                 }
@@ -703,11 +703,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         // Utilidades
         // =========================
 
-        private async Task<bool?> QueryFitStateAsync(string roleId, string roiId, CancellationToken ct)
+        public async Task<BackendStateInfo?> GetStateAsync(
+            string roleId,
+            string roiId,
+            string? modelKey = null,
+            CancellationToken ct = default)
         {
             try
             {
                 var query = $"state?role_id={Uri.EscapeDataString(roleId)}&roi_id={Uri.EscapeDataString(roiId)}";
+                if (!string.IsNullOrWhiteSpace(modelKey))
+                {
+                    query += $"&model_key={Uri.EscapeDataString(modelKey)}";
+                }
+
                 using var request = new HttpRequestMessage(HttpMethod.Get, query);
                 AddCommonHeaders(request);
                 using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
@@ -722,27 +731,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     return null;
                 }
 
-                using var doc = JsonDocument.Parse(raw);
-                var root = doc.RootElement;
-                if (root.ValueKind == JsonValueKind.Object)
-                {
-                    if (root.TryGetProperty("fitted", out var fittedEl) && fittedEl.ValueKind == JsonValueKind.True)
-                    {
-                        return true;
-                    }
-
-                    if (root.TryGetProperty("memory_fitted", out var memEl) && memEl.ValueKind == JsonValueKind.True)
-                    {
-                        return true;
-                    }
-                }
+                return JsonSerializer.Deserialize<BackendStateInfo>(raw, JsonOptions);
             }
             catch
             {
                 return null;
             }
-
-            return null;
         }
 
         private void AddCommonHeaders(HttpRequestMessage request)
@@ -898,6 +892,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
     }
 
     // ============ DTOs (mismos nombres/campos; threshold nullable) ============
+
+    public sealed record BackendStateInfo(
+        string status,
+        bool memory_fitted,
+        bool calib_present,
+        string request_id,
+        string recipe_id,
+        string role_id,
+        string roi_id,
+        string model_key);
 
     public sealed class FitOkResult
     {

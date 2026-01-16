@@ -292,6 +292,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly Dictionary<InspectionRoiConfig, RoiDatasetAnalysis> _roiDatasetCache = new();
         private readonly Dictionary<InspectionRoiConfig, FitOkResult> _lastFitResultsByRoi = new();
         private readonly Dictionary<InspectionRoiConfig, CalibResult> _lastCalibResultsByRoi = new();
+        private readonly Dictionary<InspectionRoiConfig, bool> _backendStateAvailableByRoi = new();
         private readonly Func<InspectionRoiConfig, string?>? _resolveModelDirectory;
         private readonly object _initLock = new();
         private Task? _initializationTask;
@@ -1342,6 +1343,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                         ClearInferenceUi("[ui] selection changed");
                         _ = ActivateCanvasIndexAsync(value.Index);
+                        _ = RefreshBackendStateForRoiAsync(value);
                     }
                 }
             }
@@ -2483,11 +2485,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 InvokeOnUi(RedrawOverlays);
             }
 
-            if (e.PropertyName == nameof(InspectionRoiConfig.HasFitOk) && sender is InspectionRoiConfig changedFit && !changedFit.HasFitOk)
-            {
-                _lastFitResultsByRoi.Remove(changedFit);
-            }
-
             if (e.PropertyName == nameof(InspectionRoiConfig.CalibratedThreshold) && sender is InspectionRoiConfig changedCal && changedCal.CalibratedThreshold == null)
             {
                 _lastCalibResultsByRoi.Remove(changedCal);
@@ -2509,6 +2506,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 CalibrateSelectedRoiCommand.RaiseCanExecuteChanged();
                 OpenDatasetFolderCommand.RaiseCanExecuteChanged();
+            }
+
+            if (e.PropertyName == nameof(InspectionRoiConfig.ModelKey) && sender is InspectionRoiConfig roiWithNewKey)
+            {
+                _ = RefreshBackendStateForRoiAsync(roiWithNewKey);
             }
 
             if (e.PropertyName == nameof(InspectionRoiConfig.DatasetOkCount)
@@ -4193,7 +4195,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     var result = await _client.FitOkFromDatasetAsync(RoleId, roi.ModelKey, MmPerPx, roi.TrainMemoryFit, ct).ConfigureAwait(false);
                     var memoryHint = roi.TrainMemoryFit ? " (memory-fit)" : string.Empty;
                     FitSummary = $"Embeddings={result.n_embeddings} Coreset={result.coreset_size} TokenShape=[{string.Join(',', result.token_shape ?? Array.Empty<int>())}]" + memoryHint;
-                    roi.HasFitOk = true;
+                    roi.BackendMemoryFitted = true;
                     _lastFitResultsByRoi[roi] = result;
                     await SaveModelManifestAsync(roi, result, null, ct).ConfigureAwait(false);
                     CopyModelArtifactsToRecipe(roi);
@@ -4204,7 +4206,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     {
                         FitSummary = "Model already trained";
                         _log($"[train] backend reported already trained: {ex.Message}");
-                        roi.HasFitOk = true;
+                        roi.BackendMemoryFitted = true;
                         return true;
                     }
 
@@ -4294,6 +4296,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
             _lastFitResultsByRoi.Clear();
             _lastCalibResultsByRoi.Clear();
+            _backendStateAvailableByRoi.Clear();
             FitSummary = string.Empty;
             CalibrationSummary = string.Empty;
             InferenceSummary = string.Empty;
@@ -4306,7 +4309,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 foreach (var roi in _inspectionRois)
                 {
-                    roi.HasFitOk = false;
+                    roi.BackendMemoryFitted = false;
+                    roi.BackendCalibPresent = false;
                     roi.CalibratedThreshold = null;
                     roi.LastScore = null;
                     roi.LastResultOk = null;
@@ -4355,7 +4359,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         roi.ModelKey = manifest.model_key;
                     }
 
-                    roi.HasFitOk = manifest.fit != null;
                     roi.CalibratedThreshold = manifest.calibration?.threshold;
                     roi.LastScore = null;
                     roi.LastResultOk = null;
@@ -4385,7 +4388,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                                 _lastFitResultsByRoi[roi] = fit;
                                 FitSummary = $"Embeddings={fit.n_embeddings} Coreset={fit.coreset_size} TokenShape=[{string.Join(',', fit.token_shape ?? Array.Empty<int>())}]";
-                                await Application.Current.Dispatcher.InvokeAsync(() => roi.HasFitOk = true);
+                                await Application.Current.Dispatcher.InvokeAsync(() => roi.BackendMemoryFitted = true);
                             }
                             catch (Exception ex)
                             {
@@ -4837,9 +4840,15 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                if (string.Equals(RoleId, "Inspection", StringComparison.OrdinalIgnoreCase))
+                await RefreshBackendStateForRoiAsync(roi, ct).ConfigureAwait(false);
+                if (!roi.BackendMemoryFitted)
                 {
-                    await _client.EnsureFittedAsync(RoleId, RoiId, MmPerPx, ct: ct).ConfigureAwait(false);
+                    var stateAvailable = _backendStateAvailableByRoi.TryGetValue(roi, out var available) && available;
+                    var message = stateAvailable
+                        ? "Este ROI no está entrenado en el backend (memory_fitted=false). Ejecuta Train (fit_ok) y vuelve a intentar."
+                        : "No se pudo consultar el estado del backend para este ROI. Verifica que el servicio esté disponible y vuelve a intentar.";
+                    await ShowMessageAsync(message, "Evaluate ROI").ConfigureAwait(false);
+                    return;
                 }
 
                 var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
@@ -4971,6 +4980,55 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private async Task RefreshBackendStateForRoiAsync(InspectionRoiConfig roi, CancellationToken ct = default)
+        {
+            if (roi == null)
+            {
+                return;
+            }
+
+            var roleId = string.IsNullOrWhiteSpace(RoleId) ? "Inspection" : RoleId;
+            var roiId = string.Equals(roleId, "Inspection", StringComparison.OrdinalIgnoreCase)
+                ? NormalizeInspectionKey(roi.ModelKey, roi.Index)
+                : (!string.IsNullOrWhiteSpace(RoiId) ? RoiId : roi.ModelKey);
+
+            if (string.IsNullOrWhiteSpace(roiId))
+            {
+                roiId = roi.ModelKey;
+            }
+
+            BackendStateInfo? state = null;
+            try
+            {
+                state = await _client.GetStateAsync(roleId, roiId, modelKey: roi.ModelKey, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _log($"[state] error role='{roleId}' roi='{roiId}': {ex.Message}");
+            }
+
+            _backendStateAvailableByRoi[roi] = state != null;
+            if (state == null)
+            {
+                _log($"[state] unavailable role='{roleId}' roi='{roiId}'");
+            }
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null || dispatcher.CheckAccess())
+            {
+                roi.BackendMemoryFitted = state?.memory_fitted ?? false;
+                roi.BackendCalibPresent = state?.calib_present ?? false;
+            }
+            else
+            {
+                await dispatcher.InvokeAsync(() =>
+                {
+                    roi.BackendMemoryFitted = state?.memory_fitted ?? false;
+                    roi.BackendCalibPresent = state?.calib_present ?? false;
+                });
+            }
+        }
+
         private bool ValidateInferenceInputs(InspectionRoiConfig roi, out string? message)
         {
             if (_inspectionRois == null || !_inspectionRois.Contains(roi))
@@ -4993,12 +5051,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     message = "Solo son válidos ROI de inspección: inspection-1..inspection-4.";
                     return false;
                 }
-            }
-
-            if (!roi.HasFitOk)
-            {
-                message = $"Run fit_ok for ROI '{roi.Name}' before inference.";
-                return false;
             }
 
             var sourceImage = _getSourceImagePath();

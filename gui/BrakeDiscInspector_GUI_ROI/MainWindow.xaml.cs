@@ -2569,6 +2569,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private TextBlock? _lblHeatmapScale;
         private bool _heatmapCheckboxEventsHooked;
         private bool _heatmapSliderEventsHooked;
+        private bool _heatmapOpacityEventsHooked;
         private double _heatmapNormMax = 1.0; // Global heatmap scale (1.0 = default). Lower -> brighter, Higher -> darker.
 
         private static void UILog(string msg)
@@ -3353,6 +3354,18 @@ namespace BrakeDiscInspector_GUI_ROI
                 _sldHeatmapOpacity.Minimum = 0.0;
                 _sldHeatmapOpacity.Maximum = 1.0;
                 _sldHeatmapOpacity.SetCurrentValue(RangeBase.ValueProperty, _heatmapOverlayOpacity);
+
+                if (!_heatmapOpacityEventsHooked)
+                {
+                    _sldHeatmapOpacity.ValueChanged += (_, __) =>
+                    {
+                        if (Math.Abs(HeatmapOverlayOpacity - _sldHeatmapOpacity.Value) > 1e-6)
+                        {
+                            HeatmapOverlayOpacity = _sldHeatmapOpacity.Value;
+                        }
+                    };
+                    _heatmapOpacityEventsHooked = true;
+                }
             }
 
             if (_lblHeatmapScale != null)
@@ -7138,6 +7151,17 @@ namespace BrakeDiscInspector_GUI_ROI
                         _chkHeatmap.IsChecked = true;
                     }
 
+                    _heatmapNormMax = 1.0;
+                    if (_sldHeatmapScale != null)
+                    {
+                        _sldHeatmapScale.Value = 1.0;
+                    }
+
+                    if (_lblHeatmapScale != null)
+                    {
+                        _lblHeatmapScale.Text = "Heatmap Scale: 1.00";
+                    }
+
                     CacheHeatmapGrayFromBitmapSource(heatmapSource);
 
                     if (!_lastIsNg)
@@ -7145,47 +7169,12 @@ namespace BrakeDiscInspector_GUI_ROI
                         ClearHeatmapOverlay();
                         return;
                     }
-
-                    BitmapSource? overlay = null;
-                    var regions = _workflowViewModel?.Regions;
-                    if (regions != null && regions.Count > 0)
+                    RebuildHeatmapOverlayFromCache();
+                    if (HeatmapOverlay != null)
                     {
-                        overlay = BuildRedMaskFromRegions(heatmapSource.PixelWidth, heatmapSource.PixelHeight, regions);
+                        HeatmapOverlay.Visibility = Visibility.Visible;
+                        HeatmapOverlay.Opacity = _heatmapOverlayOpacity;
                     }
-
-                    if (overlay == null && _lastHeatmapGray != null && _lastHeatmapW > 0 && _lastHeatmapH > 0)
-                    {
-                        int cutoffPercent = _workflowViewModel?.HeatmapCutoffPercent ?? 0;
-                        int cutoffByte = Math.Clamp((int)(cutoffPercent * 255 / 100.0), 0, 255);
-                        int stride = _lastHeatmapW * 4;
-                        var outBuffer = new byte[_lastHeatmapW * _lastHeatmapH * 4];
-                        for (int i = 0; i < _lastHeatmapGray.Length; i++)
-                        {
-                            byte value = _lastHeatmapGray[i];
-                            if (value > 0 && value >= cutoffByte)
-                            {
-                                int offset = i * 4;
-                                outBuffer[offset + 2] = 255;
-                                outBuffer[offset + 3] = 255;
-                            }
-                        }
-
-                        var wb = new WriteableBitmap(_lastHeatmapW, _lastHeatmapH, 96, 96, PixelFormats.Pbgra32, null);
-                        wb.WritePixels(new Int32Rect(0, 0, _lastHeatmapW, _lastHeatmapH), outBuffer, stride, 0);
-                        wb.Freeze();
-                        overlay = wb;
-                    }
-
-                    if (overlay == null)
-                    {
-                        ClearHeatmapOverlay();
-                        return;
-                    }
-
-                    _lastHeatmapBmp = overlay;
-                    HeatmapOverlay.Source = overlay;
-                    HeatmapOverlay.Visibility = Visibility.Visible;
-                    HeatmapOverlay.Opacity = _heatmapOverlayOpacity;
 
                     UpdateHeatmapOverlayLayoutAndClip();
 
@@ -7262,112 +7251,52 @@ namespace BrakeDiscInspector_GUI_ROI
             UpdateHeatmapOverlayLayoutAndClip();
         }
 
-        private static BitmapSource? ApplyHeatmapLut(BitmapSource src, double gain, double gamma)
-        {
-            if (src == null)
-            {
-                return null;
-            }
-
-            gain = Math.Clamp(gain, 0.25, 4.0);
-            gamma = Math.Clamp(gamma, 0.25, 4.0);
-
-            BitmapSource baseSrc = src;
-            if (baseSrc.Format != PixelFormats.Bgra32)
-            {
-                var converted = new FormatConvertedBitmap(baseSrc, PixelFormats.Bgra32, null, 0);
-                converted.Freeze();
-                baseSrc = converted;
-            }
-
-            var wb = new WriteableBitmap(baseSrc);
-            int width = wb.PixelWidth;
-            int height = wb.PixelHeight;
-            int stride = wb.BackBufferStride;
-            int bpp = (wb.Format.BitsPerPixel + 7) / 8;
-            byte[] pixels = new byte[stride * height];
-            wb.CopyPixels(pixels, stride, 0);
-
-            const double eps = 1e-6;
-            for (int y = 0; y < height; y++)
-            {
-                int rowOffset = y * stride;
-                for (int x = 0; x < width; x++)
-                {
-                    int idx = rowOffset + x * bpp;
-                    double b = pixels[idx];
-                    double g = pixels[idx + 1];
-                    double r = pixels[idx + 2];
-                    double lum = (0.0722 * b + 0.7152 * g + 0.2126 * r) / 255.0;
-                    double safeLum = Math.Max(lum, eps);
-                    double adjusted = Math.Pow(safeLum, gamma);
-                    adjusted = Math.Clamp(adjusted * gain, 0.0, 1.0);
-                    double scale = adjusted / safeLum;
-                    pixels[idx] = (byte)Math.Round(Math.Clamp(b * scale, 0.0, 255.0));
-                    pixels[idx + 1] = (byte)Math.Round(Math.Clamp(g * scale, 0.0, 255.0));
-                    pixels[idx + 2] = (byte)Math.Round(Math.Clamp(r * scale, 0.0, 255.0));
-                }
-            }
-
-            wb.WritePixels(new Int32Rect(0, 0, width, height), pixels, stride, 0);
-            wb.Freeze();
-            return wb;
-        }
-
         private void RebuildHeatmapOverlayFromCache()
         {
             if (HeatmapOverlay == null) return;
             if (_lastHeatmapGray == null || _lastHeatmapW <= 0 || _lastHeatmapH <= 0) return;
-
-            // Build Turbo colormap LUT (once per rebuild; fast enough at this size)
-            byte[] turboR = new byte[256], turboG = new byte[256], turboB = new byte[256];
-            for (int i = 0; i < 256; i++)
+            if (!_lastIsNg)
             {
-                double t = i / 255.0;
-                double rr = 0.13572138 + 4.61539260 * t - 42.66032258 * t * t + 132.13108234 * t * t * t - 152.94239396 * t * t * t * t + 59.28637943 * t * t * t * t * t;
-                double gg = 0.09140261 + 2.19418839 * t + 4.84296658 * t * t - 14.18503333 * t * t * t + 14.13815831 * t * t * t * t - 4.21519726 * t * t * t * t * t;
-                double bb = 0.10667330 + 12.64194608 * t - 60.58204836 * t * t + 139.27510080 * t * t * t - 150.21747690 * t * t * t * t + 59.17006120 * t * t * t * t * t;
-                turboR[i] = (byte)Math.Round(255.0 * Math.Clamp(rr, 0.0, 1.0));
-                turboG[i] = (byte)Math.Round(255.0 * Math.Clamp(gg, 0.0, 1.0));
-                turboB[i] = (byte)Math.Round(255.0 * Math.Clamp(bb, 0.0, 1.0));
+                HeatmapOverlay.Source = null;
+                HeatmapOverlay.Visibility = Visibility.Collapsed;
+                return;
             }
 
-            // Normalize with global _heatmapNormMax (1.0=identity). If <1 -> brighter; if >1 -> darker.
             double denom = Math.Max(0.0001, _heatmapNormMax) * 255.0;
+            double gamma = Math.Max(1e-6, _heatmapGamma);
+            double gain = _heatmapGain;
 
             byte[] bgra = new byte[_lastHeatmapW * _lastHeatmapH * 4];
             int idx = 0;
             for (int i = 0; i < _lastHeatmapGray.Length; i++)
             {
-                // Map gray -> 0..255 index using the global normalization
-                double v = _lastHeatmapGray[i];                 // 0..255
-                int lut = (int)Math.Round(255.0 * Math.Clamp(v / denom, 0.0, 1.0));
-                bgra[idx++] = turboB[lut];
-                bgra[idx++] = turboG[lut];
-                bgra[idx++] = turboR[lut];
-                bgra[idx++] = 255; // opaque
+                byte value = _lastHeatmapGray[i];
+                byte alpha = 0;
+                if (value > 0)
+                {
+                    double t = Math.Clamp(value / denom, 0.0, 1.0);
+                    t = Math.Pow(t, 1.0 / gamma);
+                    t = Math.Clamp(t * gain, 0.0, 1.0);
+                    if (t >= 0.05)
+                    {
+                        double t2 = (t - 0.05) / 0.95;
+                        alpha = (byte)Math.Round(255.0 * t2);
+                    }
+                }
+
+                bgra[idx++] = 113;
+                bgra[idx++] = 204;
+                bgra[idx++] = 46;
+                bgra[idx++] = alpha;
             }
 
-            // Create bitmap and assign
             var wb = new System.Windows.Media.Imaging.WriteableBitmap(
                 _lastHeatmapW, _lastHeatmapH, 96, 96,
                 System.Windows.Media.PixelFormats.Bgra32, null);
             wb.WritePixels(new Int32Rect(0, 0, _lastHeatmapW, _lastHeatmapH), bgra, _lastHeatmapW * 4, 0);
-            double baseGain = _heatmapGain;
-            double baseGamma = _heatmapGamma;
-            double effectiveGain = _lastIsNg ? Math.Max(baseGain, 1.35) : Math.Min(baseGain, 0.85);
-            double effectiveGamma = _lastIsNg ? Math.Min(baseGamma, 0.85) : Math.Max(baseGamma, 1.15);
-            var adjusted = ApplyHeatmapLut(wb, effectiveGain, effectiveGamma);
-
-            if (adjusted != null)
-            {
-                HeatmapOverlay.Source = adjusted;
-            }
-            else
-            {
-                wb.Freeze();
-                HeatmapOverlay.Source = wb;
-            }
+            wb.Freeze();
+            HeatmapOverlay.Source = wb;
+            _lastHeatmapBmp = wb;
         }
 
         private void CacheHeatmapGrayFromBitmapSource(BitmapSource src)
@@ -7412,56 +7341,6 @@ namespace BrakeDiscInspector_GUI_ROI
             _lastHeatmapH = h;
         }
 
-        private static BitmapSource? BuildRedMaskFromRegions(int width, int height, IEnumerable<Region> regions)
-        {
-            if (width <= 0 || height <= 0 || regions == null)
-            {
-                return null;
-            }
-
-            int stride = width * 4;
-            var buffer = new byte[height * stride];
-
-            foreach (var region in regions)
-            {
-                if (region == null || region.w <= 0 || region.h <= 0)
-                {
-                    continue;
-                }
-
-                int left = (int)Math.Floor(region.x);
-                int top = (int)Math.Floor(region.y);
-                int right = (int)Math.Ceiling(region.x + region.w);
-                int bottom = (int)Math.Ceiling(region.y + region.h);
-
-                left = Math.Clamp(left, 0, width);
-                right = Math.Clamp(right, 0, width);
-                top = Math.Clamp(top, 0, height);
-                bottom = Math.Clamp(bottom, 0, height);
-
-                if (right <= left || bottom <= top)
-                {
-                    continue;
-                }
-
-                for (int y = top; y < bottom; y++)
-                {
-                    int rowStart = y * stride + left * 4;
-                    for (int x = left; x < right; x++)
-                    {
-                        int offset = rowStart + (x - left) * 4;
-                        buffer[offset + 2] = 255;
-                        buffer[offset + 3] = 255;
-                    }
-                }
-            }
-
-            var wb = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
-            wb.WritePixels(new Int32Rect(0, 0, width, height), buffer, stride, 0);
-            wb.Freeze();
-            return wb;
-        }
-
         private static byte[] CopyGrayBytes(BitmapSource src)
         {
             int w = src.PixelWidth;
@@ -7496,180 +7375,6 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             SyncHeatmapBitmapFromOverlay();
         }
-
-        // Map a [0,1] value to Turbo colormap (approx), returning (B,G,R) tuple
-        private static (byte B, byte G, byte R) TurboLUT(double t)
-        {
-            if (double.IsNaN(t)) t = 0;
-            if (t < 0) t = 0; if (t > 1) t = 1;
-            // Polynomial approximation of Turbo (McIlroy 2019), clamped
-            double r = 0.13572138 + 4.61539260 * t - 42.66032258 * t * t + 132.13108234 * t * t * t - 152.94239396 * t * t * t * t + 59.28637943 * t * t * t * t * t;
-            double g = 0.09140261 + 2.19418839 * t + 4.84296658 * t * t - 14.18503333 * t * t * t + 14.13815831 * t * t * t * t - 4.21519726 * t * t * t * t * t;
-            double b = 0.10667330 + 12.64194608 * t - 60.58204836 * t * t + 139.27510080 * t * t * t - 150.21747690 * t * t * t * t + 59.17006120 * t * t * t * t * t;
-            r = System.Math.Clamp(r, 0.0, 1.0);
-            g = System.Math.Clamp(g, 0.0, 1.0);
-            b = System.Math.Clamp(b, 0.0, 1.0);
-            return ((byte)System.Math.Round(255 * b), (byte)System.Math.Round(255 * g), (byte)System.Math.Round(255 * r));
-        }
-
-        // Build a visible BGRA32 heatmap with robust min/max normalization and optional colorization
-        private static System.Windows.Media.Imaging.WriteableBitmap BuildVisibleHeatmap(
-            System.Windows.Media.Imaging.BitmapSource src,
-            bool useTurbo = true,   // set true for vivid colors
-            double gamma = 0.9      // slight gamma to lift mid-tones
-        )
-        {
-            if (src == null) return null;
-
-            var fmt = src.Format;
-            int w = src.PixelWidth, h = src.PixelHeight;
-
-            // Extract raw buffer according to source format
-            if (fmt == System.Windows.Media.PixelFormats.Gray8)
-            {
-                int stride = w;
-                byte[] g8 = new byte[h * stride];
-                src.CopyPixels(g8, stride, 0);
-
-                // Compute min/max ignoring zeros
-                int minv = 255, maxv = 0, countNZ = 0;
-                for (int i = 0; i < g8.Length; i++)
-                {
-                    int v = g8[i];
-                    if (v <= 0) continue;
-                    if (v < minv) minv = v;
-                    if (v > maxv) maxv = v;
-                    countNZ++;
-                }
-                if (countNZ == 0) { minv = 0; maxv = 0; }
-
-                double inv = (maxv > minv) ? 1.0 / (maxv - minv) : 0.0;
-
-                byte[] bgra = new byte[w * h * 4];
-                for (int p = 0, q = 0; p < g8.Length; p++, q += 4)
-                {
-                    double t = (inv == 0.0) ? 0.0 : (g8[p] - minv) * inv;
-                    if (gamma != 1.0) t = System.Math.Pow(t, 1.0 / System.Math.Max(1e-6, gamma));
-                    if (useTurbo)
-                    {
-                        var (B, G, R) = TurboLUT(t);
-                        bgra[q + 0] = B; bgra[q + 1] = G; bgra[q + 2] = R; bgra[q + 3] = 255;
-                    }
-                    else
-                    {
-                        byte u = (byte)System.Math.Round(255.0 * t);
-                        bgra[q + 0] = u; bgra[q + 1] = u; bgra[q + 2] = u; bgra[q + 3] = 255;
-                    }
-                }
-
-                var wb = new System.Windows.Media.Imaging.WriteableBitmap(w, h, src.DpiX, src.DpiY,
-                    System.Windows.Media.PixelFormats.Bgra32, null);
-                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w * 4, 0);
-                wb.Freeze();
-                return wb;
-            }
-            else if (fmt == System.Windows.Media.PixelFormats.Gray16)
-            {
-                int stride = w * 2;
-                byte[] raw = new byte[h * stride];
-                src.CopyPixels(raw, stride, 0);
-
-                // Convert bytes→ushort (Little Endian)
-                int N = w * h;
-                ushort[] g16 = new ushort[N];
-                for (int i = 0, j = 0; i < N; i++, j += 2)
-                    g16[i] = (ushort)(raw[j] | (raw[j + 1] << 8));
-
-                int minv = ushort.MaxValue, maxv = 0, countNZ = 0;
-                for (int i = 0; i < N; i++)
-                {
-                    int v = g16[i];
-                    if (v <= 0) continue;
-                    if (v < minv) minv = v;
-                    if (v > maxv) maxv = v;
-                    countNZ++;
-                }
-                if (countNZ == 0) { minv = 0; maxv = 0; }
-
-                double inv = (maxv > minv) ? 1.0 / (maxv - minv) : 0.0;
-
-                byte[] bgra = new byte[N * 4];
-                for (int i = 0, q = 0; i < N; i++, q += 4)
-                {
-                    double t = (inv == 0.0) ? 0.0 : (g16[i] - minv) * inv;
-                    if (gamma != 1.0) t = System.Math.Pow(t, 1.0 / System.Math.Max(1e-6, gamma));
-                    if (useTurbo)
-                    {
-                        var (B, G, R) = TurboLUT(t);
-                        bgra[q + 0] = B; bgra[q + 1] = G; bgra[q + 2] = R; bgra[q + 3] = 255;
-                    }
-                    else
-                    {
-                        byte u = (byte)System.Math.Round(255.0 * t);
-                        bgra[q + 0] = u; bgra[q + 1] = u; bgra[q + 2] = u; bgra[q + 3] = 255;
-                    }
-                }
-
-                var wb = new System.Windows.Media.Imaging.WriteableBitmap(w, h, src.DpiX, src.DpiY,
-                    System.Windows.Media.PixelFormats.Bgra32, null);
-                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w * 4, 0);
-                wb.Freeze();
-                return wb;
-            }
-            else
-            {
-                // Convert to BGRA32 and compute luminance min/max ignoring zeros
-                var conv = (fmt != System.Windows.Media.PixelFormats.Bgra32)
-                    ? new System.Windows.Media.Imaging.FormatConvertedBitmap(src, System.Windows.Media.PixelFormats.Bgra32, null, 0)
-                    : src;
-
-                int stride = w * 4;
-                byte[] buf = new byte[h * stride];
-                conv.CopyPixels(buf, stride, 0);
-
-                int minv = 255, maxv = 0, countNZ = 0;
-                for (int q = 0; q < buf.Length; q += 4)
-                {
-                    // premultiplied alpha is fine: we treat zeros as background
-                    byte b = buf[q + 0], g = buf[q + 1], r = buf[q + 2];
-                    int lum = (int)System.Math.Round(0.2126 * r + 0.7152 * g + 0.0722 * b);
-                    if (lum <= 0) continue;
-                    if (lum < minv) minv = lum;
-                    if (lum > maxv) maxv = lum;
-                    countNZ++;
-                }
-                if (countNZ == 0) { minv = 0; maxv = 0; }
-
-                double inv = (maxv > minv) ? 1.0 / (maxv - minv) : 0.0;
-
-                byte[] bgra = new byte[h * stride];
-                for (int q = 0; q < buf.Length; q += 4)
-                {
-                    byte b = buf[q + 0], g = buf[q + 1], r = buf[q + 2];
-                    int lum = (int)System.Math.Round(0.2126 * r + 0.7152 * g + 0.0722 * b);
-                    double t = (inv == 0.0) ? 0.0 : (lum - minv) * inv;
-                    if (t < 0) t = 0; if (t > 1) t = 1;
-                    if (gamma != 1.0) t = System.Math.Pow(t, 1.0 / System.Math.Max(1e-6, gamma));
-                    if (useTurbo)
-                    {
-                        var (B, G, R) = TurboLUT(t);
-                        bgra[q + 0] = B; bgra[q + 1] = G; bgra[q + 2] = R; bgra[q + 3] = 255;
-                    }
-                    else
-                    {
-                        byte u = (byte)System.Math.Round(255.0 * t);
-                        bgra[q + 0] = u; bgra[q + 1] = u; bgra[q + 2] = u; bgra[q + 3] = 255;
-                    }
-                }
-
-                var wb = new System.Windows.Media.Imaging.WriteableBitmap(w, h, conv.DpiX, conv.DpiY,
-                    System.Windows.Media.PixelFormats.Bgra32, null);
-                wb.WritePixels(new System.Windows.Int32Rect(0, 0, w, h), bgra, w * 4, 0);
-                wb.Freeze();
-                return wb;
-            }
-        }
-
 
         private void ResetAnalysisMarks(bool preserveLastCenters = false)
         {

@@ -42,8 +42,9 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         private ObservableCollection<DatasetPreviewItem> _ngPreview = new();
         private DatasetPreviewItem? _selectedOkPreviewItem;
         private DatasetPreviewItem? _selectedNgPreviewItem;
-        private bool _hasFitOk;
         private MasterAnchorChoice _anchorMaster = MasterAnchorChoice.Master1;
+        private bool _backendMemoryFitted;
+        private bool _backendCalibPresent;
 
         public InspectionRoiConfig(int index)
         {
@@ -131,7 +132,6 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 if (string.Equals(_modelKey, newValue, StringComparison.Ordinal)) return;
                 _modelKey = newValue;
                 OnPropertyChanged();
-                HasFitOk = false;
             }
         }
 
@@ -145,7 +145,6 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 _datasetPath = normalized;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(HasDatasetPath));
-                HasFitOk = false;
             }
         }
 
@@ -233,13 +232,26 @@ namespace BrakeDiscInspector_GUI_ROI.Models
             }
         }
 
-        public bool HasFitOk
+        [JsonIgnore]
+        public bool BackendMemoryFitted
         {
-            get => _hasFitOk;
+            get => _backendMemoryFitted;
             set
             {
-                if (_hasFitOk == value) return;
-                _hasFitOk = value;
+                if (_backendMemoryFitted == value) return;
+                _backendMemoryFitted = value;
+                OnPropertyChanged();
+            }
+        }
+
+        [JsonIgnore]
+        public bool BackendCalibPresent
+        {
+            get => _backendCalibPresent;
+            set
+            {
+                if (_backendCalibPresent == value) return;
+                _backendCalibPresent = value;
                 OnPropertyChanged();
             }
         }
@@ -431,7 +443,6 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 DatasetStatus = DatasetStatus,
                 DatasetOkCount = DatasetOkCount,
                 DatasetKoCount = DatasetKoCount,
-                HasFitOk = HasFitOk,
                 AnchorMaster = AnchorMaster,
                 BaseImgW = BaseImgW,
                 BaseImgH = BaseImgH,

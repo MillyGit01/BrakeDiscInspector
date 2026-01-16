@@ -81,7 +81,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow.DesignTime
                 DatasetKoCount = 6,
                 ThresholdDefault = 0.5,
                 CalibratedThreshold = 0.72,
-                HasFitOk = true
+                BackendMemoryFitted = true
             };
 
             roi.OkPreview = CreatePreviewCollection("ok", okBase);

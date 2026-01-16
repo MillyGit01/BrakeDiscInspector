@@ -2499,8 +2499,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 _roiDatasetCache.Remove(roiChanged);
                 roiChanged.DatasetStatus = "Syncing dataset...";
-                roiChanged.OkPreview = new ObservableCollection<DatasetPreviewItem>();
-                roiChanged.NgPreview = new ObservableCollection<DatasetPreviewItem>();
+                _log($"[dataset:path] changed roi={roiChanged.ModelKey} path='{roiChanged.DatasetPath}'");
                 _ = RefreshDatasetPreviewsForRoiAsync(roiChanged);
                 _ = RefreshRoiDatasetStateAsync(roiChanged);
 

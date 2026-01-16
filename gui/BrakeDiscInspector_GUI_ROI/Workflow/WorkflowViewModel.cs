@@ -4767,6 +4767,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 RoiId = resolvedRoiId;
             }
 
+            bool attemptedAutoFit = false;
+
             async Task ApplyInferResultAsync(InferResult result)
             {
                 _lastExport = export;
@@ -4840,14 +4842,26 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 await RefreshBackendStateForRoiAsync(roi, ct).ConfigureAwait(false);
-                if (!roi.BackendMemoryFitted)
+                var stateAvailable = _backendStateAvailableByRoi.TryGetValue(roi, out var available) && available;
+                if (stateAvailable && !roi.BackendMemoryFitted)
                 {
-                    var stateAvailable = _backendStateAvailableByRoi.TryGetValue(roi, out var available) && available;
-                    var message = stateAvailable
-                        ? "Este ROI no está entrenado en el backend (memory_fitted=false). Ejecuta Train (fit_ok) y vuelve a intentar."
-                        : "No se pudo consultar el estado del backend para este ROI. Verifica que el servicio esté disponible y vuelve a intentar.";
-                    await ShowMessageAsync(message, "Evaluate ROI").ConfigureAwait(false);
-                    return;
+                    if (OkSamples.Count < 10)
+                    {
+                        await ShowMessageAsync("Faltan OK samples (mínimo 10) para entrenar desde dataset.", "Evaluate ROI").ConfigureAwait(false);
+                        return;
+                    }
+
+                    attemptedAutoFit = true;
+                    _log($"[eval] auto-fit: state not fitted, ok_samples={OkSamples.Count} -> running fit_ok from dataset");
+                    try
+                    {
+                        await _client.FitOkFromDatasetAsync(RoleId, resolvedRoiId, MmPerPx, memoryFit: false, ct).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        await ResetAfterFailureAsync("Error en fit_ok. Revisa los OK samples.", "Evaluate ROI", $"[fit_ok] error: {ex.Message}").ConfigureAwait(false);
+                        return;
+                    }
                 }
 
                 var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.PngBytes, inferFileName, export.ShapeJson, ct).ConfigureAwait(false);
@@ -4855,6 +4869,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             catch (BackendMemoryNotFittedException)
             {
+                if (attemptedAutoFit)
+                {
+                    _log("[eval] auto-fit: already attempted, still not fitted");
+                    await ResetAfterFailureAsync("Error: el backend sigue sin modelo entrenado despues del auto-entrenamiento. Revisa logs y dataset.", "Evaluate ROI").ConfigureAwait(false);
+                    return;
+                }
+
                 try
                 {
                     if (OkSamples.Count < 10)
@@ -4863,7 +4884,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         return;
                     }
 
-                    await _client.FitOkFromDatasetAsync(RoleId, RoiId, MmPerPx, memoryFit: false, ct).ConfigureAwait(false);
+                    await _client.FitOkFromDatasetAsync(RoleId, resolvedRoiId, MmPerPx, memoryFit: false, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {

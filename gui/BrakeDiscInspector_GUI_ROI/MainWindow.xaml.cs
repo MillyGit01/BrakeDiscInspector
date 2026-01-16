@@ -4689,8 +4689,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 Directory.CreateDirectory(Path.Combine(roiDir, "ng"));
                 Directory.CreateDirectory(Path.Combine(roiDir, "Model"));
 
-                if (string.IsNullOrWhiteSpace(roi.DatasetPath))
+                var current = DatasetPathHelper.NormalizeDatasetPath(roi.DatasetPath);
+                var expected = DatasetPathHelper.NormalizeDatasetPath(roiDir);
+                if (!string.IsNullOrWhiteSpace(expected)
+                    && !string.Equals(current, expected, StringComparison.OrdinalIgnoreCase))
                 {
+                    AppendLog($"[dataset:path] realign ROI '{roi.ModelKey}' path '{roi.DatasetPath}' -> '{roiDir}' (layout='{GetCurrentLayoutName()}')");
                     roi.DatasetPath = roiDir;
                 }
             }

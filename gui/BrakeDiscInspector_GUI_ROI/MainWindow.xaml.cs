@@ -4689,7 +4689,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 Directory.CreateDirectory(Path.Combine(roiDir, "ng"));
                 Directory.CreateDirectory(Path.Combine(roiDir, "Model"));
 
-                if (!string.Equals(roi.DatasetPath, roiDir, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(roi.DatasetPath))
                 {
                     roi.DatasetPath = roiDir;
                 }
@@ -8374,7 +8374,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             RefreshInspectionRoiSlots();
             SetActiveInspectionIndex(index);
-            EnsureInspectionDatasetStructure();
             TryPersistLayout();
 
             DumpUiShapesMap($"save-slot:{index}");

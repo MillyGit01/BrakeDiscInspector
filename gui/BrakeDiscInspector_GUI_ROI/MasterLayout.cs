@@ -183,8 +183,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 var layoutName = GetLayoutNameFromPath(filePath);
-                NormalizeLayoutPathsForRecipe(layout, RecipePathHelper.GetLayoutFolder(layoutName), filePath);
                 EnsureInspectionRoiDefaults(layout);
+                NormalizeLayoutPathsForRecipe(layout, RecipePathHelper.GetLayoutFolder(layoutName), filePath);
                 EnsureOptionDefaults(layout);
                 TraceInspectionRois("load", layout);
 
@@ -683,7 +683,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var layoutName = ExtractLayoutNameFromRecipeRoot(recipeRoot);
             var datasetRoot = RecipePathHelper.GetDatasetFolder(layoutName);
-            var inspectionRegex = new Regex(@"^inspection-(\d+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
             foreach (var roi in layout.InspectionRois)
             {
@@ -693,22 +692,29 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 var roiId = roi.ModelKey ?? string.Empty;
-                var match = inspectionRegex.Match(roiId);
-                if (!match.Success)
+                var idx = TryParseInspectionIndex(roi.ModelKey);
+                if (idx < 1 || idx > 4)
                 {
+                    idx = TryParseInspectionIndex(roi.Id);
+                }
+
+                if (idx < 1 || idx > 4)
+                {
+                    GuiLog.Warn($"AlignInspectionDatasetPaths: skipping roi because cannot parse index modelKey='{roi.ModelKey ?? string.Empty}' id='{roi.Id ?? string.Empty}'");
                     continue;
                 }
 
-                var folder = $"Inspection_{match.Groups[1].Value}";
+                var roiIdentifier = string.IsNullOrWhiteSpace(roiId) ? roi.Id ?? string.Empty : roiId;
+                var folder = $"Inspection_{idx}";
                 var expected = Path.Combine(datasetRoot, folder);
                 var oldPath = roi.DatasetPath;
                 if (!string.Equals(oldPath, expected, StringComparison.OrdinalIgnoreCase))
                 {
                     roi.DatasetPath = expected;
-                    GuiLog.Info($"NormalizeLayoutPathsForRecipe: Realigned inspection dataset path roi='{roiId}' old='{oldPath ?? string.Empty}' new='{roi.DatasetPath ?? string.Empty}'");
+                    GuiLog.Info($"NormalizeLayoutPathsForRecipe: Realigned inspection dataset path roi='{roiIdentifier}' old='{oldPath ?? string.Empty}' new='{roi.DatasetPath ?? string.Empty}'");
                 }
 
-                EnsureDatasetSubfolders(expected, roiId, layoutFilePath);
+                EnsureDatasetSubfolders(expected, roiIdentifier, layoutFilePath);
             }
         }
 

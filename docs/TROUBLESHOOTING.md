@@ -1,39 +1,34 @@
 # Troubleshooting
 
-This checklist is derived from the current GUI/Backend code.
+This checklist is derived from current GUI and backend behavior. See `LOGGING.md` for log locations.
 
 ## GUI-side issues
-- **Backend unavailable:** `WorkflowViewModel.RefreshHealthAsync` reports the exception and `GuiLog` prints `[health] EX`. Verify `Backend.BaseUrl` (appsettings or `BDI_BACKEND_BASEURL`) and ensure `BackendClient.BaseUrl` points to the running FastAPI instance.
-- **Dataset path rejected:** dataset panels read from the active recipe (`Recipes/<LayoutName>/Dataset/`). If folders were deleted manually, `RefreshDatasetCommand` will show `Select a dataset`; recreate `Inspection_<n>/ok` and `Inspection_<n>/ng` under the recipe or reload the layout to let `EnsureInspectionDatasetStructure` rebuild them.
-- **Cannot add sample:** `AddRoiToDatasetAsync` logs `AddToDataset aborted: ...`. Usually no image is loaded (`_getSourceImagePath()` null) or the ROI is not frozen; fix the ROI, re-export and retry.
-- **Heatmap missing or misaligned:** check `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` for the `[heatmap:tag]` entry. If `Transform Img→Canvas` shows `sx=0`, wait for the canvas to finish measuring (resize window or trigger a redraw). Batch mode also waits for `_batchAnchorReadyForStep`; ensure Master ROIs are visible.
-- **GUI settings not persisting:** confirm `%LocalAppData%\BrakeDiscInspector\gui_setup.json` exists and is non-empty. Check `%LocalAppData%\BrakeDiscInspector\logs\gui_setup.log` for `[SAVE]` and `[LOAD]` entries; missing entries or exceptions usually indicate permissions under `%LOCALAPPDATA%` or a locked file.
-- **ROIs not moving during batch:** `RepositionInspectionRoisForImageAsync` now skips repositioning when Master anchors are missing or below threshold. Inspect `%LocalAppData%/BrakeDiscInspector/logs/roi_analyze_master.log` and `[ANCHORS] scale=` lines in `gui.log` to confirm detections, and verify each `InspectionRoiConfig.AnchorMaster` matches the intended anchor.
-- **Inspection ROI drift after re-running Analyze Master on the same image:** verify the **Scale Lock** checkbox is set as expected. When Scale Lock is enabled, only rotation/translation are applied (scale = 1.0), which can make small detection differences look like drift. Inspect `roi_analyze_master.log` and `roi_load_coords.log` for computed transforms; mismatched master centers or toggled Scale Lock will change the resulting ROI alignment.
-- **Stale geometry after changing masters:** use **Clear canvas** to wipe masters, inspection slots and cached baselines. The command logs `[align] Reset solicitado/completado` and reinitialises the layout so new anchors do not inherit previous inspection ROIs.
+- **Backend offline:** verify `Backend.BaseUrl` (`config/appsettings.json`) and network connectivity. Check `gui.log` for `[backend]` and `[infer]` entries.
+- **Dataset preview empty:** ensure dataset samples exist in the backend (`/datasets/list`) and that the GUI cache under `%LOCALAPPDATA%\BrakeDiscInspector\cache\datasets\...` is writable.
+- **Cannot add a sample:** confirm a source image is loaded and the ROI is valid; see `gui.log` for `AddToDataset` messages.
+- **Heatmap missing:**
+  - If the result is **OK**, the spec requires *no overlay*.
+  - For NG results, check `gui_heatmap.log` for placement errors.
+- **ROI disabled unexpectedly:** check the **Enabled** checkbox in both the inspection panel and the dataset tab (they are bound to the same property).
+
+### Enabled vs fitted
+- **Enabled** is UI-only; it does **not** imply the backend has a fitted model.
+- Legacy `HasFitOk` fields in layout files are ignored and should be treated as **stale**.
 
 ## Backend-side issues
-- **`400` with "Memoria no encontrada":** `/infer` could not load the model artefact stored under `BDI_MODELS_DIR/recipes/<recipe_id>/<model_key>/<role>__<roi>.npz`. Run `/fit_ok` again via the GUI or copy the expected file into that folder.
-- **Error: Insufficient OK samples:** `/fit_ok` refuses to train from dataset when fewer than 10 OK samples are present (configurable via `BDI_MIN_OK_SAMPLES`). Add more OK samples and refresh the dataset list before retrying.
-- **Error: mm_per_px mismatch:** the recipe is locked to the first `mm_per_px` value seen. Ensure the GUI `MmPerPx` value matches the dataset metadata for the active recipe, or clear the recipe metadata to reinitialize the lock.
-- **Token grid mismatch:** `/infer` returns `error` mentioning `Token grid mismatch`. The embedding grid stored during `/fit_ok` does not match the new input resolution. Rebuild the memory by running `/fit_ok` on crops with the current size.
-- **Calibration missing:** The GUI will still display scores even if `threshold` is `null`. Either run `/calibrate_ng` (button **Calibrate**) or set `InspectionRoiConfig.ThresholdDefault` to a conservative value.
-- **Error: No NG samples available for calibration:** `/calibrate_dataset` requires at least one NG sample when `require_ng=true` (default). Add NG samples and retry.
-- **Slow inference:** Heatmaps are generated with Gaussian blur (`blur_sigma=1.0`). If using CPU only, consider reducing image size in the GUI, ensuring `torch` is compiled for CPU and that the Docker image has enough CPU shares.
+- **HTTP 400: "Memoria no encontrada"** — no fitted memory at the expected path. Run `/fit_ok` or verify `recipe_id` + `model_key`.
+- **HTTP 409: mm_per_px mismatch** — the recipe is locked to a different `mm_per_px`. Align GUI `mm_per_px` or delete recipe metadata to reset.
+- **Insufficient OK samples** — `BDI_MIN_OK_SAMPLES` not met for dataset-based training.
+- **Calibration missing** — `/infer` returns `threshold=null` if no calibration is stored.
+
+## Batch issue: ROI2
+If ROI2 heatmaps are missing after the first batch image:
+1. Inspect `gui.log` / `gui_heatmap.log` for ROI2 placement messages.
+2. Confirm ROI2 is enabled.
+3. Check for guard messages indicating ROI2 geometry reuse.
 
 ## Logs to inspect
-1. `%LocalAppData%/BrakeDiscInspector/logs/gui.log` – look for `[eval]` or `[batch]` entries.
-2. Backend stdout (or Docker logs) – `slog("infer.response", ...)` includes `elapsed_ms`, `score`, `threshold`.
-3. `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log` – overlay placement details.
-4. `%LocalAppData%/BrakeDiscInspector/logs/roi_analyze_master.log` – master anchor detection status when batch alignment fails.
-
-## GitHub remote moved
-If `git` reports “This repository moved”, update your remote URL:
-```bash
-git remote set-url origin https://github.com/MillyGit01/BrakeDiscInspector.git
-git fetch --prune origin
-```
-Then re-run your `pull`/`push`.
-
-## VS Code .NET SDK error
-If VS Code logs “No installed .NET SDK was found”, install the .NET SDK (or use Visual Studio, which installs it). The runtime alone is not sufficient to restore/build the WPF solution.
+1. `%LOCALAPPDATA%\BrakeDiscInspector\logs\gui.log`
+2. `%LOCALAPPDATA%\BrakeDiscInspector\logs\gui_heatmap.log`
+3. `%LOCALAPPDATA%\BrakeDiscInspector\logs\roi_analyze_master.log`
+4. Backend `backend_diagnostics.jsonl` (see `LOGGING.md`)

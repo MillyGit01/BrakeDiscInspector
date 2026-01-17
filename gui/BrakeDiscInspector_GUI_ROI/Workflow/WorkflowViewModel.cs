@@ -217,8 +217,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly IReadOnlyList<RoiShape> _availableRoiShapes = Enum.GetValues(typeof(RoiShape)).Cast<RoiShape>().ToList();
         private RoiShape _selectedMaster1Shape = RoiShape.Rectangle;
         private RoiShape _selectedMaster2Shape = RoiShape.Rectangle;
+        private enum MasterEditState
+        {
+            Idle,
+            Creating,
+            Editing,
+            Saving
+        }
+
         private bool _isMaster1Editing;
         private bool _isMaster2Editing;
+        private MasterEditState _master1EditState = MasterEditState.Idle;
+        private MasterEditState _master2EditState = MasterEditState.Idle;
+        private readonly SemaphoreSlim _masterEditGate = new(1, 1);
         private MasterRoleOption? _selectedMaster1Role;
         private MasterRoleOption? _selectedMaster2Role;
 
@@ -2880,8 +2891,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         public void SetMasterEditState(bool isMaster1Editing, bool isMaster2Editing)
         {
-            IsMaster1Editing = isMaster1Editing;
-            IsMaster2Editing = isMaster2Editing;
+            SetMasterEditStateInternal(RoiRole.Master1Pattern, isMaster1Editing ? MasterEditState.Editing : MasterEditState.Idle, "sync");
+            SetMasterEditStateInternal(RoiRole.Master2Pattern, isMaster2Editing ? MasterEditState.Editing : MasterEditState.Idle, "sync");
         }
 
         private bool CanEditMasterRoi()
@@ -2909,7 +2920,23 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            await _createMasterRoiAsync(roleOption.Role, shape).ConfigureAwait(false);
+            await _masterEditGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                SetMasterEditStateInternal(roleOption.Role, MasterEditState.Creating, "create");
+                await _createMasterRoiAsync(roleOption.Role, shape).ConfigureAwait(false);
+                SetMasterEditStateInternal(roleOption.Role, MasterEditState.Editing, "create-dispatched");
+            }
+            catch (Exception ex)
+            {
+                _log($"[master-edit] create failed role={roleOption.Role} error={ex.Message}");
+                SetMasterEditStateInternal(roleOption.Role, MasterEditState.Idle, "create-failed");
+                throw;
+            }
+            finally
+            {
+                _masterEditGate.Release();
+            }
         }
 
         private async Task ToggleEditSaveMasterRoiAsync(MasterRoleOption? roleOption)
@@ -2922,16 +2949,33 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             bool isEditing;
             var isMaster1 = roleOption.Role is RoiRole.Master1Pattern or RoiRole.Master1Search;
-            if (_toggleEditSaveMasterRoiAsync == null)
+            await _masterEditGate.WaitAsync().ConfigureAwait(false);
+            try
             {
-                isEditing = isMaster1 ? !IsMaster1Editing : !IsMaster2Editing;
-            }
-            else
-            {
-                isEditing = await _toggleEditSaveMasterRoiAsync(roleOption.Role).ConfigureAwait(false);
-            }
+                bool wasEditing = isMaster1 ? IsMaster1Editing : IsMaster2Editing;
+                SetMasterEditStateInternal(
+                    roleOption.Role,
+                    wasEditing ? MasterEditState.Saving : MasterEditState.Editing,
+                    wasEditing ? "toggle-save" : "toggle-edit-start");
 
-            ApplyMasterEditState(roleOption.Role, isEditing);
+                if (_toggleEditSaveMasterRoiAsync == null)
+                {
+                    isEditing = !wasEditing;
+                }
+                else
+                {
+                    isEditing = await _toggleEditSaveMasterRoiAsync(roleOption.Role).ConfigureAwait(false);
+                }
+
+                SetMasterEditStateInternal(
+                    roleOption.Role,
+                    isEditing ? MasterEditState.Editing : MasterEditState.Idle,
+                    "toggle-complete");
+            }
+            finally
+            {
+                _masterEditGate.Release();
+            }
         }
 
         private async Task RemoveMasterRoiAsync(MasterRoleOption? roleOption)
@@ -2949,22 +2993,50 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             await _removeMasterRoiAsync(roleOption.Role).ConfigureAwait(false);
-            ApplyMasterEditState(roleOption.Role, isEditing: false);
+            SetMasterEditStateInternal(roleOption.Role, MasterEditState.Idle, "remove");
         }
 
         private void ApplyMasterEditState(RoiRole role, bool isEditing)
         {
+            SetMasterEditStateInternal(role, isEditing ? MasterEditState.Editing : MasterEditState.Idle, "apply");
+        }
+
+        private static bool IsEditingState(MasterEditState state)
+            => state == MasterEditState.Creating || state == MasterEditState.Editing || state == MasterEditState.Saving;
+
+        private MasterEditState GetMasterEditStateForRole(RoiRole role)
+        {
+            return role switch
+            {
+                RoiRole.Master1Pattern or RoiRole.Master1Search => _master1EditState,
+                RoiRole.Master2Pattern or RoiRole.Master2Search => _master2EditState,
+                _ => MasterEditState.Idle
+            };
+        }
+
+        private void SetMasterEditStateInternal(RoiRole role, MasterEditState nextState, string trigger)
+        {
+            var previousState = GetMasterEditStateForRole(role);
+            if (previousState == nextState)
+            {
+                return;
+            }
+
             switch (role)
             {
                 case RoiRole.Master1Pattern:
                 case RoiRole.Master1Search:
-                    IsMaster1Editing = isEditing;
+                    _master1EditState = nextState;
+                    IsMaster1Editing = IsEditingState(nextState);
                     break;
                 case RoiRole.Master2Pattern:
                 case RoiRole.Master2Search:
-                    IsMaster2Editing = isEditing;
+                    _master2EditState = nextState;
+                    IsMaster2Editing = IsEditingState(nextState);
                     break;
             }
+
+            _log($"[master-edit] role={role} {previousState}->{nextState} trigger={trigger}");
         }
 
         private void UpdateSelectedRoiState()
@@ -6027,6 +6099,35 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        public void InvalidateMasterPatternCacheForRole(RoiRole role, string reason = "manual")
+        {
+            lock (_masterPatternCacheLock)
+            {
+                if (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search)
+                {
+                    _cachedM1Pattern?.Dispose();
+                    _cachedM1Pattern = null;
+                    _cachedM1PatternPath = null;
+                    _cachedM1PatternLastWriteUtc = null;
+                    _cachedM1PatternSize = null;
+                    _warnedMissingM1PatternPath = false;
+                    _log($"[master-cache] invalidate role={role} reason={reason} target=M1");
+                    return;
+                }
+
+                if (role == RoiRole.Master2Pattern || role == RoiRole.Master2Search)
+                {
+                    _cachedM2Pattern?.Dispose();
+                    _cachedM2Pattern = null;
+                    _cachedM2PatternPath = null;
+                    _cachedM2PatternLastWriteUtc = null;
+                    _cachedM2PatternSize = null;
+                    _warnedMissingM2PatternPath = false;
+                    _log($"[master-cache] invalidate role={role} reason={reason} target=M2");
+                }
+            }
+        }
+
         private Mat? GetOrLoadPatternCached(string? path, string tag)
         {
             bool isM1 = string.Equals(tag, "M1", StringComparison.OrdinalIgnoreCase);
@@ -6070,8 +6171,19 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     cachedLastWriteUtc.HasValue && cachedLastWriteUtc.Value == lastWriteUtc &&
                     cachedSize.HasValue && cachedSize.Value == size)
                 {
+                    _log(
+                        $"[master-cache] hit tag={tag} path='{effectivePath}' " +
+                        $"cached={cachedLastWriteUtc:O}/{cachedSize} current={lastWriteUtc:O}/{size}");
                     return cachedMat;
                 }
+
+                var missReason = string.Equals(cachedPath, effectivePath, StringComparison.OrdinalIgnoreCase)
+                    ? "stamp-mismatch"
+                    : "path-mismatch";
+                _log(
+                    $"[master-cache] miss tag={tag} reason={missReason} path='{effectivePath}' " +
+                    $"cached={cachedLastWriteUtc?.ToString("O") ?? "<null>"}/{cachedSize?.ToString() ?? "<null>"} " +
+                    $"current={lastWriteUtc:O}/{size}");
 
                 if (cachedMat != null)
                 {

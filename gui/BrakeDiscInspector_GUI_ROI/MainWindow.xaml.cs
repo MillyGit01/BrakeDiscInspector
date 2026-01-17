@@ -5927,6 +5927,38 @@ namespace BrakeDiscInspector_GUI_ROI
             catch { /* ignore */ }
         }
 
+        private int CountAnalysisMarks()
+        {
+            if (CanvasROI == null)
+            {
+                return 0;
+            }
+
+            return CanvasROI.Children
+                .OfType<FrameworkElement>()
+                .Count(el => el.Tag is string tag && tag == ANALYSIS_TAG);
+        }
+
+        private void ClearBatchOverlayMarks()
+        {
+            if (BatchRoiOutline != null)
+            {
+                BatchRoiOutline.Visibility = Visibility.Collapsed;
+            }
+
+            if (HeatmapImage != null)
+            {
+                HeatmapImage.Source = null;
+                HeatmapImage.Visibility = Visibility.Collapsed;
+            }
+
+            if (_batchInfoOverlay != null)
+            {
+                _batchInfoOverlay.Text = string.Empty;
+                _batchInfoOverlay.Visibility = Visibility.Collapsed;
+            }
+        }
+
         private void ClearViewerForNewImage()
         {
             try { ClearCanvasShapesAndLabels(); } catch { }
@@ -10667,6 +10699,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     SaveRoiCropPreview(_layout.Master1Pattern, "M1_pattern");
                     _layout.Master1PatternImagePath = SaveMasterPatternCanonical(_layout.Master1Pattern, masterIndex: 1);
                     RefreshMasterTemplateCache("save-master1-pattern");
+                    _workflowViewModel?.InvalidateMasterPatternCacheForRole(RoiRole.Master1Pattern, "save-master1-pattern");
 
                     _tmpBuffer = null;
                     if (!restoreStateAfterSave)
@@ -10706,6 +10739,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     SaveRoiCropPreview(_layout.Master2Pattern, "M2_pattern");
                     _layout.Master2PatternImagePath = SaveMasterPatternCanonical(_layout.Master2Pattern, masterIndex: 2);
                     RefreshMasterTemplateCache("save-master2-pattern");
+                    _workflowViewModel?.InvalidateMasterPatternCacheForRole(RoiRole.Master2Pattern, "save-master2-pattern");
 
                     KeepOnlyMaster2InCanvas();
                     LogHeatmap("KeepOnlyMaster2InCanvas called after saving Master2Pattern.");
@@ -15027,6 +15061,15 @@ namespace BrakeDiscInspector_GUI_ROI
             _ => MasterState.DrawM1_Pattern
         };
 
+        private static RoiRole ResolveRoleForState(MasterState state) => state switch
+        {
+            MasterState.DrawM1_Pattern => RoiRole.Master1Pattern,
+            MasterState.DrawM1_Search => RoiRole.Master1Search,
+            MasterState.DrawM2_Pattern => RoiRole.Master2Pattern,
+            MasterState.DrawM2_Search => RoiRole.Master2Search,
+            _ => RoiRole.Inspection
+        };
+
         private ComboBox? ResolveMasterShapeCombo(RoiRole role)
         {
             return role == RoiRole.Master1Pattern || role == RoiRole.Master1Search
@@ -15090,6 +15133,35 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void StartDrawingFor(MasterState state, ComboBox shapeCombo)
         {
+            var role = ResolveRoleForState(state);
+            bool wasEditingM1 = _editingM1;
+            bool wasEditingM2 = _editingM2;
+
+            if (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search)
+            {
+                if (_editingM2)
+                {
+                    CancelMasterEditing(redraw: false);
+                }
+
+                _editingM1 = true;
+                _activeMaster1Role = role;
+                _editingM2 = false;
+                _activeMaster2Role = null;
+            }
+            else if (role == RoiRole.Master2Pattern || role == RoiRole.Master2Search)
+            {
+                if (_editingM1)
+                {
+                    CancelMasterEditing(redraw: false);
+                }
+
+                _editingM2 = true;
+                _activeMaster2Role = role;
+                _editingM1 = false;
+                _activeMaster1Role = null;
+            }
+
             _editModeActive = true;
             _state = state;
             var shape = ReadShapeFrom(shapeCombo);
@@ -15099,6 +15171,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 $"editingM1={_editingM1} editingM2={_editingM2} " +
                 $"editModeActive={_editModeActive} " +
                 $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
+            if (wasEditingM1 != _editingM1 || wasEditingM2 != _editingM2)
+            {
+                GuiLog.Info(
+                    $"[master-edit] transition trigger=create " +
+                    $"role={role} editingM1={wasEditingM1}->{_editingM1} editingM2={wasEditingM2}->{_editingM2}");
+            }
+            UpdateMasterEditButtonVisuals();
+            UpdateWorkflowMasterEditState();
             SetDrawToolFromShape(shape);
             UpdateWizardState();
             Snack($"Dibuja el ROI en el canvas y pulsa Guardar."); // CODEX: string interpolation compatibility.
@@ -15221,6 +15301,23 @@ namespace BrakeDiscInspector_GUI_ROI
             return (drawingMaster1 || drawingMaster2)
                 && _editModeActive
                 && _activeEditableRoiId == null;
+        }
+
+        private bool IsMasterCreateDragActive(RoiRole role)
+        {
+            if (!_isDrawing || !_editModeActive || _activeEditableRoiId != null)
+            {
+                return false;
+            }
+
+            return role switch
+            {
+                RoiRole.Master1Pattern => _state == MasterState.DrawM1_Pattern,
+                RoiRole.Master1Search => _state == MasterState.DrawM1_Search,
+                RoiRole.Master2Pattern => _state == MasterState.DrawM2_Pattern,
+                RoiRole.Master2Search => _state == MasterState.DrawM2_Search,
+                _ => false
+            };
         }
 
         private void CancelActiveDrawing()
@@ -15387,6 +15484,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 $"[master] BtnEditM1_Click targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch} hasTarget={hasTarget} " +
                 $"drawingTargetRole={drawingTargetRole} tmpBuffer={_tmpBuffer != null} activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
 
+            if (IsMasterCreateDragActive(targetRole))
+            {
+                Snack("Termina el dibujo antes de guardar.");
+                GuiLog.Info($"[master] BtnEditM1_Click blocked: draw active role={targetRole} state={_state}");
+                return;
+            }
+
             if (drawingTargetRole)
             {
                 bool hasEditableDraft = _tmpBuffer != null || !string.IsNullOrWhiteSpace(_activeEditableRoiId);
@@ -15406,6 +15510,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 _isDrawing = false;
                 _activeEditableRoiId = null;
                 _activeMaster1Role = null;
+                _editingM1 = false;
+                _editModeActive = _editingM2;
+                UpdateMasterEditButtonVisuals();
                 _state = MasterState.Ready;
 
                 GuiLog.Info($"[master] BtnEditM1_Click DRAW-PATH saved role={targetRole} -> state={_state}");
@@ -15505,6 +15612,13 @@ namespace BrakeDiscInspector_GUI_ROI
             };
 
             GuiLog.Info($"[master] BtnEditM2_Click targetRole={targetRole} hasPattern={hasPattern} hasSearch={hasSearch} hasTarget={hasTarget}");
+
+            if (IsMasterCreateDragActive(targetRole))
+            {
+                Snack("Termina el dibujo antes de guardar.");
+                GuiLog.Info($"[master] BtnEditM2_Click blocked: draw active role={targetRole} state={_state}");
+                return;
+            }
 
             if (!_editingM2)
             {
@@ -15732,6 +15846,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // CODEX: string interpolation compatibility.
             AppendLog($"[align] Reset solicitado por el usuario (Borrar Canvas).");
+            AppendLog(
+                $"[clear-canvas] begin canvasRoiChildren={CanvasROI?.Children.Count ?? 0} " +
+                $"analysisMarks={CountAnalysisMarks()} batchOverlayChildren={Overlay?.Children.Count ?? 0} " +
+                $"heatmapVisible={(HeatmapOverlay?.Visibility == Visibility.Visible)} " +
+                $"heatmapSource={(HeatmapOverlay?.Source != null)} " +
+                $"batchHeatmapVisible={(HeatmapImage?.Visibility == Visibility.Visible)}");
 
             try
             {
@@ -15742,10 +15862,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 _analysisViewActive = false;
 
                 try { DetachPreviewAndAdorner(); } catch { }
+                try { RemoveAnalysisMarks(); } catch { }
                 try { ClearCanvasShapesAndLabels(); } catch { }
                 try { ClearCanvasInternalMaps(); } catch { }
                 try { ClearPersistedRoisFromCanvas(); } catch { }
                 try { RemoveAllRoiAdorners(); } catch { }
+                try { ClearBatchOverlayMarks(); } catch { }
 
                 if (RoiOverlay != null)
                 {
@@ -15783,11 +15905,14 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                 }
 
+                try { ResetAnalysisMarks(); } catch { }
                 ResetInspectionEditingFlags();
                 ResetInspectionSlotsUi();
 
                 _workflowViewModel?.SetMasterLayout(_layout);
                 _workflowViewModel?.ResetModelStates();
+                _workflowViewModel?.InvalidateMasterPatternCacheForRole(RoiRole.Master1Pattern, "clear-canvas");
+                _workflowViewModel?.InvalidateMasterPatternCacheForRole(RoiRole.Master2Pattern, "clear-canvas");
                 UpdateLayoutLoadedState(_layout, _currentLayoutFilePath);
 
                 _state = MasterState.DrawM1_Pattern;
@@ -15804,6 +15929,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
                 // CODEX: string interpolation compatibility.
                 AppendLog($"[align] Reset completado. Estado listo para crear Masters nuevamente.");
+                AppendLog(
+                    $"[clear-canvas] end canvasRoiChildren={CanvasROI?.Children.Count ?? 0} " +
+                    $"analysisMarks={CountAnalysisMarks()} batchOverlayChildren={Overlay?.Children.Count ?? 0} " +
+                    $"heatmapVisible={(HeatmapOverlay?.Visibility == Visibility.Visible)} " +
+                    $"heatmapSource={(HeatmapOverlay?.Source != null)} " +
+                    $"batchHeatmapVisible={(HeatmapImage?.Visibility == Visibility.Visible)}");
                 Snack($"Canvas borrado."); // CODEX: string interpolation compatibility.
             }
             catch (Exception ex)

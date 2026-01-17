@@ -1,49 +1,58 @@
 # ROI and heatmap workflow
 
-This document explains how ROIs are defined, exported, aligned and how heatmaps are rendered in both manual and batch modes. Every step references the code in this repository.
+This document focuses on ROI identifiers, canonical ROI export, and heatmap visualization for manual and batch flows.
 
-## ROI identifiers and roles
-- Roles: `Inspection`, `Master1`, `Master2` (`RoiRole` enum). `BackendClient` forwards `role_id` unchanged to the FastAPI routes.
-- ROI ids: inspection slots keep `inspection-1..4` (see `MasterLayout.InspectionRois`), while Master anchors inherit their ids from the layout file. These ids are used in dataset file names (`SAMPLE_<role>_<roi>_*`) and in backend calls, so layout JSON, dataset JSON and recipes must match.
-- Recipes: each layout name resolves to `<exe>/Recipes/<LayoutName or DefaultLayout>/` with `Dataset/` and `Master/` subfolders. Dataset samples live under `Dataset/Inspection_<n>/<ok|ng>/` for inspection slots (mapped from `inspection-1..4`) or `Dataset/<roi_id>/<ok|ng>/` for other ROIs. Masters and ROI exports are versioned by moving older files into `obsolete/`.
+## ROI identifiers and terminology
+- **role_id**: logical role (`Master1`, `Master2`, `Inspection`, etc.) sent to the backend.
+- **roi_id**: logical ROI identifier, often `inspection-<n>` for inspection slots.
+- **model_key**: backend model slot, defaults to `roi_id` if not provided.
 
-## 1. Canonical ROI export
-1. `WorkflowViewModel` calls `_exportRoiAsync`, which ultimately uses `RoiCropUtils.TryBuildRoiCropInfo` to capture the ROI geometry (`shape`, `Left/Top/Width/Height`, rotation pivot).
-2. `RoiCropUtils.TryGetRotatedCrop` rotates the full image around the ROI pivot (OpenCV warp affine) and extracts a crop with the exact same width/height as the drawn ROI. Rectangles use the `Left/Top/Width/Height` bounds; circles/annulus use `CX/CY/R/RInner` with a **square** bounding box (diameter) so the crop stays centered.
-3. `RoiCropUtils.BuildRoiMask` generates a binary mask in crop coordinates that matches the shape (rectangles fill the crop, circles/annulus draw concentric discs). This mask is embedded into the metadata and used both by dataset saves and backend requests.
-4. `RoiExportResult` wraps the PNG bytes, `shape_json`, the `RoiModel` snapshot (with base image dimensions) and the integer crop rectangle. Those fields are logged before sending them to the backend or saving them to disk.
+The GUI uses inspection defaults like `inspection-1..4` (see `InspectionRoiConfig.ModelKey`). Local dataset folders (legacy) map these to `Inspection_1..4` under `<exe>/Recipes/<LayoutName>/Dataset/`.
 
-## 2. Shape JSON conventions
-- Rectangles: `{ "kind": "rect", "x": <left>, "y": <top>, "w": <width>, "h": <height> }`.
-- Circles: `{ "kind": "circle", "cx": <centerX>, "cy": <centerY>, "r": <outer radius> }`.
-- Annulus: `{ "kind": "annulus", "cx": <centerX>, "cy": <centerY>, "r": <outer radius>, "r_inner": <inner radius> }`.
-Values are expressed in pixels of the *canonical crop* (after rotation). Backend masks use the same coordinates, so there is no extra transform required (`backend/roi_mask.py`).
+## Canonical ROI export
+1. The GUI exports the ROI **after rotation**, producing a canonical crop (PNG) and a `shape` JSON mask.
+2. The `shape` JSON is expressed in **canonical ROI coordinates** (i.e., the crop’s pixel space).
+3. The backend treats the image and `shape` as authoritative and **does not** crop or rotate the source image.
 
-## 3. Master anchors and inspection alignment
-- `MasterLayout` keeps baseline ROIs for Master 1/2 (`Master1Pattern`, `Master1Search`, etc.) and the inspection slots (`Inspection1..4` plus `InspectionBaselinesByImage`).
-- During batch analysis `RepositionInspectionRoisForImageAsync` passes the saved baselines and the detected Master anchor positions into `InspectionAlignmentHelper.MoveInspectionTo`. The helper computes the vector from Master1→Master2 in both baseline and current images, extracts scale and rotation deltas, and applies them to each inspection ROI according to its `AnchorMaster` preference (per-slot anchor selection).
-- If anchors are missing or below threshold no repositioning occurs (ROI stays at its saved position) instead of applying a midpoint fallback. Scale now relies on explicit vector length math (no `Point2d.Length` dependency) to keep anchor transforms stable on older .NET builds.
-- Annulus and circle radii are scaled with the same factor; inner radii are clamped so they remain smaller than the outer radius.
+This ensures heatmaps align with the GUI overlay when rendered back in the same canonical space.
 
-## 4. Manual overlays
-- Manual ROI placement is controlled by the `RoiOverlay` bound to `ImgManual`. Letterboxing is handled via `_scale` and `_offX/_offY`; the overlay converts image coordinates to screen coordinates (`ToScreen`), draws the rotated rectangle/circle/annulus and annotates it with the ROI label.
-- When `EvaluateRoiAsync` receives a heatmap from the backend, `ShowHeatmapOverlayAsync` decodes the PNG, caches the grayscale bitmap and multiplies it by the user-controlled `HeatmapOverlayOpacity`/`HeatmapGain`/`HeatmapGamma`. The transformed bitmap is positioned using `GetImageToCanvasTransform` so it lines up with the ROI on the current zoom level.
+## Shape JSON conventions
+- Rectangle:
+  ```json
+  {"kind":"rect","x":0,"y":0,"w":W,"h":H}
+  ```
+- Circle:
+  ```json
+  {"kind":"circle","cx":CX,"cy":CY,"r":R}
+  ```
+- Annulus:
+  ```json
+  {"kind":"annulus","cx":CX,"cy":CY,"r":R,"r_inner":R_INNER}
+  ```
 
-## 5. Batch overlays
-- Batch and manual canvases share the same overlay control. `WorkflowViewModel.SetBatchHeatmapForRoi` stores the heatmap bytes per ROI index and `UpdateBatchHeatmapIndex` switches the shared overlay to the ROI currently being evaluated.
-- Placement is debounced: if anchors have not been confirmed (`_batchAnchorReadyForStep`), the heatmap is not rendered yet to avoid misalignment. Once anchors are ready, `PlaceBatchFinalAsync` logs the applied transform in `gui_heatmap.log` (`TraceBatchHeatmapPlacement`).
-- `BatchPausePerRoiSeconds` can be used to keep heatmaps visible for a short time per ROI.
+**Important:** the coordinates must match the crop size that was sent to `/infer`.
 
-## 6. Heatmap interpretation
-- Scores: `InferenceResult.score` is compared against `InspectionRoiConfig.CalibratedThreshold` (or `ThresholdDefault` when calibration is missing). `WorkflowViewModel` marks the ROI as NG when `score > threshold`.
-- Regions: backend regions contain `bbox` in canonical crop coordinates and `area_mm2` derived from `mm_per_px`. The GUI lists them in the `Regions` observable collection.
-- Logs: `MainWindow` writes placement and scaling parameters into `%LocalAppData%/BrakeDiscInspector/logs/gui_heatmap.log`, while the backend emits `{score, threshold}` via `slog("infer.response", ...)`.
+## Master anchors and inspection alignment (batch)
+- Master 1/2 anchors are used to reposition inspection ROIs per batch image.
+- The GUI applies translation/rotation/scale based on the anchor vector and each ROI’s selected anchor (Master1/Master2/Mid).
+- If anchors are missing or invalid, the GUI leaves ROIs at their saved positions.
 
-## 7. Saving and reloading ROIs
-- `PresetManager.SaveInspection` clones the selected ROI into `Preset.Inspection1/2` with ids `Inspection_<slot>` to keep dataset and backend IDs consistent.
-- Layouts are saved through `MasterLayoutManager.Save` into `Layouts/<timestamp>.layout.json`. When reloading, `EnsureInspectionRoiDefaults` reinstates the four inspection slots even if they were missing in older files.
-- `SyncModelFromShape` keeps `X/Y` aligned with `CX/CY` for circle/annulus ROIs so canvas geometry and persisted layouts stay consistent after edits.
+## Heatmap visualization (spec)
+> This section is a UI spec. If the current implementation deviates, treat it as TODO.
 
-## Note on recipes (GUI vs backend)
-- The GUI recipe folder (`<exe>/Recipes/<LayoutName>/...`) is for local layout/dataset persistence.
-- Backend recipe ids are independent and normalized for storage under `BDI_MODELS_DIR/recipes/<recipe_id>/...`.
+- Show **red** heatmap areas **only** when the final decision is **NG** and the heatmap is the NG cause.
+- If the final decision is **OK**, do **not** render a heatmap overlay.
+- Apply the same rule in **manual** and **batch** views.
+
+## Batch known issue (ROI2)
+**Observed issue:** ROI2 heatmap may not appear after the first batch image.
+
+**Plan:**
+1. Verify placement logs (`gui.log` / `gui_heatmap.log`).
+2. Ensure ROI2 placement does not reuse ROI1 geometry.
+3. Add a regression checklist once fixed.
+
+## Related docs
+- `docs/FRONTEND.md` — UI controls and toggle behavior.
+- `docs/API_CONTRACTS.md` — backend `shape` schema and contracts.
+- `LOGGING.md` — log locations and fields.

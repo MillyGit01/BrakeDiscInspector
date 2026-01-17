@@ -1,34 +1,59 @@
-# Logging guide
+# Logging guide (source of truth)
 
-The repository already contains concrete logging utilities. This page summarises what they write so you can troubleshoot issues quickly.
+This document describes **where logs are written** and **what they contain** in the current codebase.
 
-## GUI logs (`GuiLog`)
-- File location: `%LocalAppData%/BrakeDiscInspector/logs/`.
-- Files produced:
-  - `gui.log`: all general messages routed through `GuiLog.Info/Warn/Error` (dataset saves, batch progress, backend calls).
-  - `gui_heatmap.log`: heatmap placement diagnostics from `MainWindow` (transform parameters, cutoff, opacity).
-  - `roi_load_coords.log`: emitted when the UI loads/saves ROI coordinates.
-  - `roi_analyze_master.log`: master-anchor analysis traces.
-  - `gui_setup.log`: GUI setup persistence events (`GuiSetupSettingsService` load/save).
-- Format: `yyyy-MM-dd HH:mm:ss.fff [LEVEL] message`. Messages are plain text composed inside the GUI code (`WorkflowViewModel`, `MainWindow`, `DatasetManager`, etc.). There is no request-id, so correlate entries by timestamp and ROI name.
-- Usage tips:
-  - Search for `[eval]`, `[batch]`, `[dataset]` prefixes when investigating inference/batch/dataset flows.
-  - Heatmap alignment issues always write a `[heatmap:tag] ...` line into `gui_heatmap.log` before showing the overlay.
-  - Anchor transforms during batch repositioning emit `[ANCHORS] scale=... angleDeltaGlobal=...` from `WorkflowViewModel`; use them to confirm Master1/Master2 detections before aligning inspection ROIs.
-  - The **Clear canvas** action logs `[align] Reset solicitado...` / `[align] Reset completado...` around the full wipe of masters and inspection slots, which helps verify the layout was intentionally reset.
+## GUI logs (WPF)
+**Directory:** `%LOCALAPPDATA%\BrakeDiscInspector\logs\` (created on startup). The GUI clears and recreates core log files at startup. (See `gui/BrakeDiscInspector_GUI_ROI/App.xaml.cs`.)
 
-## Backend logs (`backend/app.py`)
-- Implemented through the helper `slog(event, **kw)` which simply prints `json.dumps` to stdout/stderr.
-- Typical events: `fit_ok.request`, `fit_ok.response`, `calibrate_ng.request`, `infer.response`, `infer.error`.
-- Fields always include `ts` (epoch seconds) and whatever keyword arguments were passed (e.g. `role_id`, `roi_id`, `elapsed_ms`, `score`).
-- `slog` fields include `request_id` and `recipe_id`, which also appear in every JSON response. Use these IDs to correlate GUI requests with backend logs when troubleshooting.
-- There is no log rotation; use your process supervisor (systemd, Docker) to capture stdout if you need persistence.
+**Files created by the GUI:**
+- `gui.log` — main GUI log (`GuiLog.Info/Warn/Error`).
+- `gui_heatmap.log` — heatmap overlay placement/debug.
+- `roi_load_coords.log` — ROI load/save diagnostics.
+- `roi_analyze_master.log` — master detection diagnostics.
+- `gui_setup.log` — GUI setup persistence (`GuiSetupSettingsService`).
 
-## Troubleshooting workflow
-1. Check `gui.log` for obvious frontend validation errors (dataset missing, ROI export failed). These are emitted before sending any HTTP request.
-2. Look at backend stdout for the matching `event`/`role_id` combination. If `fit_ok` failed you will see the exception in `fit_ok.error`.
-3. If heatmaps look misaligned or blank, inspect `gui_heatmap.log` to verify the calculated transform (`sx`, `sy`, `offX`, `offY`) matches the current canvas size.
-4. For dataset issues, `DatasetManager` logs every file it writes plus the reason when validation fails (e.g. missing `/ok` directory).
+**Format:**
+```
+YYYY-MM-DD HH:mm:ss.fff [LEVEL] message
+```
+Example:
+```
+2025-01-05 12:34:56.789 [INFO] [infer] ROI=... score=... threshold=...
+```
 
-## Correlation fields
-Backend JSON responses include `request_id` and `recipe_id` in the response body. Use these fields (and the backend’s structured logs) to correlate GUI actions to backend operations.
+**Notes:**
+- GUI logs are **plain text** and do not include a `request_id` by default.
+- If a file disappears during the session, the GUI will recreate it on the next write.
+
+## Backend diagnostics logs (FastAPI)
+**Format:** JSON Lines (`.jsonl`) written by `backend/diagnostics.py` via `diag_event(...)`.
+
+**Default filename:** `backend_diagnostics.jsonl`.
+
+**Directory resolution (in order):**
+1. `BDI_GUI_LOG_DIR` (if set).
+2. `%LOCALAPPDATA%\BrakeDiscInspector\logs\` when running on Windows.
+3. On WSL, the backend attempts to translate Windows `%LOCALAPPDATA%` to `/mnt/<drive>/...`.
+4. Fallback: `backend/logs/` inside the repository.
+
+If none of the above paths are writable, diagnostics logging is disabled and a warning is emitted to the backend logger.
+
+**Common fields:**
+- `ts` (epoch seconds)
+- `event` (e.g., `startup`, `http`, `fit_ok.request`, `infer.response`)
+- `request_id` (if present in request context)
+- `recipe_id`, `role_id`, `roi_id`, `model_key` (when relevant)
+
+**Example line:**
+```json
+{"ts": 1720000000.123, "event": "infer.response", "request_id": "...", "recipe_id": "default", "score": 0.42, "threshold": 0.9, "elapsed_ms": 123}
+```
+
+## Correlation tips
+- Backend responses always include `request_id` and `recipe_id` in the JSON body.
+- The backend also sets the `X-Request-Id` response header for correlation.
+- Use time proximity between GUI log timestamps and backend JSONL entries when no request id is available in the GUI logs.
+
+## Related docs
+- `docs/BACKEND.md` — backend configuration and storage details.
+- `docs/TROUBLESHOOTING.md` — common failure modes and log pointers.

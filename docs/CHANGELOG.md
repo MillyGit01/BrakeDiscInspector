@@ -1,6 +1,12 @@
 # Changelog (selected)
-## 2026-01
-- Recipe-aware backend artifacts and dataset helpers (per-recipe persistence + default fallback).
-- Reserved recipe id `last` rejected by backend (HTTP 400); GUI avoids sending it.
-- Type-safety cleanup to reduce Pylance errors; safer feature/token extraction and concurrency locks.
-- GUI batch inspection controls repositioned for better visibility.
+
+## Implemented
+- Recipe-aware backend storage under `BDI_MODELS_DIR/recipes/<recipe_id>/...` with legacy fallback.
+- Reserved `recipe_id` `last` rejected with HTTP 400.
+- Dataset-only training gate via `BDI_TRAIN_DATASET_ONLY` and minimum OK samples via `BDI_MIN_OK_SAMPLES`.
+- Backend diagnostics written as JSONL (`backend_diagnostics.jsonl`) in a resolved log directory.
+
+## Planned / Spec
+- Heatmap overlay rule: **only show red overlay when result is NG and heatmap is the cause of NG**.
+- OK/NG badge spec: square badge with bold white `OK`/`NG` on green/red background.
+- Batch issue: ROI2 heatmap missing after the first image — investigate and add regression guard.

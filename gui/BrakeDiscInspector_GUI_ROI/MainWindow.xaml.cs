@@ -9981,6 +9981,14 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            bool isMasterWizardState = _state == MasterState.DrawM1_Pattern
+                || _state == MasterState.DrawM1_Search
+                || _state == MasterState.DrawM2_Pattern
+                || _state == MasterState.DrawM2_Search;
+            bool isCanvasBackgroundClick = e.OriginalSource is Canvas;
+            var currentRole = GetCurrentStateRole();
+            bool missingEditableContext = !currentRole.HasValue || string.IsNullOrWhiteSpace(_activeEditableRoiId);
+
             var mousePos = e.GetPosition(CanvasROI);
             AppendLog(
                 $"[master-ui] MouseDown at ({mousePos.X:0.##},{mousePos.Y:0.##}) " +
@@ -9991,6 +9999,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (!_editModeActive)
             {
+                if (isMasterWizardState && isCanvasBackgroundClick)
+                {
+                    GuiLog.Info(
+                        $"[master-ui] canvas.down ignored: editModeActive=false state={_state} " +
+                        $"currentRole={currentRole?.ToString() ?? "<null>"} " +
+                        $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} " +
+                        $"missingEditableContext={missingEditableContext}");
+                }
                 e.Handled = true;
                 return;
             }
@@ -15831,6 +15847,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void BtnClearCanvas_Click(object sender, RoutedEventArgs e)
         {
+            GuiLog.Info(
+                $"[clear-canvas] start state={_state} editModeActive={_editModeActive} " +
+                $"currentRole={GetCurrentStateRole()?.ToString() ?? "<null>"} " +
+                $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} " +
+                $"editingM1={_editingM1} editingM2={_editingM2} isImageLoaded={IsImageLoaded}");
+
             var result = MessageBox.Show(
                 "Esto borrará TODOS los ROI y reiniciará el estado. ¿Deseas continuar?",
                 "Confirmar borrado y reset",
@@ -15905,7 +15927,12 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                 }
 
-                try { ResetAnalysisMarks(); } catch { }
+                try
+                {
+                    ResetAnalysisMarks();
+                    GuiLog.Info($"[clear-canvas] analysis marks cleared count={CountAnalysisMarks()}");
+                }
+                catch { }
                 ResetInspectionEditingFlags();
                 ResetInspectionSlotsUi();
 
@@ -15915,8 +15942,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 _workflowViewModel?.InvalidateMasterPatternCacheForRole(RoiRole.Master2Pattern, "clear-canvas");
                 UpdateLayoutLoadedState(_layout, _currentLayoutFilePath);
 
-                _state = MasterState.DrawM1_Pattern;
-                ApplyDrawToolSelection(RoiShape.Rectangle, updateViewModel: true);
+                StartDrawingFor(MasterState.DrawM1_Pattern, GetMasterShapeCombo(1));
+                GuiLog.Info(
+                    $"[clear-canvas] start-drawing state={_state} editModeActive={_editModeActive} " +
+                    $"currentRole={GetCurrentStateRole()?.ToString() ?? "<null>"} " +
+                    $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} " +
+                    $"layoutHasM1Pattern={(_layout?.Master1Pattern != null)}");
                 SetActiveInspectionIndex(1);
 
                 ScheduleSyncOverlay(force: true, reason: "ClearCanvas");

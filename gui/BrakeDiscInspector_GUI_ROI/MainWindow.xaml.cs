@@ -15137,28 +15137,22 @@ namespace BrakeDiscInspector_GUI_ROI
             bool wasEditingM1 = _editingM1;
             bool wasEditingM2 = _editingM2;
 
+            if (_editingM1 || _editingM2)
+            {
+                CancelMasterEditing(redraw: false);
+            }
+
+            _editingM1 = false;
+            _editingM2 = false;
+
             if (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search)
             {
-                if (_editingM2)
-                {
-                    CancelMasterEditing(redraw: false);
-                }
-
-                _editingM1 = true;
                 _activeMaster1Role = role;
-                _editingM2 = false;
                 _activeMaster2Role = null;
             }
             else if (role == RoiRole.Master2Pattern || role == RoiRole.Master2Search)
             {
-                if (_editingM1)
-                {
-                    CancelMasterEditing(redraw: false);
-                }
-
-                _editingM2 = true;
                 _activeMaster2Role = role;
-                _editingM1 = false;
                 _activeMaster1Role = null;
             }
 

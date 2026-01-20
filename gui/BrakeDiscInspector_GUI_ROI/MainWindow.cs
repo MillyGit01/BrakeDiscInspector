@@ -58,7 +58,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             var result = resp.result;
-            bool pass = !result.threshold.HasValue || result.score <= result.threshold.Value;
+            bool pass = !result.threshold.HasValue || result.score < result.threshold.Value;
             string thrText = result.threshold.HasValue ? result.threshold.Value.ToString("0.###") : "n/a";
             AppendLog($"[infer] Inspection score={result.score:0.###} thr={thrText} regions={(result.regions?.Length ?? 0)} status={(pass ? "OK" : "NG")}");
             string msg = pass

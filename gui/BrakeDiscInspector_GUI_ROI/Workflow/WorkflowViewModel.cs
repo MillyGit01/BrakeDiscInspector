@@ -1825,11 +1825,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return false;
             }
 
-            if (reason != null && reason.Contains("BatchRowOk", StringComparison.Ordinal))
-            {
-                _batchPlacedForStep = (int)_batchStepId;
-            }
-
             return true;
         }
 
@@ -4885,7 +4880,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 roi.LastScore = result.score;
                 var decisionThreshold = roi.CalibratedThreshold ?? roi.ThresholdDefault;
-                bool isNg = result.score > decisionThreshold;
+                bool isNg = result.score >= decisionThreshold;
+                if (!string.IsNullOrWhiteSpace(result.decision))
+                {
+                    isNg = string.Equals(result.decision, "ng", StringComparison.OrdinalIgnoreCase);
+                }
                 roi.LastResultOk = !isNg;
                 roi.LastEvaluatedAt = DateTime.UtcNow;
                 _log($"[eval] done idx={roi.Index} key='{roi.ModelKey}' score={result.score:0.###} thr={decisionThreshold:0.###} => {(isNg ? "NG" : "OK")}");
@@ -4988,6 +4987,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 }
 
                 return;
+            }
+            catch (BackendCalibrationMissingException)
+            {
+                await ResetAfterFailureAsync("❌ Falta calibración. Ejecuta calibración antes de inferir.", "Evaluate ROI").ConfigureAwait(false);
             }
             catch (BackendBadRequestException brex)
             {
@@ -5386,8 +5389,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                             if (!config.Enabled)
                             {
                                 SetBatchCellStatus(row, config.Index - 1, null);
-                                InvokeOnUi(ClearBatchHeatmap);
-                                _clearHeatmap();
+                                InvokeOnUi(() => SetBatchHeatmapForRoi(null, config.Index));
                                 _log($"[batch] skip disabled roi idx={config.Index} '{config.DisplayName}'");
                                 await ApplyBatchPauseAsync(ct).ConfigureAwait(false);
                                 continue;
@@ -5438,8 +5440,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                     }
                                 }
 
-                                UpdateBatchHeatmapIndex(config.Index);
-
                                 var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
                                 UpdateHeatmapFromResult(ToGlobalInferResult(result), config.Index);
@@ -5466,6 +5466,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 }
 
                                 SetBatchCellStatus(row, config.Index - 1, roiOk);
+                        }
+                        catch (BackendCalibrationMissingException ex)
+                        {
+                            _log($"[batch] ROI{roiIndex} missing calibration for '{row.FileName}': {ex.Message}");
+                            UpdateBatchRowStatus(row, roiIndex, BatchCellStatus.Nok);
                         }
                         catch (OperationCanceledException)
                         {
@@ -6970,7 +6975,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                ApplyBatchHeatmapSelection(clampedIndex);
+                if (heatmapPngBytes != null && heatmapPngBytes.Length > 0)
+                {
+                    ApplyBatchHeatmapSelection(clampedIndex);
+                }
+                else if (BatchHeatmapRoiIndex == clampedIndex)
+                {
+                    ApplyBatchHeatmapSelection(clampedIndex);
+                }
 
                 if (_isBatchRunning)
                 {
@@ -7004,6 +7016,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 score = result.score,
                 threshold = result.threshold,
                 heatmap_png_base64 = result.heatmap_png_base64,
+                decision = result.decision,
                 regions = result.regions?.Select(r => new BrakeDiscInspector_GUI_ROI.InferRegion
                 {
                     x = r.x,
@@ -7027,7 +7040,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             try
             {
                 bool hasThreshold = result.threshold.HasValue && result.threshold.Value > 0;
-                bool isNg = hasThreshold && result.score > result.threshold.Value;
+                bool isNg = hasThreshold && result.score >= result.threshold.Value;
+                if (!string.IsNullOrWhiteSpace(result.decision))
+                {
+                    isNg = string.Equals(result.decision, "ng", StringComparison.OrdinalIgnoreCase);
+                }
                 if (hasThreshold && !isNg)
                 {
                     InvokeOnUi(() => SetBatchHeatmapForRoi(null, roiIndex));

@@ -474,9 +474,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var payload = await JsonSerializer.DeserializeAsync<CalibResult>(stream, JsonOptions, ct).ConfigureAwait(false)
                           ?? throw new InvalidOperationException("Empty or invalid JSON from calibrate_ng endpoint.");
 
-            // Fallback por si backend devuelve null u omite el campo (evita romper UI)
-            payload.threshold ??= 0.5;
-
             return payload;
         }
 
@@ -583,6 +580,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                         throw new BackendMemoryNotFittedException(detail);
                     }
 
+                    if (IsCalibrationMissing(detail))
+                    {
+                        throw new BackendCalibrationMissingException(detail);
+                    }
+
                     throw new BackendBadRequestException("Backend returned 400", detail);
                 }
 
@@ -592,9 +594,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             using var stream = new MemoryStream(Encoding.UTF8.GetBytes(raw));
             var payload = await JsonSerializer.DeserializeAsync<InferResult>(stream, JsonOptions, ct).ConfigureAwait(false)
                           ?? throw new InvalidOperationException("Empty or invalid JSON from infer endpoint.");
-
-            // Fallback: si el backend devuelve threshold null/omitido
-            payload.threshold ??= 0.5;
 
             return payload;
         }
@@ -834,6 +833,16 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return false;
         }
 
+        private static bool IsCalibrationMissing(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            var t = s.ToLowerInvariant();
+            return t.Contains("calibration_missing")
+                   || t.Contains("calibration missing")
+                   || t.Contains("missing calibration")
+                   || t.Contains("no calibration");
+        }
+
         private static void ShowBackendNotAvailableMessage(string endpoint)
         {
             try
@@ -925,6 +934,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public double? threshold { get; set; }      // << ahora nullable
         public string? heatmap_png_base64 { get; set; }
         public Region[]? regions { get; set; }
+        public string? decision { get; set; }
         public string? request_id { get; set; }
         public string? recipe_id { get; set; }
     }

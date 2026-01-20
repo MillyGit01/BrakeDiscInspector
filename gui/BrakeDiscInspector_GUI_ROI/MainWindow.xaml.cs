@@ -6841,7 +6841,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            _lastIsNg = threshold.HasValue && score.Value > threshold.Value;
+            _lastIsNg = threshold.HasValue && score.Value >= threshold.Value;
         }
 
         private async Task ShowHeatmapAsync(Workflow.RoiExportResult export, byte[] heatmapBytes, double opacity)
@@ -9286,6 +9286,13 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
+                if (vm.BatchHeatmapSource != null && vm.BatchHeatmapRoiIndex > 0 && roiIndex != vm.BatchHeatmapRoiIndex)
+                {
+                    var staleIndex = roiIndex;
+                    roiIndex = vm.BatchHeatmapRoiIndex;
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:stale-idx {staleIndex}->current {roiIndex}", roiIndex, null);
+                }
+
                 var fileName = System.IO.Path.GetFileName(vm.CurrentImagePath ?? string.Empty) ?? string.Empty;
 
                 if (!vm.ShouldPlaceBatchPlacement(reason))
@@ -9526,6 +9533,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 GuiLog.Warn($"[batch-ui] pending placement abort failed: {ex.Message}");
             }
 
+            var priority = (reason?.Contains("BatchHeatmapSource", StringComparison.Ordinal) == true
+                           || reason?.Contains("BatchHeatmapRoiIndex", StringComparison.Ordinal) == true)
+                ? DispatcherPriority.Render
+                : DispatcherPriority.Background;
+
             _pendingBatchPlacementOp = Dispatcher.InvokeAsync(() =>
             {
                 if (vm.BatchStepId != stepId)
@@ -9535,7 +9547,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 TryPlaceBatchHeatmap(reason, roiIndex, vm);
-            }, DispatcherPriority.Background);
+            }, priority);
         }
         #endregion
 
@@ -14297,7 +14309,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 var resp = await BackendAPI.InferAsync(request);
 
                 // 6) Reportar resultado sin UI dedicada
-                bool isNg = resp.threshold.HasValue && resp.score > resp.threshold.Value;
+                bool isNg = resp.threshold.HasValue && resp.score >= resp.threshold.Value;
                 _lastIsNg = isNg;
                 string thrText = resp.threshold.HasValue ? resp.threshold.Value.ToString("0.###") : "n/a";
                 var msg = isNg

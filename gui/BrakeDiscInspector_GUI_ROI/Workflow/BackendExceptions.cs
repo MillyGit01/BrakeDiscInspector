@@ -20,5 +20,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         {
         }
     }
-}
 
+    public sealed class BackendCalibrationMissingException : BackendBadRequestException
+    {
+        public BackendCalibrationMissingException(string? detail = null)
+            : base("Backend calibration missing", detail)
+        {
+        }
+    }
+}

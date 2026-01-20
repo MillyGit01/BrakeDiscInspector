@@ -1357,6 +1357,7 @@ def infer(
     mm_per_px: float = Form(...),
     image: UploadFile = File(...),
     shape: Optional[str] = Form(None),
+    include_heatmap: Optional[bool] = Form(None),
     recipe_id: Optional[str] = Form(None),
     model_key: Optional[str] = Form(None),
 ):
@@ -1459,11 +1460,28 @@ def infer(
             )
         mem, token_hw_mem, metadata = cached
 
-        # 3) Calibración (opcional, también cacheada)
+        # 3) Calibración (obligatoria, también cacheada)
         calib = calib or _get_calib_cached(role_id, roi_id, recipe_id=recipe_resolved, model_key=model_key_effective)
         thr = calib.get("threshold") if calib else None
         area_mm2_thr = calib.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)) if calib else SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)
         p_score = calib.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)) if calib else SETTINGS.get("inference", {}).get("score_percentile", 99)
+        if thr is None or float(thr) <= 0:
+            diag_event(
+                "infer.calibration_missing",
+                request_id=request_id,
+                role_id=role_id,
+                roi_id=roi_id,
+                recipe_id=recipe_resolved,
+                model_key=model_key_effective,
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "calibration_missing",
+                    "request_id": request_id,
+                    "recipe_id": recipe_resolved,
+                },
+            )
 
         # 4) Shape/máscara (opcional)
         shape_obj = json.loads(shape) if shape else None
@@ -1503,9 +1521,12 @@ def infer(
         regions = res.get("regions", []) or []
         token_shape_out = res.get("token_shape", [int(token_hw_mem[0]), int(token_hw_mem[1])])
 
-        # 6) Heatmap -> PNG base64
+        decision = "ng" if float(score) >= float(thr) else "ok"
+        should_include_heatmap = include_heatmap if include_heatmap is not None else decision == "ng"
+
+        # 6) Heatmap -> PNG base64 (solo si se va a devolver)
         heatmap_png_b64 = None
-        if heat_u8 is not None:
+        if should_include_heatmap and heat_u8 is not None:
             heat_u8 = np.asarray(heat_u8, dtype=np.uint8)
             try:
                 ok, buf = cv2.imencode(".png", heat_u8)
@@ -1545,10 +1566,8 @@ def infer(
             "regions": normalized_regions,
             "request_id": request_id,
             "recipe_id": recipe_resolved,
+            "decision": decision,
         }
-        decision = None
-        if thr is not None:
-            decision = "ng" if float(score) >= float(thr) else "ok"
         diag_event(
             "infer.response",
             request_id=request_id,
@@ -1610,6 +1629,8 @@ def infer_dataset(payload: Dict[str, Any], request: Request):
         thr = calib.get("threshold") if calib else None
         area_mm2_thr = calib.get("area_mm2_thr", SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)) if calib else SETTINGS.get("inference", {}).get("area_mm2_thr", 1.0)
         p_score = calib.get("score_percentile", SETTINGS.get("inference", {}).get("score_percentile", 99)) if calib else SETTINGS.get("inference", {}).get("score_percentile", 99)
+        if thr is None or float(thr) <= 0:
+            raise HTTPException(status_code=400, detail="calibration_missing")
 
         listing = store.list_dataset(role_id, roi_id, recipe_id=recipe_resolved)
         items: list[dict[str, Any]] = []

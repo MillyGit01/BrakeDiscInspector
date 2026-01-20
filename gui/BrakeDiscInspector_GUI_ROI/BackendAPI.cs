@@ -40,6 +40,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public InferRegion[]? regions { get; set; }
         public int[]? token_shape { get; set; }
         public InferParams? @params { get; set; }
+        public string? decision { get; set; }
         public string? role_id { get; set; }
         public string? roi_id { get; set; }
         public string? error { get; set; }

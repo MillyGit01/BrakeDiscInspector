@@ -10004,11 +10004,23 @@ namespace BrakeDiscInspector_GUI_ROI
                     GuiLog.Info(
                         $"[master-ui] canvas.down ignored: editModeActive=false state={_state} " +
                         $"currentRole={currentRole?.ToString() ?? "<null>"} " +
+                        $"activeMaster1Role={_activeMaster1Role?.ToString() ?? "<null>"} " +
+                        $"activeMaster2Role={_activeMaster2Role?.ToString() ?? "<null>"} " +
                         $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} " +
                         $"missingEditableContext={missingEditableContext}");
                 }
                 e.Handled = true;
                 return;
+            }
+
+            if (isMasterWizardState && isCanvasBackgroundClick && missingEditableContext)
+            {
+                GuiLog.Info(
+                    $"[master-ui] canvas.down missing context state={_state} " +
+                    $"currentRole={currentRole?.ToString() ?? "<null>"} " +
+                    $"activeMaster1Role={_activeMaster1Role?.ToString() ?? "<null>"} " +
+                    $"activeMaster2Role={_activeMaster2Role?.ToString() ?? "<null>"} " +
+                    $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
             }
 
             var pos = e.GetPosition(CanvasROI);
@@ -15147,7 +15159,15 @@ namespace BrakeDiscInspector_GUI_ROI
             }).Task;
         }
 
-        private void StartDrawingFor(MasterState state, ComboBox shapeCombo)
+        private void StartDrawingFor(MasterState state, RoiRole role, string source)
+        {
+            var shapeCombo = role == RoiRole.Master2Pattern || role == RoiRole.Master2Search
+                ? GetMasterShapeCombo(2)
+                : GetMasterShapeCombo(1);
+            StartDrawingFor(state, shapeCombo, source);
+        }
+
+        private void StartDrawingFor(MasterState state, ComboBox shapeCombo, string source = "ui")
         {
             var role = ResolveRoleForState(state);
             bool wasEditingM1 = _editingM1;
@@ -15177,7 +15197,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var shape = ReadShapeFrom(shapeCombo);
             GuiLog.Info(
                 $"[master] StartDrawingFor " +
-                $"state={state} shape={shape} combo={shapeCombo?.Name} currentRole={GetCurrentStateRole()} " +
+                $"state={state} role={role} source={source} shape={shape} combo={shapeCombo?.Name} currentRole={GetCurrentStateRole()} " +
                 $"editingM1={_editingM1} editingM2={_editingM2} " +
                 $"editModeActive={_editModeActive} " +
                 $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"}");
@@ -15844,6 +15864,8 @@ namespace BrakeDiscInspector_GUI_ROI
             GuiLog.Info(
                 $"[clear-canvas] start state={_state} editModeActive={_editModeActive} " +
                 $"currentRole={GetCurrentStateRole()?.ToString() ?? "<null>"} " +
+                $"activeMaster1Role={_activeMaster1Role?.ToString() ?? "<null>"} " +
+                $"activeMaster2Role={_activeMaster2Role?.ToString() ?? "<null>"} " +
                 $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} " +
                 $"editingM1={_editingM1} editingM2={_editingM2} isImageLoaded={IsImageLoaded}");
 
@@ -15878,7 +15900,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 _analysisViewActive = false;
 
                 try { DetachPreviewAndAdorner(); } catch { }
-                try { RemoveAnalysisMarks(); } catch { }
                 try { ClearCanvasShapesAndLabels(); } catch { }
                 try { ClearCanvasInternalMaps(); } catch { }
                 try { ClearPersistedRoisFromCanvas(); } catch { }
@@ -15936,10 +15957,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 _workflowViewModel?.InvalidateMasterPatternCacheForRole(RoiRole.Master2Pattern, "clear-canvas");
                 UpdateLayoutLoadedState(_layout, _currentLayoutFilePath);
 
-                StartDrawingFor(MasterState.DrawM1_Pattern, GetMasterShapeCombo(1));
+                StartDrawingFor(MasterState.DrawM1_Pattern, RoiRole.Master1Pattern, "clear-canvas");
                 GuiLog.Info(
                     $"[clear-canvas] start-drawing state={_state} editModeActive={_editModeActive} " +
                     $"currentRole={GetCurrentStateRole()?.ToString() ?? "<null>"} " +
+                    $"activeMaster1Role={_activeMaster1Role?.ToString() ?? "<null>"} " +
+                    $"activeMaster2Role={_activeMaster2Role?.ToString() ?? "<null>"} " +
                     $"activeEditableRoiId={_activeEditableRoiId ?? "<null>"} " +
                     $"layoutHasM1Pattern={(_layout?.Master1Pattern != null)}");
                 SetActiveInspectionIndex(1);

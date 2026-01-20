@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
 using BrakeDiscInspector_GUI_ROI.Util;
+using BrakeDiscInspector_GUI_ROI.Workflow;
 
 
 namespace BrakeDiscInspector_GUI_ROI
@@ -50,21 +51,30 @@ namespace BrakeDiscInspector_GUI_ROI
             if (string.IsNullOrWhiteSpace(_currentImagePathWin) || !File.Exists(_currentImagePathWin))
             { Snack($"No hay imagen cargada"); return; } // CODEX: FormattableString compatibility.
 
-            var resp = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Inspection, _preset, AppendLog);
-            if (!resp.ok || resp.result == null)
+            try
             {
-                Snack($"Analyze backend: {resp.error ?? "error desconocido"}"); // CODEX: FormattableString compatibility.
+                var resp = await BackendAPI.InferAsync(_currentImagePathWin, _layout.Inspection, _preset, AppendLog);
+                if (!resp.ok || resp.result == null)
+                {
+                    Snack($"Analyze backend: {resp.error ?? "error desconocido"}"); // CODEX: FormattableString compatibility.
+                    return;
+                }
+
+                var result = resp.result;
+                bool pass = !result.threshold.HasValue || result.score < result.threshold.Value;
+                string thrText = result.threshold.HasValue ? result.threshold.Value.ToString("0.###") : "n/a";
+                AppendLog($"[infer] Inspection score={result.score:0.###} thr={thrText} regions={(result.regions?.Length ?? 0)} status={(pass ? "OK" : "NG")}");
+                string msg = pass
+                    ? $"Resultado OK (score={result.score:0.###} / thr={thrText})"
+                    : $"Resultado NG (score={result.score:0.###} / thr={thrText})";
+                Snack($"{msg}"); // CODEX: FormattableString compatibility.
+            }
+            catch (BackendCalibrationMissingException ex)
+            {
+                AppendLog($"[infer] calibration missing: {ex.Message}");
+                Snack("Falta calibración. Ejecuta Calibrate antes de inspeccionar."); // CODEX: FormattableString compatibility.
                 return;
             }
-
-            var result = resp.result;
-            bool pass = !result.threshold.HasValue || result.score < result.threshold.Value;
-            string thrText = result.threshold.HasValue ? result.threshold.Value.ToString("0.###") : "n/a";
-            AppendLog($"[infer] Inspection score={result.score:0.###} thr={thrText} regions={(result.regions?.Length ?? 0)} status={(pass ? "OK" : "NG")}");
-            string msg = pass
-                ? $"Resultado OK (score={result.score:0.###} / thr={thrText})"
-                : $"Resultado NG (score={result.score:0.###} / thr={thrText})";
-            Snack($"{msg}"); // CODEX: FormattableString compatibility.
         }
     }
 }

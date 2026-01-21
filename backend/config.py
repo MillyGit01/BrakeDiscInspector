@@ -31,6 +31,12 @@ DEFAULTS: Dict[str, Any] = {
         "min_ok_samples": int(_env("BDI_MIN_OK_SAMPLES", None, "10")),
         "dataset_only": _env("BDI_TRAIN_DATASET_ONLY", None, "1"),
     },
+    "faiss": {
+        "prefer_gpu": _env("BDI_FAISS_PREFER_GPU", None, "1"),
+        "gpu_device": int(_env("BDI_FAISS_GPU_DEVICE", None, "0")),
+        "require_faiss": _env("BDI_FAISS_REQUIRE", None, "0"),
+        "allow_sklearn_fallback": _env("BDI_FAISS_ALLOW_SKLEARN_FALLBACK", None, "1"),
+    },
 }
 
 def load_settings(config_path: str | os.PathLike[str] | None = None) -> Dict[str, Any]:

@@ -684,19 +684,44 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
         return None
     emb_mem, token_hw_mem, metadata = loaded
 
-    # Build PatchCoreMemory once (sklearn NearestNeighbors fit is expensive)
-    mem_obj = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=(metadata or {}).get("coreset_rate"))
+    faiss_cfg = SETTINGS.get("faiss", {}) or {}
+    prefer_gpu = _is_truthy(faiss_cfg.get("prefer_gpu", 1))
+    gpu_device = int(faiss_cfg.get("gpu_device", 0))
+    require_faiss = _is_truthy(faiss_cfg.get("require_faiss", 0))
+    allow_sklearn_fallback = _is_truthy(faiss_cfg.get("allow_sklearn_fallback", 1))
 
-    # Optional FAISS index (if available)
     try:
         import faiss  # type: ignore
+
         blob = store.load_index_blob(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
         if blob is not None:
-            idx = faiss.deserialize_index(np.frombuffer(blob, dtype=np.uint8))
-            mem_obj.index = idx
-            mem_obj.nn = None
-    except Exception:
-        pass
+            idx_cpu = faiss.deserialize_index(np.frombuffer(blob, dtype=np.uint8))
+        else:
+            idx_cpu = faiss.IndexFlatL2(int(emb_mem.shape[1]))
+            idx_cpu.add(emb_mem.astype(np.float32, copy=False))
+
+        idx = idx_cpu
+        if prefer_gpu and hasattr(faiss, "StandardGpuResources"):
+            get_num_gpus = getattr(faiss, "get_num_gpus", None)
+            ngpu = int(get_num_gpus()) if callable(get_num_gpus) else 0
+            if ngpu > 0:
+                res = faiss.StandardGpuResources()
+                idx = faiss.index_cpu_to_gpu(res, gpu_device, idx_cpu)
+                diag_event(
+                    "faiss.gpu.enabled",
+                    recipe_id=recipe_id,
+                    model_key=model_key,
+                    role_id=role_id,
+                    roi_id=roi_id,
+                    device_id=gpu_device,
+                )
+        mem_obj = PatchCoreMemory(embeddings=emb_mem, index=idx, coreset_rate=(metadata or {}).get("coreset_rate"))
+    except Exception as exc:
+        if require_faiss or not allow_sklearn_fallback:
+            raise RuntimeError(
+                "FAISS is required but not installed; install faiss-gpu/faiss-cpu or enable sklearn fallback."
+            ) from exc
+        mem_obj = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=(metadata or {}).get("coreset_rate"))
 
     token_hw_tup = (int(token_hw_mem[0]), int(token_hw_mem[1]))
     meta_dict = dict(metadata or {})

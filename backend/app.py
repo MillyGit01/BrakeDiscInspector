@@ -13,7 +13,7 @@ import datetime
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import cv2
@@ -694,7 +694,6 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
             _MEM_CACHE.pop(key, None)
         return None
     emb_mem, token_hw_mem, metadata = loaded
-    token_hw_mem = cast(Tuple[int, int], token_hw_mem)
 
     faiss_cfg = SETTINGS.get("faiss", {}) or {}
     prefer_gpu = _is_truthy(faiss_cfg.get("prefer_gpu", 1))
@@ -722,7 +721,9 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
         gpu_res = None
         if prefer_gpu and hasattr(faiss, "StandardGpuResources"):
             get_num_gpus = getattr(faiss, "get_num_gpus", None)
-            ngpu = int(get_num_gpus()) if callable(get_num_gpus) else 0
+            result = get_num_gpus() if callable(get_num_gpus) else None
+            ngpu = int(result) if result is not None else 0
+            ngpu = max(0, ngpu)  # Ensure non-negative
             if ngpu > 0:
                 gpu_res = _get_faiss_gpu_resources(gpu_device)
                 idx = faiss.index_cpu_to_gpu(gpu_res, gpu_device, idx_cpu)

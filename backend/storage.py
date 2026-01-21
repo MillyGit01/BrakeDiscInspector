@@ -14,6 +14,8 @@ from .diagnostics import diag_event
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
 
+MemoryPayload = Tuple[np.ndarray, Tuple[int, int], Dict[str, Any]]
+
 
 def _is_image_file(p: Path) -> bool:
     return p.is_file() and p.suffix.lower() in IMAGE_EXTS
@@ -392,7 +394,7 @@ class ModelStore:
 
 
 
-    def _load_memory_from_path(self, path: Path):
+    def _load_memory_from_path(self, path: Path) -> MemoryPayload:
         with np.load(path, allow_pickle=False) as z:
             emb = z["emb"].astype(np.float32)
             H = int(z["token_h"])
@@ -436,7 +438,14 @@ class ModelStore:
         np.savez_compressed(path, **payload)
         return path
 
-    def load_memory(self, role_id: str, roi_id: str, *, recipe_id: Optional[str] = None, model_key: Optional[str] = None):
+    def load_memory(
+        self,
+        role_id: str,
+        roi_id: str,
+        *,
+        recipe_id: Optional[str] = None,
+        model_key: Optional[str] = None,
+    ) -> Optional[MemoryPayload]:
         """
         Carga (embeddings, (Ht, Wt), metadata) o None si no existe.
 

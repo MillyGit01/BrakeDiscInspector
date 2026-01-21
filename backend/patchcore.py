@@ -1,4 +1,6 @@
 from __future__ import annotations
+from typing import Any
+
 import numpy as np
 
 try:
@@ -55,6 +57,7 @@ class PatchCoreMemory:
         self.index = index
         self.nn = None
         self.coreset_rate = coreset_rate
+        self._faiss_gpu_res: Any | None = None
         if index is None:
             if _HAS_FAISS:
                 import faiss  # type: ignore

@@ -13,7 +13,7 @@ import datetime
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 import numpy as np
 import cv2
@@ -694,6 +694,7 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
             _MEM_CACHE.pop(key, None)
         return None
     emb_mem, token_hw_mem, metadata = loaded
+    token_hw_mem = cast(Tuple[int, int], token_hw_mem)
 
     faiss_cfg = SETTINGS.get("faiss", {}) or {}
     prefer_gpu = _is_truthy(faiss_cfg.get("prefer_gpu", 1))

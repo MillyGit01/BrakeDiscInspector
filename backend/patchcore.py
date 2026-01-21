@@ -7,16 +7,30 @@ try:
 except Exception:
     _HAS_FAISS = False
 
-try:
-    from sklearn.neighbors import NearestNeighbors
+NearestNeighbors = None  # type: ignore[assignment]
+_HAS_SKLEARN = False
+_SKLEARN_IMPORT_ATTEMPTED = False
+
+
+def _get_sklearn_neighbors():
+    global NearestNeighbors, _HAS_SKLEARN, _SKLEARN_IMPORT_ATTEMPTED
+    if _SKLEARN_IMPORT_ATTEMPTED:
+        return NearestNeighbors
+    _SKLEARN_IMPORT_ATTEMPTED = True
+    try:
+        from sklearn.neighbors import NearestNeighbors as SklearnNearestNeighbors
+    except Exception:
+        _HAS_SKLEARN = False
+        return None
+    NearestNeighbors = SklearnNearestNeighbors
     _HAS_SKLEARN = True
-except Exception:
-    NearestNeighbors = None  # type: ignore[assignment]
-    _HAS_SKLEARN = False
+    return NearestNeighbors
+
 
 def l2_normalize(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     n = np.linalg.norm(x, axis=1, keepdims=True) + eps
     return x / n
+
 
 def kcenter_greedy(E: np.ndarray, m: int, seed: int = 0) -> np.ndarray:
     """Coreset k-center greedy sobre embeddings ya normalizados."""
@@ -34,6 +48,7 @@ def kcenter_greedy(E: np.ndarray, m: int, seed: int = 0) -> np.ndarray:
         d = np.minimum(d, di)
     return np.array(centers, dtype=np.int64)
 
+
 class PatchCoreMemory:
     def __init__(self, embeddings: np.ndarray, index=None, coreset_rate: float | None = None):
         self.emb = embeddings.astype(np.float32, copy=False)
@@ -47,12 +62,13 @@ class PatchCoreMemory:
                 index = faiss.IndexFlatL2(self.emb.shape[1])
                 index.add(self.emb)
                 self.index = index
-            elif _HAS_SKLEARN:
-                assert NearestNeighbors is not None
-                self.nn = NearestNeighbors(n_neighbors=1, algorithm="auto", metric="euclidean")
-                self.nn.fit(self.emb)
             else:
-                raise RuntimeError("PatchCoreMemory not fitted: missing kNN index (FAISS/sklearn).")
+                nn_cls = _get_sklearn_neighbors()
+                if nn_cls is not None:
+                    self.nn = nn_cls(n_neighbors=1, algorithm="auto", metric="euclidean")
+                    self.nn.fit(self.emb)
+                else:
+                    raise RuntimeError("PatchCoreMemory not fitted: missing kNN index (FAISS/sklearn).")
 
     @staticmethod
     def build(embeddings: np.ndarray, coreset_rate: float = 0.02, seed: int = 0) -> "PatchCoreMemory":

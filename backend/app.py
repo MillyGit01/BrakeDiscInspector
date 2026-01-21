@@ -621,6 +621,17 @@ class _CalibCacheEntry:
 _CACHE_LOCK = threading.RLock()
 _MEM_CACHE: "OrderedDict[str, _MemCacheEntry]" = OrderedDict()
 _CALIB_CACHE: "OrderedDict[str, _CalibCacheEntry]" = OrderedDict()
+_FAISS_GPU_RESOURCES: dict[int, Any] = {}
+
+
+def _get_faiss_gpu_resources(device_id: int):
+    import faiss  # type: ignore
+
+    res = _FAISS_GPU_RESOURCES.get(device_id)
+    if res is None:
+        res = faiss.StandardGpuResources()
+        _FAISS_GPU_RESOURCES[device_id] = res
+    return res
 
 
 def _env_int(name: str, default: int) -> int:
@@ -692,7 +703,13 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
 
     try:
         import faiss  # type: ignore
-
+    except Exception as exc:
+        if require_faiss or not allow_sklearn_fallback:
+            raise RuntimeError(
+                "FAISS is required but not installed; install faiss-gpu/faiss-cpu or enable sklearn fallback."
+            ) from exc
+        mem_obj = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=(metadata or {}).get("coreset_rate"))
+    else:
         blob = store.load_index_blob(role_id, roi_id, recipe_id=recipe_id, model_key=model_key)
         if blob is not None:
             idx_cpu = faiss.deserialize_index(np.frombuffer(blob, dtype=np.uint8))
@@ -701,12 +718,13 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
             idx_cpu.add(emb_mem.astype(np.float32, copy=False))
 
         idx = idx_cpu
+        gpu_res = None
         if prefer_gpu and hasattr(faiss, "StandardGpuResources"):
             get_num_gpus = getattr(faiss, "get_num_gpus", None)
             ngpu = int(get_num_gpus()) if callable(get_num_gpus) else 0
             if ngpu > 0:
-                res = faiss.StandardGpuResources()
-                idx = faiss.index_cpu_to_gpu(res, gpu_device, idx_cpu)
+                gpu_res = _get_faiss_gpu_resources(gpu_device)
+                idx = faiss.index_cpu_to_gpu(gpu_res, gpu_device, idx_cpu)
                 diag_event(
                     "faiss.gpu.enabled",
                     recipe_id=recipe_id,
@@ -716,12 +734,8 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
                     device_id=gpu_device,
                 )
         mem_obj = PatchCoreMemory(embeddings=emb_mem, index=idx, coreset_rate=(metadata or {}).get("coreset_rate"))
-    except Exception as exc:
-        if require_faiss or not allow_sklearn_fallback:
-            raise RuntimeError(
-                "FAISS is required but not installed; install faiss-gpu/faiss-cpu or enable sklearn fallback."
-            ) from exc
-        mem_obj = PatchCoreMemory(embeddings=emb_mem, index=None, coreset_rate=(metadata or {}).get("coreset_rate"))
+        if gpu_res is not None:
+            mem_obj._faiss_gpu_res = gpu_res
 
     token_hw_tup = (int(token_hw_mem[0]), int(token_hw_mem[1]))
     meta_dict = dict(metadata or {})

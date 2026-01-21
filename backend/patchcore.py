@@ -7,7 +7,12 @@ try:
 except Exception:
     _HAS_FAISS = False
 
-from sklearn.neighbors import NearestNeighbors
+try:
+    from sklearn.neighbors import NearestNeighbors
+    _HAS_SKLEARN = True
+except Exception:
+    NearestNeighbors = None  # type: ignore[assignment]
+    _HAS_SKLEARN = False
 
 def l2_normalize(x: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     n = np.linalg.norm(x, axis=1, keepdims=True) + eps
@@ -36,8 +41,18 @@ class PatchCoreMemory:
         self.nn = None
         self.coreset_rate = coreset_rate
         if index is None:
-            self.nn = NearestNeighbors(n_neighbors=1, algorithm="auto", metric="euclidean")
-            self.nn.fit(self.emb)
+            if _HAS_FAISS:
+                import faiss  # type: ignore
+
+                index = faiss.IndexFlatL2(self.emb.shape[1])
+                index.add(self.emb)
+                self.index = index
+            elif _HAS_SKLEARN:
+                assert NearestNeighbors is not None
+                self.nn = NearestNeighbors(n_neighbors=1, algorithm="auto", metric="euclidean")
+                self.nn.fit(self.emb)
+            else:
+                raise RuntimeError("PatchCoreMemory not fitted: missing kNN index (FAISS/sklearn).")
 
     @staticmethod
     def build(embeddings: np.ndarray, coreset_rate: float = 0.02, seed: int = 0) -> "PatchCoreMemory":

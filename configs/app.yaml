@@ -8,3 +8,9 @@ inference:
   coreset_rate: 0.10
   score_percentile: 99
   area_mm2_thr: 1.0
+
+faiss:
+  prefer_gpu: 1
+  gpu_device: 0
+  require_faiss: 0
+  allow_sklearn_fallback: 1

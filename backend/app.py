@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import logging
+import numbers
 import os
 import shutil
 import subprocess
@@ -719,10 +720,24 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
 
         idx = idx_cpu
         gpu_res = None
+
+        ngpu = 0
         if prefer_gpu and hasattr(faiss, "StandardGpuResources"):
             get_num_gpus = getattr(faiss, "get_num_gpus", None)
-            result = get_num_gpus() if callable(get_num_gpus) else None
-            ngpu = int(result) if result is not None else 0
+            result: Any = get_num_gpus() if callable(get_num_gpus) else None
+
+            if isinstance(result, numbers.Integral):
+                ngpu = int(result)
+            elif isinstance(result, float):
+                ngpu = int(result)
+            elif isinstance(result, str):
+                try:
+                    ngpu = int(float(result.strip()))
+                except Exception:
+                    ngpu = 0
+            else:
+                ngpu = 0
+
             ngpu = max(0, ngpu)  # Ensure non-negative
             if ngpu > 0:
                 gpu_res = _get_faiss_gpu_resources(gpu_device)

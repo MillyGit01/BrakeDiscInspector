@@ -740,16 +740,42 @@ def _get_patchcore_memory_cached(role_id: str, roi_id: str, *, recipe_id: str, m
 
             ngpu = max(0, ngpu)  # Ensure non-negative
             if ngpu > 0:
-                gpu_res = _get_faiss_gpu_resources(gpu_device)
-                idx = faiss.index_cpu_to_gpu(gpu_res, gpu_device, idx_cpu)
-                diag_event(
-                    "faiss.gpu.enabled",
-                    recipe_id=recipe_id,
-                    model_key=model_key,
-                    role_id=role_id,
-                    roi_id=roi_id,
-                    device_id=gpu_device,
-                )
+                # Validate device id to avoid hard failure on misconfig.
+                if gpu_device < 0 or gpu_device >= ngpu:
+                    diag_event(
+                        "faiss.gpu.device_invalid",
+                        recipe_id=recipe_id,
+                        model_key=model_key,
+                        role_id=role_id,
+                        roi_id=roi_id,
+                        device_id=gpu_device,
+                        ngpu=ngpu,
+                    )
+                else:
+                    # Best-effort GPU: fall back to CPU index if transfer fails (OOM, etc.)
+                    try:
+                        gpu_res = _get_faiss_gpu_resources(gpu_device)
+                        idx = faiss.index_cpu_to_gpu(gpu_res, gpu_device, idx_cpu)
+                        diag_event(
+                            "faiss.gpu.enabled",
+                            recipe_id=recipe_id,
+                            model_key=model_key,
+                            role_id=role_id,
+                            roi_id=roi_id,
+                            device_id=gpu_device,
+                        )
+                    except Exception as exc:
+                        idx = idx_cpu
+                        gpu_res = None
+                        diag_event(
+                            "faiss.gpu.transfer_failed",
+                            recipe_id=recipe_id,
+                            model_key=model_key,
+                            role_id=role_id,
+                            roi_id=roi_id,
+                            device_id=gpu_device,
+                            error=str(exc),
+                        )
         mem_obj = PatchCoreMemory(embeddings=emb_mem, index=idx, coreset_rate=(metadata or {}).get("coreset_rate"))
         if gpu_res is not None:
             mem_obj._faiss_gpu_res = gpu_res

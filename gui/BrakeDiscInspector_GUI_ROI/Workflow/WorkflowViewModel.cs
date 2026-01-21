@@ -5594,7 +5594,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var m1BaselineCenter = new ImgPoint(m1bx, m1by);
             var m2BaselineCenter = new ImgPoint(m2bx, m2by);
 
-            var analyzeOpts = _layoutOriginal.Analyze ?? new AnalyzeOptions();
+            var analyzeOpts = _layout?.Analyze ?? _layoutOriginal?.Analyze ?? new AnalyzeOptions();
             input = new RoiPlacementInput(
                 m1BaselineCenter,
                 m2BaselineCenter,

@@ -6599,58 +6599,21 @@ namespace BrakeDiscInspector_GUI_ROI
             // 3) ROI en espacio de imagen (si tienes RoiDebug)
             try { LogHeatmap("ROI (image space): " + RoiDebug(_lastHeatmapRoi)); } catch { }
 
-            // 4) ROI en espacio de CANVAS
-            var rc = ImageToCanvas(_lastHeatmapRoi);
-            LogHeatmap($"ROI canvas rect rc = (L={rc.Left:F2},T={rc.Top:F2},W={rc.Width:F2},H={rc.Height:F2})");
-
-            // 5) Margen del Canvas de las ROI (CanvasROI) y su offset visual real
-            if (CanvasROI != null)
+            if (CanvasROI == null)
             {
-                var cm = CanvasROI.Margin;
-                LogHeatmap($"CanvasROI.Margin = (L={cm.Left:F0},T={cm.Top:F0})");
-                var cofs = System.Windows.Media.VisualTreeHelper.GetOffset(CanvasROI);
-                LogHeatmap($"CanvasROI.VisualOffset = (X={cofs.X:F4},Y={cofs.Y:F4})");
+                LogHeatmap("CanvasROI is null; cannot place heatmap.");
+                return;
             }
 
-            // 6) Tipo de padre del heatmap y ruta de posicionamiento
-            var parent = System.Windows.Media.VisualTreeHelper.GetParent(HeatmapOverlay);
-            bool parentIsCanvas = parent is System.Windows.Controls.Canvas;
-            LogHeatmap($"HeatmapOverlay.Parent = {parent?.GetType().Name ?? "<null>"} ; ParentIsCanvas={parentIsCanvas}");
+            var (imgW, imgH) = GetImagePixelSize();
 
-            // 2) Anchor overlay to ROI rect (canvas absolute via Canvas coords when available)
-            // Size to ROI rect
             HeatmapOverlay.Source = _lastHeatmapBmp;
-            HeatmapOverlay.Width = rc.Width;
-            HeatmapOverlay.Height = rc.Height;
 
-            // Prefer Canvas positioning to avoid Margin rounding drift. Fallback to Margin
-            // only if parent is not a Canvas.
-            if (parentIsCanvas)
-            {
-                // Clear Margin so Canvas.Left/Top are not compounded
-                HeatmapOverlay.Margin = new System.Windows.Thickness(0);
-                System.Windows.Controls.Canvas.SetLeft(HeatmapOverlay, rc.Left);
-                System.Windows.Controls.Canvas.SetTop(HeatmapOverlay, rc.Top);
-            }
-            else
-            {
-                // SUMAR el margen del Canvas de las ROI para alinear origen,
-                // y redondear a enteros para evitar subpíxeles (misma política que CanvasROI).
-                double leftRounded = System.Math.Round((CanvasROI?.Margin.Left ?? 0) + rc.Left);
-                double topRounded = System.Math.Round((CanvasROI?.Margin.Top ?? 0) + rc.Top);
-                HeatmapOverlay.Margin = new System.Windows.Thickness(leftRounded, topRounded, 0, 0);
-            }
-
-            LogHeatmap($"Heatmap by Margin with CanvasROI.Margin sum: finalMargin=({HeatmapOverlay.Margin.Left},{HeatmapOverlay.Margin.Top})");
-
-            ApplyHeatmapOverlayRotation(rc.Width, rc.Height);
-
-            HeatmapOverlay.Visibility = System.Windows.Visibility.Visible;
+            var effectiveAnalyze = GetEffectiveAnalyzeOptions();
+            bool disableRotation = effectiveAnalyze.DisableRot;
 
             // 3) Build Clip in OVERLAY-LOCAL coordinates (0..Width, 0..Height)
             //    Determine shape ratios from ROI model
-            System.Windows.Media.Geometry clipGeo = null;
-
             // Optional: role-based mismatch detection (keep existing skipClip logic if you already added it)
             bool skipClip = false; // keep your previous mismatch logic if present to possibly set this true
             string heatmapShape = InferShapeName(_lastHeatmapRoi);
@@ -6690,37 +6653,27 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             // --- end mismatch detection block ---
 
-            // Compute outer ellipse based on the overlay bounds:
-            // Note: overlay is exactly the ROI bounding box. "Outer radius" is half of the max side.
-            double ow = HeatmapOverlay.Width;
-            double oh = HeatmapOverlay.Height;
-            double outerR = System.Math.Max(ow, oh) * 0.5;
-            var center = new System.Windows.Point(ow * 0.5, oh * 0.5);
+            var rc = HeatmapOverlayHelper.UpdateHeatmapOverlay(
+                HeatmapOverlay,
+                CanvasROI,
+                disp,
+                imgW,
+                imgH,
+                _lastHeatmapRoi,
+                _heatmapOverlayOpacity,
+                disableRotation,
+                skipClip,
+                "Evaluate",
+                LogHeatmap);
 
-            // If ROI has both R and RInner > 0 => Annulus
-            if (!skipClip && _lastHeatmapRoi.R > 0 && _lastHeatmapRoi.RInner > 0)
+            if (rc == null)
             {
-                // Inner radius is proportional to outer radius by model ratio
-                double innerR = outerR * (_lastHeatmapRoi.RInner / _lastHeatmapRoi.R);
-
-                var outer = new System.Windows.Media.EllipseGeometry(center, outerR, outerR);
-                var inner = new System.Windows.Media.EllipseGeometry(center, innerR, innerR);
-                clipGeo = new System.Windows.Media.CombinedGeometry(System.Windows.Media.GeometryCombineMode.Exclude, outer, inner);
-            }
-            // If ROI has only R > 0 => Circle
-            else if (!skipClip && _lastHeatmapRoi.R > 0)
-            {
-                clipGeo = new System.Windows.Media.EllipseGeometry(center, outerR, outerR);
-            }
-            // Otherwise treat as rectangle ROI (no need to clip; the overlay bounds already match)
-            else
-            {
-                // leave clipGeo = null
-                // clipGeo = new System.Windows.Media.RectangleGeometry(new System.Windows.Rect(0, 0, ow, oh));
+                HeatmapOverlay.Visibility = Visibility.Collapsed;
+                LogHeatmap("Heatmap overlay placement failed.");
+                return;
             }
 
-            // 4) Apply Clip (or disable if mismatch logic set skipClip)
-            HeatmapOverlay.Clip = skipClip ? null : clipGeo;
+            HeatmapOverlay.Visibility = System.Windows.Visibility.Visible;
 
             var hOfs = System.Windows.Media.VisualTreeHelper.GetOffset(HeatmapOverlay);
             LogHeatmap($"HeatmapOverlay.VisualOffset = (X={hOfs.X:F4},Y={hOfs.Y:F4})");
@@ -6736,7 +6689,7 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             // 5) (Optional) Log overlay rect in canvas space & local clip bounds
-            LogHeatmap($"Overlay anchored to ROI: Left={rc.Left:F2}, Top={rc.Top:F2}, W={rc.Width:F2}, H={rc.Height:F2}");
+            LogHeatmap($"Overlay anchored to ROI: Left={rc.Value.Left:F2}, Top={rc.Value.Top:F2}, W={rc.Value.Width:F2}, H={rc.Value.Height:F2}");
             if (HeatmapOverlay?.Clip != null)
             {
                 var b = HeatmapOverlay.Clip.Bounds;
@@ -9354,7 +9307,29 @@ namespace BrakeDiscInspector_GUI_ROI
                     return;
                 }
 
-                WRect? canvasRect = vm.GetInspectionRoiCanvasRect(roiIndex); // CODEX: capture explicit WPF rect type to avoid ambiguity.
+                var roiImageModel = vm.GetInspectionRoiImageModel(roiIndex);
+                if (roiImageModel == null)
+                {
+                    heatmap.Source = null;
+                    heatmap.Visibility = Visibility.Collapsed;
+                    if (BatchRoiOutline != null)
+                    {
+                        BatchRoiOutline.Visibility = Visibility.Collapsed;
+                    }
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:null-roi", roiIndex, null);
+                    return;
+                }
+
+                if (!HeatmapOverlayHelper.TryGetDisplayRect(baseImage, out var displayRect, out var imgW, out var imgH))
+                {
+                    if (baseImage.ActualWidth <= 0 || baseImage.ActualHeight <= 0 || roiCanvas.ActualWidth <= 0 || roiCanvas.ActualHeight <= 0)
+                    {
+                        ScheduleBatchHeatmapPlacement(vm, $"{reason}:await-size");
+                    }
+                    return;
+                }
+
+                WRect? canvasRect = HeatmapOverlayHelper.GetRoiCanvasRect(displayRect, imgW, imgH, roiImageModel);
                 if (BatchRoiOutline != null)
                 {
                     if (canvasRect == null)
@@ -9386,12 +9361,6 @@ namespace BrakeDiscInspector_GUI_ROI
                     return; // CODEX: no heatmap available yet; skip scheduling await-size retries.
                 }
 
-                if (baseImage.ActualWidth <= 0 || baseImage.ActualHeight <= 0 || roiCanvas.ActualWidth <= 0 || roiCanvas.ActualHeight <= 0)
-                {
-                    ScheduleBatchHeatmapPlacement(vm, $"{reason}:await-size"); // CODEX: wait until layout system reports non-zero sizes, but only when a source exists.
-                    return;
-                }
-
                 if (canvasRect == null)
                 {
                     heatmap.Source = null;
@@ -9402,10 +9371,28 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 heatmap.Source = src;
-                heatmap.Width = Math.Max(1.0, canvasRect.Value.Width);
-                heatmap.Height = Math.Max(1.0, canvasRect.Value.Height);
-                Canvas.SetLeft(heatmap, canvasRect.Value.Left);
-                Canvas.SetTop(heatmap, canvasRect.Value.Top);
+                bool disableRotation = _layout?.Analyze?.DisableRot ?? _disableRot;
+                var placedRect = HeatmapOverlayHelper.UpdateHeatmapOverlay(
+                    heatmap,
+                    roiCanvas,
+                    displayRect,
+                    imgW,
+                    imgH,
+                    roiImageModel,
+                    _heatmapOverlayOpacity,
+                    disableRotation,
+                    skipClip: false,
+                    "Batch",
+                    message => GuiLog.Info(message));
+                if (placedRect == null)
+                {
+                    heatmap.Source = null;
+                    heatmap.Visibility = Visibility.Collapsed;
+                    vm.TraceBatchHeatmapPlacement($"ui:{reason}:place-failed", roiIndex, null);
+                    return;
+                }
+
+                canvasRect = placedRect;
                 heatmap.Visibility = Visibility.Visible;
 
                 WInt32Rect? rectImgOpt = vm.GetInspectionRoiImageRectPx(roiIndex); // CODEX: explicit Int32Rect for conversion helpers.
@@ -9447,7 +9434,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         }
                         else if (Math.Abs(roi1Rect.Value.Width - rectImgOpt.Value.Width) > 0.5)
                         {
-                            WRect? roi1Canvas = vm.GetInspectionRoiCanvasRect(1); // CODEX: explicit WPF rect typing for ROI1 canvas rect.
+                            WRect? roi1Canvas = HeatmapOverlayHelper.GetRoiCanvasRect(displayRect, imgW, imgH, vm.GetInspectionRoiImageModel(1) ?? roiImageModel);
                             if (roi1Canvas.HasValue && RectsClose(canvasRect.Value, roi1Canvas.Value))
                             {
                                 GuiLog.Warn($"[batch-ui] guard: idx=2 canvasRect≈ROI1 while widths differ (w1={roi1Rect.Value.Width:0.##} w2={rectImgOpt.Value.Width:0.##})");

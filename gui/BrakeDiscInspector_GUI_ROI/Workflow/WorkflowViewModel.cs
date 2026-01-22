@@ -1769,6 +1769,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             return GetInspectionRoiModelByIndex(idx);
         }
 
+        public RoiModel? GetInspectionRoiImageModel(int idx)
+        {
+            var roi = GetInspectionRoiModelByIndex(idx);
+            if (roi == null)
+            {
+                return null;
+            }
+
+            if (_isBatchRunning)
+            {
+                return GetBatchTransformedRoi(roi);
+            }
+
+            return roi.Clone();
+        }
+
         public Int32Rect? GetInspectionRoiImageRectPx(int idx)
         {
             var roi = GetInspectionRoiModelByIndex(idx);

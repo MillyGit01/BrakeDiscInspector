@@ -1326,14 +1326,24 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 if (!ReferenceEquals(_selectedInspectionRoi, value))
                 {
+                    if (_selectedInspectionRoi != null)
+                    {
+                        _selectedInspectionRoi.PropertyChanged -= InspectionRoiPropertyChanged;
+                    }
+
                     _selectedInspectionRoi = value;
+                    if (_selectedInspectionRoi != null)
+                    {
+                        _selectedInspectionRoi.PropertyChanged += InspectionRoiPropertyChanged;
+                    }
+
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(SelectedInspectionShape));
                     OnPropertyChanged(nameof(ActiveInspectionRoiModel));
                     OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
                     UpdateSelectedRoiState();
                     OpenDatasetFolderCommand.RaiseCanExecuteChanged();
-                    RemoveSelectedPreviewCommand.RaiseCanExecuteChanged();
+                    RaiseDatasetCommandCanExecuteChanged();
 
                     if (value != null)
                     {
@@ -2543,10 +2553,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             if (e.PropertyName == nameof(InspectionRoiConfig.DatasetOkCount)
                 || e.PropertyName == nameof(InspectionRoiConfig.DatasetKoCount)
-                || e.PropertyName == nameof(InspectionRoiConfig.IsDatasetLoading))
+                || e.PropertyName == nameof(InspectionRoiConfig.IsDatasetLoading)
+                || e.PropertyName == nameof(InspectionRoiConfig.Enabled)
+                || e.PropertyName == nameof(InspectionRoiConfig.BackendMemoryFitted)
+                || e.PropertyName == nameof(InspectionRoiConfig.BackendCalibPresent))
             {
-                TrainSelectedRoiCommand.RaiseCanExecuteChanged();
-                CalibrateSelectedRoiCommand.RaiseCanExecuteChanged();
+                RaiseDatasetCommandCanExecuteChanged();
             }
 
             if (ReferenceEquals(sender, SelectedInspectionRoi))
@@ -2554,7 +2566,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (e.PropertyName == nameof(InspectionRoiConfig.SelectedOkPreviewItem)
                     || e.PropertyName == nameof(InspectionRoiConfig.SelectedNgPreviewItem))
                 {
-                    RemoveSelectedPreviewCommand.RaiseCanExecuteChanged();
+                    RaiseDatasetCommandCanExecuteChanged();
                 }
 
                 OnPropertyChanged(nameof(SelectedInspectionRoi));
@@ -2640,6 +2652,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _isBusy = value;
                     OnPropertyChanged();
                     RaiseBusyChanged();
+                    RaiseDatasetCommandCanExecuteChanged();
                 }
             }
         }
@@ -2898,6 +2911,31 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
             BrowseBatchFolderCommand?.RaiseCanExecuteChanged();
             UpdateBatchCommandStates();
+        }
+
+        private static void RaiseCanExecuteChanged(ICommand? command)
+        {
+            if (command is AsyncCommand asyncCommand)
+            {
+                asyncCommand.RaiseCanExecuteChanged();
+            }
+        }
+
+        private void RaiseDatasetCommandCanExecuteChanged()
+        {
+            RaiseCanExecuteChanged(TrainSelectedRoiCommand);
+            RaiseCanExecuteChanged(CalibrateSelectedRoiCommand);
+            RaiseCanExecuteChanged(EvaluateSelectedRoiCommand);
+            RaiseCanExecuteChanged(RemoveSelectedPreviewCommand);
+            RaiseCanExecuteChanged(InferEnabledRoisCommand);
+            if (!ReferenceEquals(EvaluateAllRoisCommand, InferEnabledRoisCommand))
+            {
+                RaiseCanExecuteChanged(EvaluateAllRoisCommand);
+            }
+            else
+            {
+                RaiseCanExecuteChanged(EvaluateAllRoisCommand);
+            }
         }
 
         public void SetMasterEditState(bool isMaster1Editing, bool isMaster2Editing)
@@ -3228,6 +3266,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
                 await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
+                RaiseDatasetCommandCanExecuteChanged();
 
                 await ShowDatasetSavedAsync(roi.DisplayName, fileName, isOk).ConfigureAwait(false);
             }
@@ -3290,6 +3329,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 await _client.UploadDatasetSampleAsync(role, roiId, !positive, export.PngBytes, fileName, meta).ConfigureAwait(false);
 
                 await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
+                RaiseDatasetCommandCanExecuteChanged();
                 GuiLog.Info($"AddToDataset (direct) uploaded {(positive ? "OK" : "NG")} -> '{fileName}'");
                 await ShowDatasetSavedAsync(roi.Label ?? roi.Role.ToString(), fileName, positive).ConfigureAwait(false);
             }
@@ -3514,6 +3554,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
             await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
+            RaiseDatasetCommandCanExecuteChanged();
         }
 
         private async Task OpenDatasetFolderAsync()
@@ -3602,6 +3643,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             TrainFitCommand.RaiseCanExecuteChanged();
             CalibrateCommand.RaiseCanExecuteChanged();
+            RaiseDatasetCommandCanExecuteChanged();
         }
 
         private async Task TrainAsync()
@@ -4055,6 +4097,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
             _roiDatasetCache[roi] = analysis;
+            var trainEnabled = !IsBusy && roi.DatasetOkCount >= 10;
+            var calibrateEnabled = !IsBusy && ReferenceEquals(roi, SelectedInspectionRoi) && CanCalibrateSelectedRoi();
+            _log($"[dataset] roi={roi.ModelKey} ok={roi.DatasetOkCount} ng={roi.DatasetKoCount} trainEnabled={trainEnabled} calibrateEnabled={calibrateEnabled}");
+            RaiseDatasetCommandCanExecuteChanged();
 
             return analysis;
         }

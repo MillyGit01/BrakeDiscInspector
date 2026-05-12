@@ -181,6 +181,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private MasterLayout? _layout;
         private MasterLayout? _layoutOriginal;
         private InspectionRoiConfig? _selectedInspectionRoi;
+        private InspectionRoiConfig? _selectedRoiCommandSubscription;
         private bool? _hasFitEndpoint;
         private bool? _hasCalibrateEndpoint;
         private long _batchStepId;
@@ -642,6 +643,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     Application.Current?.Dispatcher.Invoke(RedrawOverlays);
                 }
             };
+
+            AttachSelectedRoiCommandNotifications(SelectedInspectionRoi);
         }
 
         public void SetLayoutName(string layoutName)
@@ -1341,6 +1344,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     OnPropertyChanged(nameof(SelectedInspectionShape));
                     OnPropertyChanged(nameof(ActiveInspectionRoiModel));
                     OnPropertyChanged(nameof(ActiveInspectionRoiImageRectPx));
+                    AttachSelectedRoiCommandNotifications(_selectedInspectionRoi);
                     UpdateSelectedRoiState();
                     OpenDatasetFolderCommand.RaiseCanExecuteChanged();
                     RaiseDatasetCommandCanExecuteChanged();
@@ -2932,9 +2936,42 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 RaiseCanExecuteChanged(EvaluateAllRoisCommand);
             }
-            else
+        }
+
+        private void AttachSelectedRoiCommandNotifications(InspectionRoiConfig? roi)
+        {
+            if (_selectedRoiCommandSubscription != null)
             {
-                RaiseCanExecuteChanged(EvaluateAllRoisCommand);
+                _selectedRoiCommandSubscription.PropertyChanged -= SelectedRoi_PropertyChangedForCommands;
+            }
+
+            _selectedRoiCommandSubscription = roi;
+
+            if (_selectedRoiCommandSubscription != null)
+            {
+                _selectedRoiCommandSubscription.PropertyChanged += SelectedRoi_PropertyChangedForCommands;
+            }
+
+            RaiseDatasetCommandCanExecuteChanged();
+        }
+
+        private void SelectedRoi_PropertyChangedForCommands(object? sender, PropertyChangedEventArgs e)
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(InspectionRoiConfig.DatasetOkCount):
+                case nameof(InspectionRoiConfig.DatasetKoCount):
+                case nameof(InspectionRoiConfig.OkCount):
+                case nameof(InspectionRoiConfig.NgCount):
+                case nameof(InspectionRoiConfig.Enabled):
+                case nameof(InspectionRoiConfig.IsDatasetLoading):
+                case nameof(InspectionRoiConfig.DatasetReady):
+                case nameof(InspectionRoiConfig.SelectedOkPreviewItem):
+                case nameof(InspectionRoiConfig.SelectedNgPreviewItem):
+                case nameof(InspectionRoiConfig.BackendMemoryFitted):
+                case nameof(InspectionRoiConfig.BackendCalibPresent):
+                    InvokeOnUi(RaiseDatasetCommandCanExecuteChanged);
+                    break;
             }
         }
 
@@ -4097,10 +4134,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
             _roiDatasetCache[roi] = analysis;
-            var trainEnabled = !IsBusy && roi.DatasetOkCount >= 10;
-            var calibrateEnabled = !IsBusy && ReferenceEquals(roi, SelectedInspectionRoi) && CanCalibrateSelectedRoi();
-            _log($"[dataset] roi={roi.ModelKey} ok={roi.DatasetOkCount} ng={roi.DatasetKoCount} trainEnabled={trainEnabled} calibrateEnabled={calibrateEnabled}");
             RaiseDatasetCommandCanExecuteChanged();
+            GuiLog.Info($"[dataset-ui] roi='{roi.Name}' id='{roi.Id}' ok={roi.DatasetOkCount} ng={roi.DatasetKoCount} trainCan={TrainSelectedRoiCommand.CanExecute(null)} calibrateCan={CalibrateSelectedRoiCommand.CanExecute(null)} selected={ReferenceEquals(roi, SelectedInspectionRoi)}");
 
             return analysis;
         }

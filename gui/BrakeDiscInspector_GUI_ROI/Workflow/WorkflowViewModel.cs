@@ -2877,8 +2877,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private static string BuildDatasetStatusText(InspectionRoiConfig roi)
         {
-            var missingOk = MissingOkForCalibration(roi);
-            var missingNg = MissingNgForCalibration(roi);
+            return BuildDatasetStatusText(roi.DatasetOkCount, roi.DatasetKoCount);
+        }
+
+        private static string BuildDatasetStatusText(int okCount, int ngCount)
+        {
+            var missingOk = Math.Max(0, MinOkSamplesForCalibration - okCount);
+            var missingNg = Math.Max(0, MinNgSamplesForCalibration - ngCount);
 
             if (missingOk == 0 && missingNg == 0)
             {
@@ -4159,7 +4164,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var ready = okCount >= MinOkSamplesForCalibration && ngCount >= MinNgSamplesForCalibration;
                 var status = ready
                     ? "Dataset ready"
-                    : BuildDatasetStatusText(new InspectionRoiConfig { DatasetOkCount = okCount, DatasetKoCount = ngCount });
+                    : BuildDatasetStatusText(okCount, ngCount);
                 analysis = new RoiDatasetAnalysis(string.Empty, new List<DatasetEntry>(), okCount, ngCount, ready, status, new List<(string, bool)>());
 
                 await Application.Current.Dispatcher.InvokeAsync(() =>

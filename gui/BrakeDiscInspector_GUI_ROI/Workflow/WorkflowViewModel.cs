@@ -153,6 +153,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
     public sealed partial class WorkflowViewModel : INotifyPropertyChanged
     {
+        private const int MinOkSamplesForTraining = 10;
+        private const int MinOkSamplesForCalibration = 10;
+        private const int MinNgSamplesForCalibration = 1;
+
         private readonly BackendClient _client;
         private readonly DatasetManager _datasetManager;
         private readonly Func<Task<RoiExportResult?>> _exportRoiAsync;
@@ -582,8 +586,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }, _ => _isBatchRunning);
 
             BrowseDatasetCommand = CreateCommand(_ => BrowseDatasetAsync(), _ => !IsBusy && SelectedInspectionRoi != null);
-            TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null && SelectedInspectionRoi.DatasetOkCount >= 10);
-            CalibrateSelectedRoiCommand = CreateCommand(async _ => await CalibrateSelectedRoiAsync().ConfigureAwait(false), _ => !IsBusy && CanCalibrateSelectedRoi());
+            TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiWithValidationAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
+            CalibrateSelectedRoiCommand = CreateCommand(async _ => await CalibrateSelectedRoiWithValidationAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
             EvaluateSelectedRoiCommand = CreateCommand(_ => EvaluateSelectedRoiAsync(), _ => !IsBusy && SelectedInspectionRoi != null && SelectedInspectionRoi.Enabled);
             var inferEnabledCommand = CreateCommand(_ => InferEnabledRoisAsync(), _ => !IsBusy && HasAnyEnabledInspectionRoi());
             EvaluateAllRoisCommand = inferEnabledCommand;
@@ -2845,20 +2849,64 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }, canExecute ?? (_ => !IsBusy));
         }
 
-        private bool CanCalibrateSelectedRoi()
+        private static int MissingOkForTraining(InspectionRoiConfig roi)
         {
-            var roi = SelectedInspectionRoi;
+            return Math.Max(0, MinOkSamplesForTraining - roi.DatasetOkCount);
+        }
+
+        private static int MissingOkForCalibration(InspectionRoiConfig roi)
+        {
+            return Math.Max(0, MinOkSamplesForCalibration - roi.DatasetOkCount);
+        }
+
+        private static int MissingNgForCalibration(InspectionRoiConfig roi)
+        {
+            return Math.Max(0, MinNgSamplesForCalibration - roi.DatasetKoCount);
+        }
+
+        private static bool HasEnoughTrainingDataset(InspectionRoiConfig roi)
+        {
+            return roi.DatasetOkCount >= MinOkSamplesForTraining;
+        }
+
+        private static bool HasEnoughCalibrationDataset(InspectionRoiConfig roi)
+        {
+            return roi.DatasetOkCount >= MinOkSamplesForCalibration
+                && roi.DatasetKoCount >= MinNgSamplesForCalibration;
+        }
+
+        private static string BuildDatasetStatusText(InspectionRoiConfig roi)
+        {
+            var missingOk = MissingOkForCalibration(roi);
+            var missingNg = MissingNgForCalibration(roi);
+
+            if (missingOk == 0 && missingNg == 0)
+            {
+                return "Dataset ready";
+            }
+
+            if (missingOk == 0 && missingNg > 0)
+            {
+                return $"Dataset insuficiente: añada {missingNg} NG";
+            }
+
+            if (missingOk > 0 && missingNg == 0)
+            {
+                return $"Dataset insuficiente: añada {missingOk} OK";
+            }
+
+            return $"Dataset insuficiente: añada {missingOk} OK y {missingNg} NG";
+        }
+
+        private static void UpdateDatasetReadiness(InspectionRoiConfig roi)
+        {
             if (roi == null)
             {
-                return false;
+                return;
             }
 
-            if (roi.IsDatasetLoading)
-            {
-                return false;
-            }
-
-            return roi.DatasetOkCount >= 10 && roi.DatasetKoCount >= 1;
+            roi.DatasetReady = HasEnoughCalibrationDataset(roi);
+            roi.DatasetStatus = BuildDatasetStatusText(roi);
         }
 
         private async Task RunExclusiveAsync(Func<Task> action)
@@ -4057,6 +4105,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 roi.OkPreview = okItems;
                 roi.NgPreview = ngItems;
+                UpdateDatasetReadiness(roi);
+                RaiseDatasetCommandCanExecuteChanged();
                 Debug.WriteLine($"[thumbs] {roi.DisplayName} ok={okItems.Count} ng={ngItems.Count}");
             });
         }
@@ -4106,8 +4156,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 var list = await _client.GetDatasetListAsync(RoleId, roi.ModelKey).ConfigureAwait(false);
                 var okCount = list.ok.count;
                 var ngCount = list.ng.count;
-                var ready = okCount > 0;
-                var status = ready ? "Dataset Ready ✅" : "Dataset missing OK samples";
+                var ready = okCount >= MinOkSamplesForCalibration && ngCount >= MinNgSamplesForCalibration;
+                var status = ready
+                    ? "Dataset ready"
+                    : BuildDatasetStatusText(new InspectionRoiConfig { DatasetOkCount = okCount, DatasetKoCount = ngCount });
                 analysis = new RoiDatasetAnalysis(string.Empty, new List<DatasetEntry>(), okCount, ngCount, ready, status, new List<(string, bool)>());
 
                 await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -4115,8 +4167,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     roi.IsDatasetLoading = false;
                     roi.DatasetOkCount = okCount;
                     roi.DatasetKoCount = ngCount;
-                    roi.DatasetReady = ready;
-                    roi.DatasetStatus = status;
+                    UpdateDatasetReadiness(roi);
                 });
             }
             catch (Exception ex)
@@ -4127,15 +4178,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     roi.IsDatasetLoading = false;
                     roi.DatasetOkCount = 0;
                     roi.DatasetKoCount = 0;
-                    roi.DatasetReady = false;
-                    roi.DatasetStatus = analysis.StatusMessage;
+                    UpdateDatasetReadiness(roi);
                 });
             }
 
             await RefreshDatasetPreviewsForRoiAsync(roi).ConfigureAwait(false);
             _roiDatasetCache[roi] = analysis;
             RaiseDatasetCommandCanExecuteChanged();
-            GuiLog.Info($"[dataset-ui] roi='{roi.Name}' id='{roi.Id}' ok={roi.DatasetOkCount} ng={roi.DatasetKoCount} trainCan={TrainSelectedRoiCommand.CanExecute(null)} calibrateCan={CalibrateSelectedRoiCommand.CanExecute(null)} selected={ReferenceEquals(roi, SelectedInspectionRoi)}");
+            GuiLog.Info($"[dataset-ui] roi='{roi.Name}' ok={roi.DatasetOkCount} ng={roi.DatasetKoCount} ready={roi.DatasetReady} status='{roi.DatasetStatus}' trainAllowed={HasEnoughTrainingDataset(roi)} calibrateAllowed={HasEnoughCalibrationDataset(roi)}");
 
             return analysis;
         }
@@ -4393,6 +4443,27 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
+        private async Task TrainSelectedRoiWithValidationAsync()
+        {
+            var roi = SelectedInspectionRoi;
+            if (roi == null)
+            {
+                ShowDatasetInsufficientMessage("Seleccione un ROI de inspección.");
+                return;
+            }
+
+            if (!HasEnoughTrainingDataset(roi))
+            {
+                var missingOk = MissingOkForTraining(roi);
+                ShowDatasetInsufficientMessage($"Dataset insuficiente. Añada {missingOk} imagen(es) OK antes de entrenar.");
+                UpdateDatasetReadiness(roi);
+                RaiseDatasetCommandCanExecuteChanged();
+                return;
+            }
+
+            await TrainSelectedRoiAsync().ConfigureAwait(false);
+        }
+
         private static bool IsAlreadyTrainedError(HttpRequestException ex)
         {
             if (ex == null || string.IsNullOrWhiteSpace(ex.Message))
@@ -4460,6 +4531,43 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 _hideBusyDialog?.Invoke();
             }
+        }
+
+        private async Task CalibrateSelectedRoiWithValidationAsync()
+        {
+            var roi = SelectedInspectionRoi;
+            if (roi == null)
+            {
+                ShowDatasetInsufficientMessage("Seleccione un ROI de inspección.");
+                return;
+            }
+
+            if (!HasEnoughCalibrationDataset(roi))
+            {
+                var missingOk = MissingOkForCalibration(roi);
+                var missingNg = MissingNgForCalibration(roi);
+                string message;
+
+                if (missingOk > 0 && missingNg > 0)
+                {
+                    message = $"Dataset insuficiente. Añada {missingOk} imagen(es) OK y {missingNg} imagen(es) NG antes de calibrar.";
+                }
+                else if (missingOk > 0)
+                {
+                    message = $"Dataset insuficiente. Añada {missingOk} imagen(es) OK antes de calibrar.";
+                }
+                else
+                {
+                    message = $"Dataset insuficiente. Añada {missingNg} imagen(es) NG antes de calibrar.";
+                }
+
+                ShowDatasetInsufficientMessage(message);
+                UpdateDatasetReadiness(roi);
+                RaiseDatasetCommandCanExecuteChanged();
+                return;
+            }
+
+            await CalibrateSelectedRoiAsync().ConfigureAwait(false);
         }
 
         public void ResetModelStates()
@@ -7292,6 +7400,26 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
 
             InvokeOnUi(() => _showSnackbar?.Invoke(message));
+        }
+
+        private void ShowDatasetInsufficientMessage(string message)
+        {
+            GuiLog.Warn($"[dataset-ui] {message}");
+
+            if (_showSnackbar != null)
+            {
+                InvokeOnUi(() => _showSnackbar(message));
+                return;
+            }
+
+            InvokeOnUi(() =>
+            {
+                MessageBox.Show(
+                    message,
+                    "Dataset insuficiente",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            });
         }
 
         private void UpdateInferenceSummary()

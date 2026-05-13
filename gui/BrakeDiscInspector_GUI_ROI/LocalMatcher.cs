@@ -151,7 +151,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
             double margin = safeBest - safeSecond;
-            Log(log, $"[PATTERN][TM] role={roleTag} mode=tm_rot search={imageGray.Width}x{imageGray.Height} pattern={patternGray.Width}x{patternGray.Height} candidates={candidates.Count} best={safeBest:F4} second={safeSecond:F4} margin={margin:F4} score={ToScore(best)} angle={bestAngle:F3} scale={bestScale:F3} loc=({bestLoc.X},{bestLoc.Y}) center=({bestPoint?.X:F3},{bestPoint?.Y:F3})");
             return (bestPoint, ToScore(best), failure, safeBest, safeSecond, margin, bestScale, bestAngle, bestLoc, candidates.Count);
         }
 
@@ -291,7 +290,6 @@ namespace BrakeDiscInspector_GUI_ROI
             Log(log,
                 $"[FEATURE] inliers={inliers}/{good.Length} " +
                 $"avgDist={avgDist:F1} score={score} rot≈{rotDegApprox:F1}deg");
-            Log(log, $"[PATTERN][FEATURE] role={roleTag} kpsImg={imgKp.Length} kpsPat={patKp.Length} good={good.Length} inliers={inliers} avgDist={avgDist:F1} score={score}");
             return (new Point2d(cx, cy), score, null, imgKp.Length, patKp.Length, good.Length, inliers, avgDist, rotDegApprox);
         }
 
@@ -490,7 +488,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
                         var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log, roleTag);
 
-                        if (tm.center is null || tm.score < threshold)
+                        bool acceptedByThreshold = tm.center is not null && tm.score >= threshold;
+                        Log(log, $"[PATTERN][EDGES] role={roleTag} requested=edges used=edges nzSearch={nzSearch} nzPattern={nzPattern} best={tm.bestCorr:F4} second={tm.secondBestCorr:F4} margin={tm.corrMargin:F4} score={tm.score} threshold={threshold} acceptedByThreshold={acceptedByThreshold}");
+                        if (!acceptedByThreshold)
                         {
                             Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
                             return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "edges", Failure = tm.failure, BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg, AcceptedByThreshold = false, SearchWidth = searchRect.Width, SearchHeight = searchRect.Height, PatternWidth = patternGray.Width, PatternHeight = patternGray.Height, TemplateScore = tm.score };
@@ -511,7 +511,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     {
                         var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag);
 
-                        if (tm.center is null || tm.score < threshold)
+                        bool acceptedByThreshold = tm.center is not null && tm.score >= threshold;
+                        Log(log, $"[PATTERN][TM] role={roleTag} requested=tm_rot used=tm_rot search={searchRect.Width}x{searchRect.Height} pattern={patternGray.Width}x{patternGray.Height} candidates={tm.candidatesEvaluated} best={tm.bestCorr:F4} second={tm.secondBestCorr:F4} margin={tm.corrMargin:F4} score={tm.score} threshold={threshold} angle={tm.bestAngleDeg:F3} scale={tm.bestScale:F3} center=({(tm.center?.X):F3},{(tm.center?.Y):F3}) acceptedByThreshold={acceptedByThreshold}");
+                        if (!acceptedByThreshold)
                         {
                             Log(log, $"[TM] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
                             return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "tm_rot", Failure = tm.failure, BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg, AcceptedByThreshold = false, SearchWidth = searchRect.Width, SearchHeight = searchRect.Height, PatternWidth = patternGray.Width, PatternHeight = patternGray.Height, TemplateScore = tm.score };
@@ -526,18 +528,22 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     // 1) FEATURES
                     var feat = MatchFeatures(searchGray, patternGray, log, roleTag);
+                    bool featureAcceptedByThreshold = feat.center is not null && feat.score >= threshold;
+                    Log(log, $"[PATTERN][FEATURE] role={roleTag} requested={mode} used=features kpsImg={feat.imgKps} kpsPat={feat.patKps} good={feat.goodCount} inliers={feat.inliers} avgDist={feat.avgDist:F1} score={feat.score} threshold={threshold} acceptedByThreshold={featureAcceptedByThreshold} failure={feat.failure ?? "<none>"}");
 
                     // 2) AUTO: fallback a TM si fallan features
                     if (mode == "auto" && (feat.center is null || feat.score < threshold))
                     {
                         var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag);
-                        Log(log, $"[PATTERN][AUTO] role={roleTag} requested=auto used=tm_fallback fallback=True causeFeat={feat.failure ?? "<none>"} featScore={feat.score} tmScore={tm.score} threshold={threshold}");
+                        bool tmAcceptedByThreshold = tm.center is not null && tm.score >= threshold;
+                        Log(log, $"[PATTERN][AUTO] role={roleTag} requested=auto used=tm_fallback fallback=True causeFeat={feat.failure ?? "<none>"} featScore={feat.score} tmScore={tm.score} threshold={threshold} acceptedByThreshold={tmAcceptedByThreshold}");
 
                         if (tm.center is null || tm.score < threshold)
                         {
                             Log(log, $"[RESULT] no-hit scoreFeat={feat.score} scoreTM={tm.score} (<{threshold}) causeFeat={feat.failure} causeTM={tm.failure}");
                             var maxScore = Math.Max(feat.score, tm.score);
                             var angleDeg = tm.score >= feat.score ? tm.bestAngleDeg : feat.rotDegApprox;
+                            Log(log, $"[PATTERN][NOHIT] role={roleTag} requested=auto used=auto_fail score={maxScore} threshold={threshold} failure='feat={feat.failure};tm={tm.failure}'");
                             return new LocalMatchResult { Center = null, Score = maxScore, AngleDeg = angleDeg, UsedFeatures = tm.score < feat.score, ModeRequested = mode, ModeUsed = "auto_fail", UsedFallback = true, Failure = $"feat={feat.failure};tm={tm.failure}", BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg, ImageKeypoints = feat.imgKps, PatternKeypoints = feat.patKps, GoodMatches = feat.goodCount, Inliers = feat.inliers, AvgDistance = feat.avgDist, FeatureScore = feat.score, TemplateScore = tm.score, AcceptedByThreshold = false, SearchWidth = searchRect.Width, SearchHeight = searchRect.Height, PatternWidth = patternGray.Width, PatternHeight = patternGray.Height };
                         }
 
@@ -559,7 +565,8 @@ namespace BrakeDiscInspector_GUI_ROI
                     Log(log,
                         FormattableString.Invariant(
                             $"[RESULT] HIT (FEATURES) center=({global.X:F1},{global.Y:F1}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount, 1)}"));
-                    Log(log, $"[PATTERN][AUTO] role={roleTag} requested={mode} used=features fallback=False featScore={feat.score} threshold={threshold} good={feat.goodCount} inliers={feat.inliers}");
+                    if (mode == "auto")
+                        Log(log, $"[PATTERN][AUTO] role={roleTag} requested=auto used=features fallback=False featScore={feat.score} threshold={threshold} good={feat.goodCount} inliers={feat.inliers} acceptedByThreshold=True");
                     return new LocalMatchResult { Center = global, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true, ModeRequested = mode, ModeUsed = "features", ImageKeypoints = feat.imgKps, PatternKeypoints = feat.patKps, GoodMatches = feat.goodCount, Inliers = feat.inliers, AvgDistance = feat.avgDist, FeatureScore = feat.score, AcceptedByThreshold = true, SearchWidth = searchRect.Width, SearchHeight = searchRect.Height, PatternWidth = patternGray.Width, PatternHeight = patternGray.Height };
                 }
                 finally

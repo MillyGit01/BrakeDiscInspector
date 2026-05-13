@@ -2096,7 +2096,7 @@ namespace BrakeDiscInspector_GUI_ROI
             bool scaleInRange = !double.IsNaN(rawScale) && rawScale >= scaleRange.Item1 && rawScale <= scaleRange.Item2;
             bool angleInTol = !double.IsNaN(dAng) && angTol > 0 && dAng <= angTol;
             bool posInTol = !double.IsNaN(dM1) && !double.IsNaN(dM2) && posTol > 0 && dM1 <= posTol && dM2 <= posTol;
-            InspLog($"[PATTERN][GEOM] image='{Path.GetFileName(_currentImagePathWin ?? string.Empty)}' distBase={baselineDist:F3} distDet={detectedDist:F3} rawScale={rawScale:F4} scaleMin={scaleRange.Item1:F2} scaleMax={scaleRange.Item2:F2} scaleInRange={scaleInRange} angleDelta={dAng:F3} angTol={angTol:F3} angleInTol={angleInTol} dM1={dM1:F3} dM2={dM2:F3} posTol={posTol:F3} posInTol={posInTol} hasLast={hasLast} accepted={accept} reason='{reason}'");
+            InspLog($"[PATTERN][GEOM] image='{Path.GetFileName(_currentImagePathWin ?? string.Empty)}' distBase={baselineDist:F3} distDet={detectedDist:F3} rawScale={rawScale:F4} scaleMin={scaleRange.Item1:F2} scaleMax={scaleRange.Item2:F2} scaleInRange={scaleInRange} angleDelta={dAng:F3} angTolDeg={angTol:F3} angleInTol={angleInTol} dM1={dM1:F3} dM2={dM2:F3} posTolPx={posTol:F3} posInTol={posInTol} hasLast={hasLast} acceptedFinal={accept} reason='{reason}'");
             if (accept)
             {
                 bool outsideTol = (!double.IsNaN(dM1) && posTol > 0 && dM1 > posTol)
@@ -11194,6 +11194,7 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog(
                 $"[ANALYZE_MASTER][START] key='{analyzeImageKey}' keyDetail='{_lastImageKeyDetail}' posTol={posTolForLog:0.###} angTol={angTolForLog:0.###} " +
                 $"minScore=({effectiveAnalyze.ThrM1},{effectiveAnalyze.ThrM2}) scaleLock={effectiveAnalyze.ScaleLock} lockRotation={effectiveAnalyze.DisableRot} useLocalMatcher={useLocalMatcher}");
+            LogToFileAndUI($"[PATTERN][CONFIG] image='{analyzeFileName}' layout='{GetCurrentLayoutName()}' featureM1='{effectiveAnalyze.FeatureM1}' thrM1={effectiveAnalyze.ThrM1} featureM2='{effectiveAnalyze.FeatureM2}' thrM2={effectiveAnalyze.ThrM2} rotRange={effectiveAnalyze.RotRange} scaleMin={effectiveAnalyze.ScaleMin:F2} scaleMax={effectiveAnalyze.ScaleMax:F2} posTolPx={effectiveAnalyze.PosTolPx:F3} angTolDeg={effectiveAnalyze.AngTolDeg:F3} scaleLock={effectiveAnalyze.ScaleLock} disableRot={effectiveAnalyze.DisableRot}");
 
             ViewModel?.TraceManual($"[manual-master] analyze file='{Path.GetFileName(ViewModel?.CurrentManualImagePath ?? string.Empty)}'");
 
@@ -11256,6 +11257,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 double score2 = 0;
                 double angle1 = double.NaN;
                 double angle2 = double.NaN;
+                LocalMatcher.LocalMatchResult? m1Detail = null;
+                LocalMatcher.LocalMatchResult? m2Detail = null;
                 long loadMsLocal = 0;
                 long matchMsLocal = 0;
                 bool disableLocal = false;
@@ -11277,11 +11280,17 @@ namespace BrakeDiscInspector_GUI_ROI
                             m2Override = _masterTemplateM2.Clone();
 
                         var matchSw = Stopwatch.StartNew();
+                        Action<string> patternLog = msg =>
+                        {
+                            try { VisConfLog.AnalyzeMaster(FormattableStringFactory.Create("{0}", msg)); } catch { }
+                            try { GuiLog.Info(msg); } catch { }
+                        };
+
                         var res1 = LocalMatcher.MatchInSearchROIWithDetails(img, localM1Pattern, localM1Search,
                             localAnalyze.FeatureM1, localAnalyze.ThrM1, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m1Override,
-                            LogToFileAndUI, "M1");
-                        LogToFileAndUI($"[PATTERN][SUMMARY] role=M1 requested={res1.ModeRequested} used={res1.ModeUsed} fallback={res1.UsedFallback} score={res1.Score} thr={localAnalyze.ThrM1} acceptedByThreshold={res1.AcceptedByThreshold} center=({res1.Center?.X:F3},{res1.Center?.Y:F3}) angle={res1.AngleDeg:F3} scale={res1.BestScale:F3} bestCorr={res1.BestCorr:F3} secondCorr={res1.SecondBestCorr:F3} margin={res1.CorrMargin:F3} search={res1.SearchWidth}x{res1.SearchHeight} pattern={res1.PatternWidth}x{res1.PatternHeight}");
-                        if (localAnalyze.ThrM1 < 70) LogToFileAndUI($"[PATTERN][WARN] low threshold role=M1 threshold={localAnalyze.ThrM1} score={res1.Score} mode={res1.ModeUsed} risk='false-positive'");
+                            patternLog, "M1");
+                        m1Detail = res1;
+                        if (localAnalyze.ThrM1 < 70) LogToFileAndUI($"[PATTERN][WARN] low threshold role=M1 threshold={localAnalyze.ThrM1} score={res1.Score} requested={res1.ModeRequested} used={res1.ModeUsed} risk='false-positive'");
                         if (res1.Center.HasValue)
                         {
                             m1 = new SWPoint(res1.Center.Value.X, res1.Center.Value.Y);
@@ -11296,8 +11305,9 @@ namespace BrakeDiscInspector_GUI_ROI
 
                         var res2 = LocalMatcher.MatchInSearchROIWithDetails(img, localM2Pattern, localM2Search,
                             localAnalyze.FeatureM2, localAnalyze.ThrM2, localAnalyze.RotRange, localAnalyze.ScaleMin, localAnalyze.ScaleMax, m2Override,
-                            LogToFileAndUI, "M2");
-                        LogToFileAndUI($"[PATTERN][SUMMARY] role=M2 requested={res2.ModeRequested} used={res2.ModeUsed} fallback={res2.UsedFallback} score={res2.Score} thr={localAnalyze.ThrM2} acceptedByThreshold={res2.AcceptedByThreshold} center=({res2.Center?.X:F3},{res2.Center?.Y:F3}) angle={res2.AngleDeg:F3} scale={res2.BestScale:F3} bestCorr={res2.BestCorr:F3} secondCorr={res2.SecondBestCorr:F3} margin={res2.CorrMargin:F3} kpsImg={res2.ImageKeypoints} kpsPat={res2.PatternKeypoints} good={res2.GoodMatches} inliers={res2.Inliers} avgDist={res2.AvgDistance:F1} search={res2.SearchWidth}x{res2.SearchHeight} pattern={res2.PatternWidth}x{res2.PatternHeight}");
+                            patternLog, "M2");
+                        m2Detail = res2;
+                        if (localAnalyze.ThrM2 < 70) LogToFileAndUI($"[PATTERN][WARN] low threshold role=M2 threshold={localAnalyze.ThrM2} score={res2.Score} requested={res2.ModeRequested} used={res2.ModeUsed} risk='false-positive'");
                         matchSw.Stop();
                         matchMsLocal = matchSw.ElapsedMilliseconds;
                         if (res2.Center.HasValue)
@@ -11328,7 +11338,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     logs.Add($"[local matcher] ERROR: {ex.Message}");
                 }
 
-                return (m1: m1, m2: m2, score1: score1, score2: score2, angle1: angle1, angle2: angle2, loadMs: loadMsLocal, matchMs: matchMsLocal, logs: logs, disableLocal: disableLocal);
+                return (m1: m1, m2: m2, score1: score1, score2: score2, angle1: angle1, angle2: angle2, m1Detail: m1Detail, m2Detail: m2Detail, loadMs: loadMsLocal, matchMs: matchMsLocal, logs: logs, disableLocal: disableLocal);
             });
 
             foreach (var log in localResult.logs)
@@ -11369,6 +11379,27 @@ namespace BrakeDiscInspector_GUI_ROI
                 c2 = localResult.m2;
                 s2 = localResult.score2;
                 a2 = localResult.angle2;
+            }
+            if (localResult.m1Detail != null)
+            {
+                LogPatternSummary("M1", localResult.m1Detail.ModeRequested, localAnalyze.ThrM1, localResult.m1Detail, localResult.m1.HasValue);
+            }
+            if (localResult.m2Detail != null)
+            {
+                LogPatternSummary("M2", localResult.m2Detail.ModeRequested, localAnalyze.ThrM2, localResult.m2Detail, localResult.m2.HasValue);
+                if (string.Equals(localAnalyze.FeatureM2, "auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cause = localResult.m2Detail.Failure ?? string.Empty;
+                    var causeFeat = cause.Contains("feat=") ? cause.Split(';').FirstOrDefault(x => x.StartsWith("feat="))?.Substring(5) : localResult.m2Detail.Failure;
+                    var causeTm = cause.Contains("tm=") ? cause.Split(';').FirstOrDefault(x => x.StartsWith("tm="))?.Substring(3) : string.Empty;
+                    var decision = localResult.m2Detail.ModeUsed switch
+                    {
+                        "features" => "features accepted",
+                        "tm_fallback" => "features rejected, template fallback accepted",
+                        _ => "both rejected"
+                    };
+                    LogToFileAndUI($"[PATTERN][M2_AUTO_DECISION] requested=auto used={localResult.m2Detail.ModeUsed} fallback={localResult.m2Detail.UsedFallback} featureScore={localResult.m2Detail.FeatureScore:F0} templateScore={localResult.m2Detail.TemplateScore:F0} threshold={localAnalyze.ThrM2} decision='{decision}' causeFeat='{(string.IsNullOrWhiteSpace(causeFeat) ? "<none>" : causeFeat)}' causeTm='{(string.IsNullOrWhiteSpace(causeTm) ? "<none>" : causeTm)}'");
+                }
             }
 
             loadMs = localResult.loadMs;
@@ -11730,6 +11761,15 @@ namespace BrakeDiscInspector_GUI_ROI
             var stamped = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
             Debug.WriteLine(stamped);
 #endif
+        }
+
+        private static string FormatCenter(OpenCvSharp.Point2d? center)
+            => center.HasValue ? $"({center.Value.X:F3},{center.Value.Y:F3})" : "(null,null)";
+
+        private void LogPatternSummary(string role, string requested, int threshold, LocalMatcher.LocalMatchResult result, bool acceptedFinal)
+        {
+            var failure = string.IsNullOrWhiteSpace(result.Failure) ? "<none>" : result.Failure;
+            LogToFileAndUI($"[PATTERN][SUMMARY] role={role} requested={requested} used={result.ModeUsed} fallback={result.UsedFallback} usedFeatures={result.UsedFeatures} score={result.Score} thr={threshold} acceptedByThreshold={result.AcceptedByThreshold} acceptedFinal={acceptedFinal} center={FormatCenter(result.Center)} angle={result.AngleDeg:F3} bestAngle={result.BestAngleDeg:F3} scale={result.BestScale:F3} bestCorr={result.BestCorr:F4} secondCorr={result.SecondBestCorr:F4} margin={result.CorrMargin:F4} featureScore={result.FeatureScore:F0} templateScore={result.TemplateScore:F0} kpsImg={result.ImageKeypoints} kpsPat={result.PatternKeypoints} good={result.GoodMatches} inliers={result.Inliers} avgDist={result.AvgDistance:F3} search={result.SearchWidth}x{result.SearchHeight} pattern={result.PatternWidth}x{result.PatternHeight} failure='{failure}'");
         }
 
         private void AppendLogLine(string line)

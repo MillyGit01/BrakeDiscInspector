@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import inspect
 import logging
+import os
 import threading
 from contextlib import nullcontext
 from typing import Any, Iterable, Optional, Tuple, Union, cast
@@ -46,6 +47,7 @@ class DinoV2Features:
         pool: str = "none",                     # "none" | "mean"
         dynamic_input: bool = False,            # False => fuerza tamaño fijo; True => acepta HxW múltiplos de patch
         patch_size: Optional[int] = None,       # si se pasa, fuerza el valor de patch
+        pretrained: bool = True,
         **_,
     ) -> None:
         self.model_name = model_name
@@ -87,7 +89,28 @@ class DinoV2Features:
         self.pool = pool
 
         # --- modelo ---
-        self.model: nn.Module = timm.create_model(self.model_name, pretrained=True)
+        self.pretrained = bool(pretrained)
+        try:
+            self.model: nn.Module = timm.create_model(self.model_name, pretrained=self.pretrained)
+        except Exception as exc:
+            hf_home = os.environ.get("HF_HOME", "<not set>")
+            hf_hub_cache = os.environ.get("HUGGINGFACE_HUB_CACHE", "<not set>")
+            default_hf_cache = os.path.expanduser("~/.cache/huggingface/hub")
+            expected_url = (
+                f"https://huggingface.co/timm/{self.model_name}/resolve/main/model.safetensors"
+            )
+            raise RuntimeError(
+                "Failed to load feature extractor model via timm.create_model. "
+                f"model='{self.model_name}', pretrained={self.pretrained}. "
+                "This can happen when model weights are not cached and internet is unavailable. "
+                f"Expected Hugging Face model URL: {expected_url}. "
+                "Hugging Face cache locations: "
+                f"HF_HOME={hf_home}, "
+                f"HUGGINGFACE_HUB_CACHE={hf_hub_cache}, "
+                f"default={default_hf_cache}. "
+                "To pre-cache weights, run: "
+                "python -c \"import timm; timm.create_model('vit_small_patch14_dinov2.lvd142m', pretrained=True)\""
+            ) from exc
         self.model.eval().to(self.device)
 
         # patch size

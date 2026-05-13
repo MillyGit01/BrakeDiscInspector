@@ -81,3 +81,37 @@ See `docs/API_CONTRACTS.md` for exact request/response schemas.
 
 ## Logging
 The backend uses **structured JSONL diagnostics** (not stdout-only). See `LOGGING.md` for log locations and fields.
+
+## DINOv2 weights, cache, and offline startup
+
+On first execution, the backend may need to download DINOv2 weights from Hugging Face through `timm` (for the default model `vit_small_patch14_dinov2.lvd142m`). If weights are not already cached and the host has no internet access, backend startup can fail.
+
+### Feature extractor environment variables
+- `BDI_FEATURE_MODEL_NAME` (default: `vit_small_patch14_dinov2.lvd142m`)
+- `BDI_FEATURE_INPUT_SIZE` (default: `448`)
+- `BDI_FEATURE_PATCH_SIZE` (default: `14`)
+- `BDI_FEATURE_PRETRAINED` (default: `1`)
+
+> `BDI_FEATURE_PRETRAINED=0` is supported only for testing/debugging. It is **not** recommended in production because untrained/random embeddings can break anomaly detection quality.
+
+### Pre-cache model weights
+Run this once in an online environment:
+
+```bash
+python -c "import timm; timm.create_model('vit_small_patch14_dinov2.lvd142m', pretrained=True)"
+```
+
+### Run offline once cached
+If weights are already cached, you can force offline mode:
+
+```bash
+HF_HUB_OFFLINE=1 uvicorn backend.app:app --host 0.0.0.0 --port 8000
+```
+
+### Hugging Face cache locations
+You can control cache paths with:
+- `HF_HOME`
+- `HUGGINGFACE_HUB_CACHE`
+
+Default hub cache path is typically:
+- `~/.cache/huggingface/hub`

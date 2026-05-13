@@ -95,6 +95,23 @@ def _env_str(name: str, default: str, legacy_names: Sequence[str] = ()) -> str:
         v = default
     return v
 
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 app = FastAPI(title="Anomaly Backend (PatchCore + DINOv2)")
 
 # --- CORS (solo afecta a clientes web / navegador) ---
@@ -591,12 +608,35 @@ if torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
 
 # Carga única del extractor (congelado)
+_FEATURE_MODEL_NAME = _env_str("BDI_FEATURE_MODEL_NAME", default="vit_small_patch14_dinov2.lvd142m")
+_FEATURE_INPUT_SIZE = _env_int("BDI_FEATURE_INPUT_SIZE", 448)
+_FEATURE_PATCH_SIZE = _env_int("BDI_FEATURE_PATCH_SIZE", 14)
+_FEATURE_PRETRAINED = _env_bool("BDI_FEATURE_PRETRAINED", True)
+_FEATURE_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+log.info(
+    "[startup] loading feature extractor model=%s pretrained=%s device=%s input_size=%s patch_size=%s",
+    _FEATURE_MODEL_NAME,
+    _FEATURE_PRETRAINED,
+    _FEATURE_DEVICE,
+    _FEATURE_INPUT_SIZE,
+    _FEATURE_PATCH_SIZE,
+)
+
 _extractor = DinoV2Features(
-    model_name="vit_small_patch14_dinov2.lvd142m",
-    device="cuda" if torch.cuda.is_available() else "cpu",
+    model_name=_FEATURE_MODEL_NAME,
+    pretrained=_FEATURE_PRETRAINED,
+    device=_FEATURE_DEVICE,
     half=torch.cuda.is_available(),
-    input_size=448,   # múltiplo de 14; si envías 384, el extractor reescala internamente
-    patch_size=14
+    input_size=_FEATURE_INPUT_SIZE,
+    patch_size=_FEATURE_PATCH_SIZE,
+)
+
+log.info(
+    "[startup] feature extractor loaded model=%s device=%s patch_size=%s",
+    _extractor.model_name,
+    _extractor.device,
+    _extractor.patch,
 )
 
 
@@ -635,7 +675,7 @@ def _get_faiss_gpu_resources(device_id: int):
     return res
 
 
-def _env_int(name: str, default: int) -> int:
+
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return int(default)

@@ -13,6 +13,20 @@ namespace BrakeDiscInspector_GUI_ROI
             public int Score { get; init; }
             public double AngleDeg { get; init; }
             public bool UsedFeatures { get; init; }
+            public string ModeRequested { get; init; } = string.Empty;
+            public string ModeUsed { get; init; } = string.Empty;
+            public bool UsedFallback { get; init; }
+            public string? Failure { get; init; }
+            public double BestCorr { get; init; }
+            public double SecondBestCorr { get; init; }
+            public double CorrMargin { get; init; }
+            public double BestScale { get; init; }
+            public double BestAngleDeg { get; init; }
+            public int ImgKeypoints { get; init; }
+            public int PatternKeypoints { get; init; }
+            public int GoodMatches { get; init; }
+            public int Inliers { get; init; }
+            public double AvgDistance { get; init; }
         }
 
         private static void Log(Action<string>? log, string message) => log?.Invoke(message);
@@ -61,8 +75,8 @@ namespace BrakeDiscInspector_GUI_ROI
             return dst;
         }
 
-        private static (Point2d? center, int score, string? failure, double bestCorr, double bestAngleDeg) MatchTemplateRot(
-            Mat imageGray, Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax, Action<string>? log)
+        private static (Point2d? center, int score, string? failure, double bestCorr, double secondBestCorr, double corrMargin, double bestScale, double bestAngleDeg) MatchTemplateRot(
+            Mat imageGray, Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax, Action<string>? log, string roleTag)
         {
             if (imageGray.Empty() || patternGray.Empty())
                 return (null, 0, "imgs vacías", 0, 0);
@@ -70,6 +84,8 @@ namespace BrakeDiscInspector_GUI_ROI
             double best = -1.0;
             Point2d? bestPoint = null;
             double bestAngle = 0.0;
+            double secondBest = -1.0;
+            double bestScale = 1.0;
 
             var minScale = Math.Min(scaleMin, scaleMax);
             var maxScale = Math.Max(scaleMin, scaleMax);
@@ -96,19 +112,29 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     if (maxVal > best)
                     {
+                        secondBest = best;
                         best = maxVal;
                         bestPoint = new Point2d(maxLoc.X + rotated.Width / 2.0, maxLoc.Y + rotated.Height / 2.0);
                         bestAngle = angle;
+                        bestScale = scale;
+                    }
+                    else if (maxVal > secondBest)
+                    {
+                        secondBest = maxVal;
                     }
                 }
             }
 
             string? failure = bestPoint == null ? "sin correlación" : $"maxCorr={Math.Max(best, 0):F4}";
-            return (bestPoint, ToScore(best), failure, best, bestAngle);
+            double safeBest = Math.Max(best, 0);
+            double safeSecond = Math.Max(secondBest, 0);
+            double margin = safeBest - safeSecond;
+            Log(log, $"[PATTERN][TM] role={roleTag} angle={bestAngle:F2} scale={bestScale:F4} best={safeBest:F4} second={safeSecond:F4} margin={margin:F4} score={ToScore(best)}");
+            return (bestPoint, ToScore(best), failure, safeBest, safeSecond, margin, bestScale, bestAngle);
         }
 
         private static (Point2d? center, int score, string? failure, int imgKps, int patKps, int goodCount, int inliers, double avgDist, double rotDegApprox) MatchFeatures(
-            Mat imageGrayIn, Mat patternGrayIn, Action<string>? log)
+            Mat imageGrayIn, Mat patternGrayIn, Action<string>? log, string roleTag)
         {
             // Trabajar sobre clones: NUNCA liberar ni reasignar Mats del caller
             using var imageGray = imageGrayIn.Clone();
@@ -243,6 +269,7 @@ namespace BrakeDiscInspector_GUI_ROI
             Log(log,
                 $"[FEATURE] inliers={inliers}/{good.Length} " +
                 $"avgDist={avgDist:F1} score={score} rot≈{rotDegApprox:F1}deg");
+            Log(log, $"[PATTERN][FEATURE] role={roleTag} kpsImg={imgKp.Length} kpsPat={patKp.Length} good={good.Length} inliers={inliers} avgDist={avgDist:F1} score={score}");
             return (new Point2d(cx, cy), score, null, imgKp.Length, patKp.Length, good.Length, inliers, avgDist, rotDegApprox);
         }
 
@@ -412,6 +439,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
 
                     Log(log, $"[INPUT] feature={feature} thr={threshold} search={searchRect.Width}x{searchRect.Height} pattern={patternGray.Width}x{patternGray.Height}");
+                    string roleTag = patternRoi?.Role == RoiRole.Master2Pattern ? "M2" : "M1";
 
                     var mode = (feature ?? "").Trim().ToLowerInvariant();
 
@@ -434,12 +462,12 @@ namespace BrakeDiscInspector_GUI_ROI
                         Log(log, $"[EDGES] nz(search,pattern)=({nzSearch},{nzPattern}) thr={threshold}");
                         Log(log, "[EDGES] using Canny + MatchTemplateRot");
 
-                        var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log);
+                        var tm = MatchTemplateRot(searchEdges, patternEdges, rotRange, scaleMin, scaleMax, log, roleTag);
 
                         if (tm.center is null || tm.score < threshold)
                         {
                             Log(log, $"[EDGES] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
-                            return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                            return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "edges", Failure = tm.failure, BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg };
                         }
 
                         var globalEdges = new Point2d(
@@ -450,62 +478,62 @@ namespace BrakeDiscInspector_GUI_ROI
                             FormattableString.Invariant(
                                 $"[EDGES] HIT center=({globalEdges.X:F1},{globalEdges.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
 
-                        return new LocalMatchResult { Center = globalEdges, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        return new LocalMatchResult { Center = globalEdges, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "edges", BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg };
                     }
 
                     if (mode == "tm_rot")
                     {
-                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
+                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag);
 
                         if (tm.center is null || tm.score < threshold)
                         {
                             Log(log, $"[TM] no-hit score={tm.score} (<{threshold}) corr={tm.bestCorr:F3} cause={tm.failure}");
-                            return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                            return new LocalMatchResult { Center = null, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "tm_rot", Failure = tm.failure, BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg };
                         }
 
                         var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
                         Log(log,
                             FormattableString.Invariant(
                                 $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
-                        return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "tm_rot", BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg };
                     }
 
                     // 1) FEATURES
-                    var feat = MatchFeatures(searchGray, patternGray, log);
+                    var feat = MatchFeatures(searchGray, patternGray, log, roleTag);
 
                     // 2) AUTO: fallback a TM si fallan features
                     if (mode == "auto" && (feat.center is null || feat.score < threshold))
                     {
-                        Log(log, $"[AUTO] fallback TM: causeFeat={feat.failure} kpsImg={feat.imgKps} kpsPat={feat.patKps} good={feat.goodCount} inliers={feat.inliers} avgDist={feat.avgDist:F1}");
-                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log);
+                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag);
+                        Log(log, $"[PATTERN][AUTO] role={roleTag} fallback=True causeFeat={feat.failure} featScore={feat.score} tmScore={tm.score}");
 
                         if (tm.center is null || tm.score < threshold)
                         {
                             Log(log, $"[RESULT] no-hit scoreFeat={feat.score} scoreTM={tm.score} (<{threshold}) causeFeat={feat.failure} causeTM={tm.failure}");
                             var maxScore = Math.Max(feat.score, tm.score);
                             var angleDeg = tm.score >= feat.score ? tm.bestAngleDeg : feat.rotDegApprox;
-                            return new LocalMatchResult { Center = null, Score = maxScore, AngleDeg = angleDeg, UsedFeatures = tm.score < feat.score };
+                            return new LocalMatchResult { Center = null, Score = maxScore, AngleDeg = angleDeg, UsedFeatures = tm.score < feat.score, ModeRequested = mode, ModeUsed = "auto_fail", UsedFallback = true, Failure = $"feat={feat.failure};tm={tm.failure}", BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg, ImgKeypoints = feat.imgKps, PatternKeypoints = feat.patKps, GoodMatches = feat.goodCount, Inliers = feat.inliers, AvgDistance = feat.avgDist };
                         }
 
                         var globalTM = new Point2d(searchRect.X + tm.center.Value.X, searchRect.Y + tm.center.Value.Y);
                         Log(log,
                             FormattableString.Invariant(
                                 $"[RESULT] HIT (TM) center=({globalTM.X:F1},{globalTM.Y:F1}) score={tm.score} corr={tm.bestCorr:F3}"));
-                        return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false };
+                        return new LocalMatchResult { Center = globalTM, Score = tm.score, AngleDeg = tm.bestAngleDeg, UsedFeatures = false, ModeRequested = mode, ModeUsed = "tm_fallback", UsedFallback = true, BestCorr = tm.bestCorr, SecondBestCorr = tm.secondBestCorr, CorrMargin = tm.corrMargin, BestScale = tm.bestScale, BestAngleDeg = tm.bestAngleDeg, ImgKeypoints = feat.imgKps, PatternKeypoints = feat.patKps, GoodMatches = feat.goodCount, Inliers = feat.inliers, AvgDistance = feat.avgDist };
                     }
 
                     if (feat.center is null || feat.score < threshold)
                     {
                         var reason = feat.failure ?? (feat.center is null ? "sin coincidencias" : $"score={feat.score}");
                         Log(log, $"[RESULT] no-hit score={feat.score} (<{threshold}) cause={reason}");
-                        return new LocalMatchResult { Center = null, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
+                        return new LocalMatchResult { Center = null, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true, ModeRequested = mode, ModeUsed = mode == "auto" ? "features" : "features", Failure = reason, ImgKeypoints = feat.imgKps, PatternKeypoints = feat.patKps, GoodMatches = feat.goodCount, Inliers = feat.inliers, AvgDistance = feat.avgDist };
                     }
 
                     var global = new Point2d(searchRect.X + feat.center.Value.X, searchRect.Y + feat.center.Value.Y);
                     Log(log,
                         FormattableString.Invariant(
                             $"[RESULT] HIT (FEATURES) center=({global.X:F1},{global.Y:F1}) score={feat.score} inliers={feat.inliers}/{Math.Max(feat.goodCount, 1)}"));
-                    return new LocalMatchResult { Center = global, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true };
+                    return new LocalMatchResult { Center = global, Score = feat.score, AngleDeg = feat.rotDegApprox, UsedFeatures = true, ModeRequested = mode, ModeUsed = "features", ImgKeypoints = feat.imgKps, PatternKeypoints = feat.patKps, GoodMatches = feat.goodCount, Inliers = feat.inliers, AvgDistance = feat.avgDist };
                 }
                 finally
                 {

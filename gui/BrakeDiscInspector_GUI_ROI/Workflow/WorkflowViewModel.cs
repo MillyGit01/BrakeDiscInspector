@@ -148,6 +148,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         public Point2d? Center { get; set; }
         public double AngleDeg { get; set; }
         public int Score { get; set; }
+        public LocalMatcher.LocalMatchResult? MatchResult { get; set; }
+        public string ModeRequested => MatchResult?.ModeRequested ?? string.Empty;
+        public string ModeUsed => MatchResult?.ModeUsed ?? string.Empty;
+        public bool UsedFallback => MatchResult?.UsedFallback ?? false;
         public bool IsOk => Center.HasValue;
     }
 
@@ -770,6 +774,84 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var thrM1 = GetBatchThrM1();
             var thrM2 = GetBatchThrM2();
             return _batchAnchorM1Score >= thrM1 && _batchAnchorM2Score >= thrM2;
+        }
+
+        private void PatternLog(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            try { _log(message); } catch { }
+            try { GuiLog.Info(message); } catch { }
+            try { VisConfLog.AnalyzeMaster(FormattableStringFactory.Create("{0}", message)); } catch { }
+        }
+
+        private static string PatternBool(bool value) => value ? "True" : "False";
+
+        private static string PatternFailure(string? failure) =>
+            string.IsNullOrWhiteSpace(failure) ? "<none>" : failure.Replace("'", "\"");
+
+        private static string PatternCenter(Point2d? center) =>
+            !center.HasValue ? "(null,null)" : FormattableString.Invariant($"({center.Value.X:0.000},{center.Value.Y:0.000})");
+
+        private void LogPatternSummary(string role, string requested, int threshold, LocalMatcher.LocalMatchResult result, bool acceptedFinal)
+        {
+            if (result == null)
+            {
+                PatternLog(FormattableString.Invariant($"[PATTERN][SUMMARY] role={role} requested={requested} used=<null> fallback=False usedFeatures=False score=0 thr={threshold} acceptedByThreshold=False acceptedFinal={PatternBool(acceptedFinal)} center=(null,null) angle=0.000 bestAngle=0.000 scale=0.000 bestCorr=0.0000 secondCorr=0.0000 margin=0.0000 featureScore=0 templateScore=0 kpsImg=0 kpsPat=0 good=0 inliers=0 avgDist=0.000 search=0x0 pattern=0x0 failure='null-result'"));
+                return;
+            }
+
+            var used = string.IsNullOrWhiteSpace(result.ModeUsed) ? "<empty>" : result.ModeUsed;
+            var req = string.IsNullOrWhiteSpace(result.ModeRequested) ? requested : result.ModeRequested;
+            PatternLog(FormattableString.Invariant(
+                $"[PATTERN][SUMMARY] role={role} requested={req} used={used} fallback={PatternBool(result.UsedFallback)} usedFeatures={PatternBool(result.UsedFeatures)} score={result.Score} thr={threshold} acceptedByThreshold={PatternBool(result.AcceptedByThreshold)} acceptedFinal={PatternBool(acceptedFinal)} center={PatternCenter(result.Center)} angle={result.AngleDeg:0.000} bestAngle={result.BestAngleDeg:0.000} scale={result.BestScale:0.000} bestCorr={result.BestCorr:0.0000} secondCorr={result.SecondBestCorr:0.0000} margin={result.CorrMargin:0.0000} featureScore={result.FeatureScore:0.###} templateScore={result.TemplateScore:0.###} kpsImg={result.ImageKeypoints} kpsPat={result.PatternKeypoints} good={result.GoodMatches} inliers={result.Inliers} avgDist={result.AvgDistance:0.000} search={result.SearchWidth}x{result.SearchHeight} pattern={result.PatternWidth}x{result.PatternHeight} failure='{PatternFailure(result.Failure)}'"));
+
+            if (threshold > 0 && threshold < 70)
+            {
+                PatternLog(FormattableString.Invariant($"[PATTERN][WARN] low threshold role={role} threshold={threshold} score={result.Score} requested={req} used={used} risk='false-positive'"));
+            }
+        }
+
+        private void LogM2AutoDecision(LocalMatcher.LocalMatchResult result, int threshold)
+        {
+            if (result == null)
+            {
+                PatternLog("[PATTERN][M2_AUTO_DECISION] requested=auto used=<null> fallback=False featureScore=0 templateScore=0 threshold=0 decision='null result' cause='<none>'");
+                return;
+            }
+
+            if (!string.Equals(result.ModeRequested, "auto", StringComparison.OrdinalIgnoreCase)) return;
+            var decision = string.Equals(result.ModeUsed, "features", StringComparison.OrdinalIgnoreCase) ? "features accepted"
+                : string.Equals(result.ModeUsed, "tm_fallback", StringComparison.OrdinalIgnoreCase) ? "features rejected, template fallback accepted"
+                : string.Equals(result.ModeUsed, "auto_fail", StringComparison.OrdinalIgnoreCase) ? "both rejected"
+                : "unknown auto branch";
+
+            PatternLog(FormattableString.Invariant(
+                $"[PATTERN][M2_AUTO_DECISION] requested=auto used={result.ModeUsed} fallback={PatternBool(result.UsedFallback)} featureScore={result.FeatureScore:0.###} templateScore={result.TemplateScore:0.###} threshold={threshold} decision='{decision}' cause='{PatternFailure(result.Failure)}'"));
+        }
+
+        private void LogPatternConfig(string? imagePath, string featureM1, int thrM1, string featureM2, int thrM2, int rotRange, double scaleMin, double scaleMax, double posTolPx, double angTolDeg, bool scaleLock, bool disableRot)
+        {
+            PatternLog(FormattableString.Invariant(
+                $"[PATTERN][CONFIG] image='{System.IO.Path.GetFileName(imagePath ?? string.Empty)}' layout='{CurrentLayoutName}' featureM1='{featureM1}' thrM1={thrM1} featureM2='{featureM2}' thrM2={thrM2} rotRange={rotRange} scaleMin={scaleMin:0.###} scaleMax={scaleMax:0.###} posTolPx={posTolPx:0.###} angTolDeg={angTolDeg:0.###} scaleLock={PatternBool(scaleLock)} disableRot={PatternBool(disableRot)}"));
+        }
+
+        private void LogPatternGeometry(string? imagePath, double distBase, double distDet, double rawScale, double scaleMin, double scaleMax, double angleDeltaDeg, double angTolDeg, double dM1, double dM2, double posTolPx, bool hasLast, bool acceptedFinal, string reason)
+        {
+            var scaleInRange = rawScale >= scaleMin && rawScale <= scaleMax;
+            var angleInTol = Math.Abs(angleDeltaDeg) <= angTolDeg;
+            var posInTol = dM1 <= posTolPx && dM2 <= posTolPx;
+            PatternLog(FormattableString.Invariant(
+                $"[PATTERN][GEOM] image='{System.IO.Path.GetFileName(imagePath ?? string.Empty)}' distBase={distBase:0.###} distDet={distDet:0.###} rawScale={rawScale:0.####} scaleMin={scaleMin:0.###} scaleMax={scaleMax:0.###} scaleInRange={PatternBool(scaleInRange)} angleDelta={angleDeltaDeg:0.###} angTolDeg={angTolDeg:0.###} angleInTol={PatternBool(angleInTol)} dM1={dM1:0.###} dM2={dM2:0.###} posTolPx={posTolPx:0.###} posInTol={PatternBool(posInTol)} hasLast={PatternBool(hasLast)} acceptedFinal={PatternBool(acceptedFinal)} reason='{PatternFailure(reason)}'"));
+
+            if (acceptedFinal && (!scaleInRange || !angleInTol || !posInTol))
+            {
+                PatternLog(FormattableString.Invariant(
+                    $"[PATTERN][WARN] accepted outside tolerance image='{System.IO.Path.GetFileName(imagePath ?? string.Empty)}' dM1={dM1:0.###} dM2={dM2:0.###} posTolPx={posTolPx:0.###} angleDelta={angleDeltaDeg:0.###} angTolDeg={angTolDeg:0.###} rawScale={rawScale:0.####} scaleRange=({scaleMin:0.###},{scaleMax:0.###}) reason='{PatternFailure(reason)}'"));
+            }
         }
 
         public void RegisterBatchAnchors(Point baselineM1, Point baselineM2, Point detectedM1, Point detectedM2, int scoreM1 = 0, int scoreM2 = 0)
@@ -6201,6 +6283,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var featureM2 = GetBatchFeatureM2();
             var thrM1 = GetBatchThrM1();
             var thrM2 = GetBatchThrM2();
+            var posTolPx = analyze.PosTolPx;
+            var angTolDeg = analyze.AngTolDeg;
+            var scaleLock = analyze.ScaleLock;
+            var disableRot = analyze.DisableRot;
 
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 feature={featureM1} thr={thrM1}"));
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M2 feature={featureM2} thr={thrM2}"));
@@ -6224,6 +6310,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return Task.FromResult(false);
             }
 
+            LogPatternConfig(
+                imagePath,
+                featureM1,
+                thrM1,
+                featureM2,
+                thrM2,
+                analyze.RotRange,
+                analyze.ScaleMin,
+                analyze.ScaleMax,
+                posTolPx,
+                angTolDeg,
+                scaleLock,
+                disableRot);
+
             var m1Result = LocalMatcher.MatchInSearchROIWithDetailsGray(
                 imageGray,
                 _layoutOriginal.Master1Pattern,
@@ -6234,7 +6334,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 analyze.ScaleMin,
                 analyze.ScaleMax,
                 pattern1,
-                _trace);
+                PatternLog,
+                "M1");
 
             var m2Result = LocalMatcher.MatchInSearchROIWithDetailsGray(
                 imageGray,
@@ -6246,20 +6347,28 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 analyze.ScaleMin,
                 analyze.ScaleMax,
                 pattern2,
-                _trace);
+                PatternLog,
+                "M2");
+
+            var acceptedFinal = m1Result.Score >= thrM1 && m2Result.Score >= thrM2;
+            LogPatternSummary("M1", featureM1, thrM1, m1Result, acceptedFinal);
+            LogPatternSummary("M2", featureM2, thrM2, m2Result, acceptedFinal);
+            LogM2AutoDecision(m2Result, thrM2);
 
             _m1Detection = new MasterDetection
             {
                 Center = m1Result.Center,
                 AngleDeg = m1Result.AngleDeg,
-                Score = m1Result.Score
+                Score = m1Result.Score,
+                MatchResult = m1Result
             };
 
             _m2Detection = new MasterDetection
             {
                 Center = m2Result.Center,
                 AngleDeg = m2Result.AngleDeg,
-                Score = m2Result.Score
+                Score = m2Result.Score,
+                MatchResult = m2Result
             };
 
             _trace?.Invoke(FormattableString.Invariant($"[MASTER] M1 center={_m1Detection.Center} angle={_m1Detection.AngleDeg:F1} score={_m1Detection.Score}"));
@@ -6288,6 +6397,20 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 new Point(_m2Detection.Center.Value.X, _m2Detection.Center.Value.Y),
                 _m1Detection.Score,
                 _m2Detection.Score);
+
+            var distBase = Math.Sqrt(Math.Pow(m2Base.cx - m1Base.cx, 2) + Math.Pow(m2Base.cy - m1Base.cy, 2));
+            var distDet = Math.Sqrt(Math.Pow(_m2Detection.Center.Value.X - _m1Detection.Center.Value.X, 2) + Math.Pow(_m2Detection.Center.Value.Y - _m1Detection.Center.Value.Y, 2));
+            var rawScale = distBase > 1e-9 ? distDet / distBase : 1.0;
+            var baseAngle = Math.Atan2(m2Base.cy - m1Base.cy, m2Base.cx - m1Base.cx) * 180.0 / Math.PI;
+            var detAngle = Math.Atan2(_m2Detection.Center.Value.Y - _m1Detection.Center.Value.Y, _m2Detection.Center.Value.X - _m1Detection.Center.Value.X) * 180.0 / Math.PI;
+            var angleDeltaDeg = detAngle - baseAngle;
+            while (angleDeltaDeg <= -180.0) angleDeltaDeg += 360.0;
+            while (angleDeltaDeg > 180.0) angleDeltaDeg -= 360.0;
+            var dM1 = 0.0;
+            var dM2 = 0.0;
+            var hasLast = false;
+            var reason = acceptedFinal ? "accepted_by_threshold" : "rejected_by_threshold";
+            LogPatternGeometry(imagePath, distBase, distDet, rawScale, analyze.ScaleMin, analyze.ScaleMax, angleDeltaDeg, angTolDeg, dM1, dM2, posTolPx, hasLast, acceptedFinal, reason);
 
             _batchAnchorsOk = AnchorsMeetThreshold();
             GuiLog.Info(FormattableString.Invariant(

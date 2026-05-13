@@ -16018,7 +16018,4 @@ namespace BrakeDiscInspector_GUI_ROI
 
     }
 }
-                        logs.Add(FormattableString.Invariant(
-                            $"[PATTERN][SUMMARY] role=M1 requested={res1.ModeRequested} used={res1.ModeUsed} score={res1.Score} thr={localAnalyze.ThrM1} center=({res1.Center?.X:F0},{res1.Center?.Y:F0}) angle={res1.AngleDeg:F2} scale={res1.BestScale:F4} best={res1.BestCorr:F4} second={res1.SecondBestCorr:F4} margin={res1.CorrMargin:F4} kps={res1.ImgKeypoints}/{res1.PatternKeypoints} good={res1.GoodMatches} inliers={res1.Inliers} accepted={res1.Center.HasValue && res1.Score >= localAnalyze.ThrM1}"));
-                        logs.Add(FormattableString.Invariant(
-                            $"[PATTERN][SUMMARY] role=M2 requested={res2.ModeRequested} used={res2.ModeUsed} score={res2.Score} thr={localAnalyze.ThrM2} center=({res2.Center?.X:F0},{res2.Center?.Y:F0}) angle={res2.AngleDeg:F2} scale={res2.BestScale:F4} best={res2.BestCorr:F4} second={res2.SecondBestCorr:F4} margin={res2.CorrMargin:F4} kps={res2.ImgKeypoints}/{res2.PatternKeypoints} good={res2.GoodMatches} inliers={res2.Inliers} accepted={res2.Center.HasValue && res2.Score >= localAnalyze.ThrM2}"));
+

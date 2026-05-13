@@ -79,7 +79,7 @@ namespace BrakeDiscInspector_GUI_ROI
             Mat imageGray, Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax, Action<string>? log, string roleTag)
         {
             if (imageGray.Empty() || patternGray.Empty())
-                return (null, 0, "imgs vacías", 0, 0);
+                return (null, 0, "imgs vacías", 0, 0, 0, 1.0, 0.0);
 
             double best = -1.0;
             Point2d? bestPoint = null;

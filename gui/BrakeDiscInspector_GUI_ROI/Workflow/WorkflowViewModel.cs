@@ -785,6 +785,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try { _log(message); } catch { }
             try { GuiLog.Info(message); } catch { }
+            try { VisConfLog.AnalyzeMaster(FormattableStringFactory.Create("{0}", message)); } catch { }
         }
 
         private static string PatternBool(bool value) => value ? "True" : "False";

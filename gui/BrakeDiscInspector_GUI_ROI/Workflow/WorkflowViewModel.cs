@@ -785,7 +785,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try { _log(message); } catch { }
             try { GuiLog.Info(message); } catch { }
-            try { VisConfLog.AnalyzeMaster(FormattableStringFactory.Create("{0}", message)); } catch { }
         }
 
         private static string PatternBool(bool value) => value ? "True" : "False";
@@ -6406,9 +6405,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             var angleDeltaDeg = detAngle - baseAngle;
             while (angleDeltaDeg <= -180.0) angleDeltaDeg += 360.0;
             while (angleDeltaDeg > 180.0) angleDeltaDeg -= 360.0;
-            var dM1 = 0.0;
-            var dM2 = 0.0;
-            var hasLast = false;
+            var dM1 = Math.Sqrt(Math.Pow(_m1Detection.Center.Value.X - m1Base.cx, 2) + Math.Pow(_m1Detection.Center.Value.Y - m1Base.cy, 2));
+            var dM2 = Math.Sqrt(Math.Pow(_m2Detection.Center.Value.X - m2Base.cx, 2) + Math.Pow(_m2Detection.Center.Value.Y - m2Base.cy, 2));
+            var hasLast = true;
             var reason = acceptedFinal ? "accepted_by_threshold" : "rejected_by_threshold";
             LogPatternGeometry(imagePath, distBase, distDet, rawScale, analyze.ScaleMin, analyze.ScaleMax, angleDeltaDeg, angTolDeg, dM1, dM2, posTolPx, hasLast, acceptedFinal, reason);
 

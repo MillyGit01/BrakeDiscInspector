@@ -21,7 +21,7 @@ public class BackendPayloadBuilderTests
         roi.Left = 120;
         roi.Top = 80;
 
-        Assert.True(BackendAPI.TryPrepareCanonicalRoi(src, roi, out var payload, out _));
+        Assert.True(BackendPayloadBuilder.TryPrepareCanonicalRoi(src, roi, out var payload, out _));
         Assert.NotNull(payload);
 
         using var doc = JsonDocument.Parse(payload!.ShapeJson ?? "{}");
@@ -48,7 +48,7 @@ public class BackendPayloadBuilderTests
             AngleDeg = 0
         };
 
-        Assert.True(BackendAPI.TryPrepareCanonicalRoi(src, roi, out var payload, out _));
+        Assert.True(BackendPayloadBuilder.TryPrepareCanonicalRoi(src, roi, out var payload, out _));
         Assert.NotNull(payload);
 
         using var doc = JsonDocument.Parse(payload!.ShapeJson ?? "{}");

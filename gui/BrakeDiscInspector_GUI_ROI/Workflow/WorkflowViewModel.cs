@@ -31,7 +31,6 @@ using OpenCvSharp;
 using Point = System.Windows.Point;
 using Rect = System.Windows.Rect;
 using Forms = System.Windows.Forms;
-using GlobalInferResult = global::BrakeDiscInspector_GUI_ROI.InferResult;
 using WorkflowInferResult = global::BrakeDiscInspector_GUI_ROI.Workflow.InferResult;
 
 namespace BrakeDiscInspector_GUI_ROI.Workflow
@@ -195,12 +194,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
         private volatile bool _batchAnchorM1Ready;
         private volatile bool _batchAnchorM2Ready;
-        private volatile bool _batchXformComputed;
         private int _batchPlacementToken;
         private int _batchPlacementTokenPlaced = -1;
         private bool _batchCanvasMeasured;
         private string? _currentBatchFile;
-        private bool _allowBatchInferWithoutAnchors;
         public string? CurrentManualImagePath { get; private set; }
         private int _currentRowIndex;
         private string? _currentImagePath;
@@ -251,7 +248,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private bool _showInspectionRoi = true;
 
         // CODEX: UI placement guards
-        private bool _manualRepositionGuard;
         private bool _batchRepositionGuard;
         private int _batchPlacedForStep = -1;
         private volatile int _batchAnchorReadyForStep = -1;
@@ -319,12 +315,10 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private Task? _initializationTask;
         private bool _initialized;
         private bool _isInitializing;
-        private string? _annotatedOutputDir;
         private string _currentLayoutName = "DefaultLayout";
         private bool _hasLoadedLayout;
         private int _layoutIoDepth;
         private readonly SemaphoreSlim _captureGate = new(1, 1);
-        private bool _sharedHeatmapGuardLogged;
 
         public string CurrentLayoutName => _currentLayoutName;
 
@@ -864,7 +858,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchAnchorM1Ready = true;
             _batchAnchorM2Ready = true;
             _batchAnchorReadyForStep = (int)_batchStepId;
-            _batchXformComputed = false;
             _batchAnchorM1Score = scoreM1;
             _batchAnchorM2Score = scoreM2;
             _batchAnchorsOk = AnchorsMeetThreshold();
@@ -875,7 +868,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchXform.Tx = 0.0;
             _batchXform.Ty = 0.0;
             _batchXform.StepId = BatchStepId;
-            _batchXformComputed = true;
 
             TraceBatch($"[batch] anchors-ready file='{System.IO.Path.GetFileName(CurrentImagePath ?? string.Empty)}' M1=({detectedM1.X:0.0},{detectedM1.Y:0.0}) M2=({detectedM2.X:0.0},{detectedM2.Y:0.0}) scores=({_batchAnchorM1Score},{_batchAnchorM2Score})");
             GuiLog.Info($"[anchors] m1Score={_batchAnchorM1Score} m2Score={_batchAnchorM2Score} anchorsOk={_batchAnchorsOk}");
@@ -892,7 +884,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     _batchFolder = value;
                     OnPropertyChanged();
                     UpdateCanStart();
-                    _annotatedOutputDir = null;
                 }
             }
         }
@@ -5649,7 +5640,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             try
             {
-                _annotatedOutputDir = null;
 
                 foreach (var row in rows)
                 {
@@ -5720,7 +5710,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                                 continue;
                             }
 
-                            if (!_batchAnchorsOk && !_allowBatchInferWithoutAnchors)
+                            if (!_batchAnchorsOk)
                             {
                                 var fileName = row.FileName;
                                 var message = FormattableString.Invariant($"[batch] skip ROI={config.Index} for file='{fileName}' because master fit failed (fit_ok=false)");
@@ -5767,7 +5757,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                                 var result = await _client.InferAsync(RoleId, resolvedRoiId, MmPerPx, export.Bytes, export.FileName, export.ShapeJson).ConfigureAwait(false);
 
-                                UpdateHeatmapFromResult(ToGlobalInferResult(result), config.Index);
+                                UpdateHeatmapFromResult(result, config.Index);
 
                                 InvokeOnUi(() =>
                                 {
@@ -7429,32 +7419,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             }
         }
 
-        private static GlobalInferResult ToGlobalInferResult(WorkflowInferResult result)
-        {
-            if (result == null)
-            {
-                throw new ArgumentNullException(nameof(result));
-            }
-
-            return new GlobalInferResult
-            {
-                score = result.score,
-                threshold = result.threshold,
-                heatmap_png_base64 = result.heatmap_png_base64,
-                decision = result.decision,
-                regions = result.regions?.Select(r => new BrakeDiscInspector_GUI_ROI.InferRegion
-                {
-                    x = r.x,
-                    y = r.y,
-                    w = r.w,
-                    h = r.h,
-                    area_px = r.area_px,
-                    area_mm2 = r.area_mm2,
-                }).ToArray(),
-            };
-        }
-
-        private void UpdateHeatmapFromResult(GlobalInferResult result, int roiIndex)
+        private void UpdateHeatmapFromResult(WorkflowInferResult result, int roiIndex)
         {
             if (result == null)
             {
@@ -7567,7 +7532,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             var roiForExport = GetBatchTransformedRoi(roiModel);
 
-            if (!BackendAPI.TryPrepareCanonicalRoi(src, roiForExport, out var payload, out var fileName, _log) || payload == null)
+            if (!BackendPayloadBuilder.TryPrepareCanonicalRoi(src, roiForExport, out var payload, out var fileName, _log) || payload == null)
             {
                 throw new InvalidOperationException($"ROI export failed for '{imagePath}'.");
             }
@@ -8033,8 +7998,6 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchDetectedM2 = null;
             _batchBaselineM1 = null;
             _batchBaselineM2 = null;
-            _batchXformComputed = false;
-            _sharedHeatmapGuardLogged = false;
             ClearBaselines();
             CurrentRowIndex = Math.Max(1, rowIndex1Based);
             CurrentImagePath = imagePath;

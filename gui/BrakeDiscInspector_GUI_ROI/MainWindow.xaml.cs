@@ -886,7 +886,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private bool _sharedHeatmapGuardLogged;
 
-        private TextBlock? _batchCaption;
 
         private int _activeInspectionIndex = 1;
         private bool _updatingActiveInspection;
@@ -919,6 +918,19 @@ namespace BrakeDiscInspector_GUI_ROI
             = new string[] { "default" };
 
         public bool IsImageLoaded => _workflowViewModel?.IsImageLoaded ?? false;
+
+        private string ResolveBackendBaseUrl()
+        {
+            var baseUrl = _backendClient?.BaseUrl;
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                baseUrl = _appConfig.Backend?.BaseUrl;
+            }
+
+            return string.IsNullOrWhiteSpace(baseUrl)
+                ? "http://127.0.0.1:8000"
+                : baseUrl.TrimEnd('/');
+        }
 
         public bool IsRoiEditModeActive => _editModeActive;
 
@@ -1749,7 +1761,6 @@ namespace BrakeDiscInspector_GUI_ROI
             new(StringComparer.OrdinalIgnoreCase);              // fixed baselines per inspection id for the current image
         private readonly HashSet<string> _inspectionBaselineSeededIds =
             new(StringComparer.OrdinalIgnoreCase);
-        private bool _inspectionBaselineSeededForImage = false; // has ANY baseline been seeded for the current image?
         private readonly Dictionary<string, List<RoiModel>> _inspectionBaselinesByImage
             = new(StringComparer.OrdinalIgnoreCase);
         private string _currentImageHash = string.Empty;
@@ -1803,7 +1814,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
         // Respect "scale lock" by default. If you want to allow scaling of the Inspection ROI
         // *even when* the lock is ON, set this to true at runtime (e.g., via a checkbox).
-        private bool _allowInspectionScaleOverride = false;
 
         // Freeze Master*Search movement on Analyze Master
         private const bool FREEZE_MASTER_SEARCH_ON_ANALYZE = true;
@@ -2605,7 +2615,6 @@ namespace BrakeDiscInspector_GUI_ROI
         private SWPoint _p0;
         private RoiShape _currentShape = RoiShape.Rectangle;
 
-        private DispatcherTimer? _trainTimer;
         private DispatcherTimer? _healthTimer;
 
         // ==== Drag de ROI (mover) ====
@@ -2621,15 +2630,8 @@ namespace BrakeDiscInspector_GUI_ROI
         private double _lastLoggedAnnulusOuterRadius = double.NaN;
         private double _lastLoggedAnnulusInnerProposed = double.NaN;
         private double _lastLoggedAnnulusInnerFinal = double.NaN;
-        private bool _annulusResetLogged;
 
         // Cache de la última sincronización del overlay
-        private double _canvasLeftPx = 0;
-        private double _canvasTopPx = 0;
-        private double _canvasWpx = 0;
-        private double _canvasHpx = 0;
-        private double _sx = 1.0;   // escala imagen->canvas en X
-        private double _sy = 1.0;   // escala imagen->canvas en Y
 
 
         // === File Logger ===
@@ -2664,7 +2666,6 @@ namespace BrakeDiscInspector_GUI_ROI
             RInner = 0
         };
         private Mat? bgrFrame; // tu frame actual
-        private bool UseAnnulus = false;
 
         private bool _loadedOnce;
         private RoiShape _currentDrawTool = RoiShape.Rectangle;
@@ -3692,7 +3693,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 InitializeOptionsFromConfig();
 
                 InitUI();
-                InitTrainPollingTimer();
                 HookCanvasInput();
                 InitWorkflow();
                 LogInspectionRoiAnchors("startup:after-init-workflow");
@@ -4852,7 +4852,6 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _backendClient.RecipeId = effective;
             }
-            BackendAPI.SetRecipeId(effective);
         }
 
         private void UpdateLayoutLoadedState(MasterLayout? layout, string? layoutPath = null)
@@ -5061,12 +5060,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 _dataRoot = EnsureDataRoot();
 
                 var backendClient = new Workflow.BackendClient();
-                if (!string.IsNullOrWhiteSpace(BackendAPI.BaseUrl))
+                if (!string.IsNullOrWhiteSpace(_appConfig.Backend?.BaseUrl))
                 {
-                    backendClient.BaseUrl = BackendAPI.BaseUrl;
+                    backendClient.BaseUrl = _appConfig.Backend.BaseUrl;
                 }
                 backendClient.RecipeId = GetCurrentLayoutName();
-                BackendAPI.SetRecipeId(backendClient.RecipeId);
 
                 if ((_layout?.InspectionRois == null || _layout.InspectionRois.Count == 0) && !_hasAppliedLayoutSnapshot)
                 {
@@ -6138,7 +6136,6 @@ namespace BrakeDiscInspector_GUI_ROI
             ImgMain.Source = _imgSourceBI;
 
             // [AUTO] reset master/image seeds for this new image
-            _inspectionBaselineSeededForImage = false;   // force reseed of inspection baseline for this image
             _imageKeyForMasters = string.Empty;          // so masters won't be considered already seeded
             _mastersSeededForImage = false;              // seed again during auto Analyze Master
             RemoveAllRoiAdorners();
@@ -6241,7 +6238,6 @@ namespace BrakeDiscInspector_GUI_ROI
                         $"[VISCONF][IMGLOAD] key='{seedKey}' file='{GetCurrentImageFileName()}' path='{_currentImagePathWin ?? string.Empty}' size={_imgW}x{_imgH} layout='{GetCurrentLayoutName()}'"));
                     _inspectionBaselineFixedById.Clear();
                     _inspectionBaselineSeededIds.Clear();
-                    _inspectionBaselineSeededForImage = false;
                     InspLog($"[Seed] New image detected, oldKey='{_lastImageSeedKey}' newKey='{seedKey}' -> reset baseline.");
                     try
                     {
@@ -10174,10 +10170,6 @@ namespace BrakeDiscInspector_GUI_ROI
             Canvas.SetLeft(_batchInfoOverlay, 8);
             Canvas.SetTop(_batchInfoOverlay, 8);
 
-            if (_batchCaption != null && Overlay != null && Overlay.Children.Contains(_batchCaption))
-            {
-                Overlay.Children.Remove(_batchCaption);
-            }
         }
 
         private void RequestBatchHeatmapPlacement(string reason, WorkflowViewModel? vmOverride = null)
@@ -12351,7 +12343,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 return false;
             }
 
-            double mmPerPx = BackendAPI.ResolveMmPerPx(_preset);
+            double mmPerPx = BackendPayloadBuilder.ResolveMmPerPx(_preset);
             var rois = new[] { _layout.Master1Pattern, _layout.Master2Pattern };
             bool any = false;
             bool allOk = true;
@@ -12364,8 +12356,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
 
                 any = true;
-                string roleId = BackendAPI.ResolveRoleId(roi);
-                string roiId = BackendAPI.ResolveRoiId(roi);
+                string roleId = BackendPayloadBuilder.ResolveRoleId(roi);
+                string roiId = BackendPayloadBuilder.ResolveRoiId(roi);
 
                 try
                 {
@@ -12375,7 +12367,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         mmPerPx,
                         async _ =>
                         {
-                            if (!BackendAPI.TryPrepareCanonicalRoi(_currentImagePathWin, roi, out var payload, out var fileName, AppendLog) || payload == null)
+                            if (!BackendPayloadBuilder.TryPrepareCanonicalRoi(_currentImagePathWin, roi, out var payload, out var fileName, AppendLog) || payload == null)
                             {
                                 GuiLog.Warn($"Auto-fit sin muestras para role='{roleId}' roi='{roiId}'");
                                 return Array.Empty<BackendClient.FitImage>();
@@ -12790,7 +12782,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 _inspectionBaselineSeededIds.Add(roiId);
             }
 
-            _inspectionBaselineSeededForImage = true;
             _lastImageSeedKey = seedKey;
             InspLog($"[Seed][FIXUP] seeded fixed inspection baseline from layout snapshot key='{seedKey}'");
             return true;
@@ -12890,7 +12881,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             _inspectionBaselineFixedById[roiId] = baseline.Clone();
             _inspectionBaselineSeededIds.Add(roiId);
-            _inspectionBaselineSeededForImage = true;
             _lastImageSeedKey = seedKey;
             var sourceLabel = baseline == persisted ? "persisted" : "persisted_adjusted_size";
             InspLog($"[Seed] Fixed baseline SEEDED (key='{seedKey}' id='{roiId}' source={sourceLabel}) from: {FInsp(baseline)}");
@@ -12905,7 +12895,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             var seedKey = ComputeImageSeedKey();
             _currentImageHash = seedKey;
-            _inspectionBaselineSeededForImage = false;
             _inspectionBaselineFixedById.Clear();
             _inspectionBaselineSeededIds.Clear();
 
@@ -13815,7 +13804,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             try
             {
-                var uri = new Uri(BackendAPI.BaseUrl);
+                var uri = new Uri(ResolveBackendBaseUrl());
                 if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
                 {
                     Snack($"BaseUrl no es http/https"); // CODEX: string interpolation compatibility.
@@ -13829,7 +13818,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 ok = false;
             }
 
-            var url = BackendAPI.BaseUrl.TrimEnd('/') + "/" + BackendAPI.TrainStatusEndpoint.TrimStart('/');
+            var url = ResolveBackendBaseUrl() + "/health";
             try
             {
                 using var hc = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -13838,11 +13827,11 @@ namespace BrakeDiscInspector_GUI_ROI
                 AppendLog($"[VERIFY] GET {url} -> {(int)resp.StatusCode} {resp.ReasonPhrase}");
                 if (resp.IsSuccessStatusCode)
                 {
-                    AppendLog($"[VERIFY] train_status body (tail): {body.Substring(0, Math.Min(body.Length, 200))}");
+                    AppendLog($"[VERIFY] health body (tail): {body.Substring(0, Math.Min(body.Length, 200))}");
                 }
                 else
                 {
-                    Snack($"El backend respondió {resp.StatusCode} en /train_status");
+                    Snack($"El backend respondió {resp.StatusCode} en /health");
                 }
             }
             catch (Exception ex)
@@ -13861,9 +13850,9 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog($"========== PATH SNAPSHOT ==========");
             try
             {
-                AppendLog($"[CFG] BaseUrl={BackendAPI.BaseUrl}");
-                AppendLog($"[CFG] InferEndpoint={BackendAPI.InferEndpoint} TrainStatusEndpoint={BackendAPI.TrainStatusEndpoint}");
-                AppendLog($"[CFG] DefaultMmPerPx={BackendAPI.DefaultMmPerPx:0.###}");
+                AppendLog($"[CFG] BaseUrl={ResolveBackendBaseUrl()}");
+                AppendLog("[CFG] InferEndpoint=infer HealthEndpoint=health");
+                AppendLog($"[CFG] DefaultMmPerPx={BackendPayloadBuilder.DefaultMmPerPx:0.###}");
                 var exists = !string.IsNullOrWhiteSpace(_currentImagePathWin) && File.Exists(_currentImagePathWin);
                 AppendLog($"[IMG] _currentImagePathWin='{_currentImagePathWin}'  exists={exists}");
 
@@ -14512,29 +14501,6 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         // ====== Logs / Polling ======
-        private void InitTrainPollingTimer()
-        {
-            _trainTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            _trainTimer.Tick += async (s, e) =>
-            {
-                try
-                {
-                    var url = BackendAPI.BaseUrl.TrimEnd('/') + BackendAPI.TrainStatusEndpoint;
-                    using var hc = new System.Net.Http.HttpClient();
-                    var resp = await hc.GetAsync(url);
-                    var text = await resp.Content.ReadAsStringAsync();
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[train_status] {text.Trim()}");
-                }
-                catch (Exception ex)
-                {
-                    // CODEX: string interpolation compatibility.
-                    AppendLog($"[train_status] ERROR {ex.Message}");
-                }
-            };
-            // _trainTimer.Start(); // opcional
-        }
-
         private void EnsureHealthPollingStarted()
         {
             if (_healthTimer == null)
@@ -15037,11 +15003,17 @@ namespace BrakeDiscInspector_GUI_ROI
                 // }
                 // 5) Llamada al backend /infer con el ROI canónico
                 string? shapeJson = annulus != null ? System.Text.Json.JsonSerializer.Serialize(annulus) : null;
-                var request = new InferRequest("DemoRole", "DemoROI", BackendAPI.DefaultMmPerPx, cropPng)
+                var client = _backendClient ?? new BackendClient
                 {
-                    ShapeJson = shapeJson
+                    BaseUrl = ResolveBackendBaseUrl()
                 };
-                var resp = await BackendAPI.InferAsync(request);
+                var resp = await client.InferAsync(
+                    "DemoRole",
+                    "DemoROI",
+                    BackendPayloadBuilder.DefaultMmPerPx,
+                    cropPng,
+                    "roi.png",
+                    shapeJson);
 
                 // 6) Reportar resultado sin UI dedicada
                 bool isNg = resp.threshold.HasValue && resp.score >= resp.threshold.Value;

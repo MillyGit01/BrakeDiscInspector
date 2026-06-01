@@ -7,6 +7,7 @@ using BrakeDiscInspector_GUI_ROI.Workflow;
 using BrakeDiscInspector_GUI_ROI.Overlay;
 using BrakeDiscInspector_GUI_ROI.Util;
 using System;
+using System.Collections.ObjectModel;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -66,6 +67,7 @@ using CvRect = OpenCvSharp.Rect; // CODEX: alias for OpenCV rectangles.
 using WRect = System.Windows.Rect; // CODEX: alias for WPF rectangles.
 using WPoint = System.Windows.Point; // CODEX: alias for WPF points.
 using WInt32Rect = System.Windows.Int32Rect; // CODEX: alias for WPF Int32Rect.
+using Forms = System.Windows.Forms;
 // --- END: UI/OCV type aliases ---
 using BrakeDiscInspector_GUI_ROI.Properties;
 
@@ -858,6 +860,20 @@ namespace BrakeDiscInspector_GUI_ROI
         private int _imgW, _imgH;
         private bool _hasLoadedImage;
         private bool _isFirstImageLoaded = false;
+        private static readonly HashSet<string> ThumbnailImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".bmp",
+            ".tif",
+            ".tiff"
+        };
+        private readonly ObservableCollection<ImageThumbnailItem> _imageThumbnails = new();
+        private ImageThumbnailItem? _selectedThumbnail;
+        private string _thumbnailFolderPath = string.Empty;
+        private bool _updatingThumbnailSelection;
+        private bool _isThumbnailCollectionLoading;
 
         private WorkflowViewModel? _workflowViewModel;
         private WorkflowViewModel? ViewModel => _workflowViewModel;
@@ -903,6 +919,68 @@ namespace BrakeDiscInspector_GUI_ROI
             = new string[] { "default" };
 
         public bool IsImageLoaded => _workflowViewModel?.IsImageLoaded ?? false;
+
+        public bool IsRoiEditModeActive => _editModeActive;
+
+        private void SetEditModeActive(bool value)
+        {
+            if (_editModeActive == value)
+            {
+                return;
+            }
+
+            _editModeActive = value;
+            OnPropertyChanged(nameof(IsRoiEditModeActive));
+        }
+
+        public ObservableCollection<ImageThumbnailItem> ImageThumbnails => _imageThumbnails;
+
+        public ImageThumbnailItem? SelectedThumbnail
+        {
+            get => _selectedThumbnail;
+            set
+            {
+                if (!ReferenceEquals(_selectedThumbnail, value))
+                {
+                    _selectedThumbnail = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string ThumbnailFolderDisplay
+            => string.IsNullOrWhiteSpace(_thumbnailFolderPath)
+                ? "No image folder selected"
+                : _thumbnailFolderPath;
+
+        public bool IsThumbnailCollectionLoading
+        {
+            get => _isThumbnailCollectionLoading;
+            private set
+            {
+                if (_isThumbnailCollectionLoading != value)
+                {
+                    _isThumbnailCollectionLoading = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public sealed class ImageThumbnailItem
+        {
+            public ImageThumbnailItem(string path, ImageSource thumbnail)
+            {
+                Path = path;
+                FileName = System.IO.Path.GetFileName(path);
+                Thumbnail = thumbnail;
+            }
+
+            public string Path { get; }
+
+            public string FileName { get; }
+
+            public ImageSource Thumbnail { get; }
+        }
 
         public RoiModel? Inspection1
         {
@@ -1415,7 +1493,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             ResetInspectionEditingFlags();
             ResetEditState();
-            _editModeActive = false;
+            SetEditModeActive(false);
             UpdateInspectionEditButtons();
 
             ClearInspectionCanvasShapes();
@@ -1448,6 +1526,7 @@ namespace BrakeDiscInspector_GUI_ROI
             AppendLog(FormattableString.Invariant(
                 $"[ANCHOR][VM-AFTER-LAYOUT] count={_workflowViewModel?.InspectionRois?.Count ?? 0} items={FormatInspectionAnchorList(_workflowViewModel?.InspectionRois)}"));
             _workflowViewModel?.AlignDatasetPathsWithCurrentLayout();
+            _ = RefreshInspectionDatasetsAfterLayoutAsync(sourceContext);
             AppendLog(FormattableString.Invariant(
                 $"[layout] Master1PatternImagePath='{_layout?.Master1PatternImagePath}'"));
             AppendLog(FormattableString.Invariant(
@@ -1473,6 +1552,24 @@ namespace BrakeDiscInspector_GUI_ROI
             RequestRoiVisibilityRefresh();
             RedrawOverlaySafe();
             UpdateRoiHud();
+        }
+
+        private async Task RefreshInspectionDatasetsAfterLayoutAsync(string sourceContext)
+        {
+            var vm = _workflowViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+
+            try
+            {
+                await vm.RefreshInspectionDatasetsAsync($"layout:{sourceContext}").ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error($"[dataset] refresh after layout failed source='{sourceContext}'", ex);
+            }
         }
 
         private void FreezeAllRois(MasterLayout? layout)
@@ -3457,36 +3554,31 @@ namespace BrakeDiscInspector_GUI_ROI
         private readonly TimeSpan _snackDuration = TimeSpan.FromSeconds(7);
         private DispatcherTimer? _guiSetupSaveTimer;
         private string _pendingGuiSetupSaveReason = "Unknown";
-        private readonly Dictionary<string, object> _defaultGuiResources = new();
         private readonly List<string> _availableFontFamilies = new() { "Segoe UI", "Calibri", "Arial", "Consolas" };
+        private TextBox? _activeGuiColorTextBox;
+        private string? _activeGuiColorResourceKey;
         private bool _isGuiSetupSyncingControls;
         private bool _isGuiSetupInitialized;
         private bool _lastInspectionRepositioned;
-        private static readonly string[] FontFamilyResourceKeys =
-        {
-            "UI.FontFamily.Body",
-            "UI.FontFamily.Header"
-        };
-        private static readonly string[] FontSizeResourceKeys =
-        {
-            "UI.FontSize.WindowTitle",
-            "UI.FontSize.SectionTitle",
-            "UI.FontSize.GroupHeader",
-            "UI.FontSize.ControlLabel",
-            "UI.FontSize.ControlText",
-            "UI.FontSize.ButtonText",
-            "UI.FontSize.CheckBox"
-        };
-        private static readonly string[] BrushResourceKeys =
-        {
-            "BrushAppBackground",
-            "UI.Brush.Foreground",
-            "UI.Brush.Accent",
-            "UI.Brush.ButtonBackground",
-            "UI.Brush.ButtonBackgroundHover",
-            "UI.Brush.ButtonForeground",
-            "UI.Brush.GroupHeaderForeground"
-        };
+
+        private static readonly IReadOnlyDictionary<string, string> DefaultFontFamilies =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["UI.FontFamily.Body"] = "Segoe UI",
+                ["UI.FontFamily.Header"] = "Segoe UI"
+            };
+
+        private static readonly IReadOnlyDictionary<string, double> DefaultFontSizes =
+            new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["UI.FontSize.WindowTitle"] = 20d,
+                ["UI.FontSize.SectionTitle"] = 16d,
+                ["UI.FontSize.GroupHeader"] = 16d,
+                ["UI.FontSize.ControlLabel"] = 13d,
+                ["UI.FontSize.ControlText"] = 13d,
+                ["UI.FontSize.ButtonText"] = 13d,
+                ["UI.FontSize.CheckBox"] = 13d
+            };
 
         private void AppendResizeLog(string msg)
         {
@@ -3517,7 +3609,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 InitializeComponent();
                 GuiLog.Info($"[BOOT] MainWindow ctor → InitializeComponent() OK"); // CODEX: string interpolation compatibility.
 
-                CaptureDefaultGuiResources();
                 InitializeGuiSetupPanel();
 
                 ShowSidePanel(SidePanelMode.RoiManagement);
@@ -3626,12 +3717,13 @@ namespace BrakeDiscInspector_GUI_ROI
             Settings.Default.SidePanelWidth = _lastSidePanelWidth;
             Settings.Default.IsSidePanelCollapsed = _isPanelCollapsed;
             Settings.Default.Save();
+            _commsVm?.Dispose();
             base.OnClosed(e);
         }
 
         private void ConfigureCommandBindings()
         {
-            CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (_, _) => BtnLoadImage_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, (_, _) => BtnOpenImageFolder_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, (_, _) => BtnSaveLayout_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Find, (_, _) => BtnLoadLayout_Click(this, new RoutedEventArgs()), (_, e) => e.CanExecute = CanExecuteWhenIdle()));
             CommandBindings.Add(new CommandBinding(ApplicationCommands.Print, (_, _) => ViewModel?.InferFromCurrentRoiCommand.Execute(null), (_, e) => e.CanExecute = ViewModel?.InferFromCurrentRoiCommand?.CanExecute(null) == true && CanExecuteWhenIdle()));
@@ -3921,10 +4013,14 @@ namespace BrakeDiscInspector_GUI_ROI
                         }
                     }
                 }
-                GuiSetupSettingsService.Apply(App.CurrentGuiSetup);
-                SyncSetupGuiControlsFromResources();
+                var keepCustomColors = App.CurrentGuiSetup.CustomColorsEnabled;
+                App.CurrentGuiSetup = GuiSetupSettingsService.CaptureCurrent(this, keepCustomColors);
+                App.CurrentGuiSetup.Theme = desired;
                 Settings.Default.ThemePreference = desired;
                 Settings.Default.Save();
+                GuiSetupSettingsService.ApplyThemeBrushes(desired, this);
+                GuiSetupSettingsService.Apply(App.CurrentGuiSetup, this);
+                SyncSetupGuiControlsFromResources();
             }
             catch (Exception ex)
             {
@@ -3936,7 +4032,8 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             try
             {
-                var settings = GuiSetupSettingsService.CaptureCurrent(this);
+                var includeCustomColors = ShouldCaptureGuiSetupColors(reason);
+                var settings = GuiSetupSettingsService.CaptureCurrent(this, includeCustomColors);
                 App.CurrentGuiSetup = settings;
                 GuiSetupSettingsService.Log($"[Persist] start reason={reason} path={GuiSetupSettingsService.ConfigPath}");
                 GuiSetupSettingsService.Save(settings);
@@ -3946,6 +4043,29 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 GuiSetupSettingsService.Log($"[Persist] FAIL reason={reason}", ex);
             }
+        }
+
+        private static bool IsGuiSetupColorReason(string reason)
+        {
+            return string.Equals(reason, "ApplyColors", StringComparison.OrdinalIgnoreCase)
+                   || reason.Contains("Color", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool ShouldCaptureGuiSetupColors(string reason)
+        {
+            return IsGuiSetupColorReason(reason) || App.CurrentGuiSetup.CustomColorsEnabled;
+        }
+
+        private static void EnableCustomGuiColors()
+        {
+            App.CurrentGuiSetup.CustomColorsEnabled = true;
+        }
+
+        private static void ClearCustomGuiColors()
+        {
+            App.CurrentGuiSetup.CustomColorsEnabled = false;
+            App.CurrentGuiSetup.Brushes = null;
+            App.CurrentGuiSetup.Accent = null;
         }
 
         private void RequestPersistGuiSetup(string reason)
@@ -3984,12 +4104,14 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void ThemeLightButton_Click(object sender, RoutedEventArgs e)
         {
+            ClearCustomGuiColors();
             ApplyTheme("Light");
             RequestPersistGuiSetup("ThemeLight");
         }
 
         private void ThemeDarkButton_Click(object sender, RoutedEventArgs e)
         {
+            ClearCustomGuiColors();
             ApplyTheme("Dark");
             RequestPersistGuiSetup("ThemeDark");
         }
@@ -4012,30 +4134,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SyncSetupGuiControlsFromResources();
             _isGuiSetupInitialized = true;
-        }
-
-        private void CaptureDefaultGuiResources()
-        {
-            _defaultGuiResources.Clear();
-            foreach (var key in FontFamilyResourceKeys.Concat(FontSizeResourceKeys).Concat(BrushResourceKeys))
-            {
-                if (!TryGetResourceValue(key, out object? value))
-                {
-                    continue;
-                }
-                if (value is SolidColorBrush brush)
-                {
-                    _defaultGuiResources[key] = new SolidColorBrush(brush.Color);
-                }
-                else if (value is FontFamily family)
-                {
-                    _defaultGuiResources[key] = new FontFamily(family.Source);
-                }
-                else
-                {
-                    _defaultGuiResources[key] = value;
-                }
-            }
         }
 
         private void SyncSetupGuiControlsFromResources()
@@ -4155,44 +4253,126 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (TryApplyColorText(textBox, key))
                 {
+                    EnableCustomGuiColors();
                     RequestPersistGuiSetup("ColorTextChanged");
                 }
             }
         }
 
+        private void ColorPickerButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isGuiSetupInitialized)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "not-initialized");
+                return;
+            }
+
+            if (GuiSetupPopup != null && !GuiSetupPopup.IsOpen)
+            {
+                ShouldIgnoreGuiSetupEvent(sender as FrameworkElement, "popup-closed");
+                return;
+            }
+
+            if (sender is not FrameworkElement source || source.Tag is not string key)
+            {
+                return;
+            }
+
+            _activeGuiColorResourceKey = key;
+            _activeGuiColorTextBox = ResolveGuiColorTextBox(key);
+
+            if (_activeGuiColorTextBox == null || GuiColorPalettePopup == null)
+            {
+                return;
+            }
+
+            GuiColorPalettePopup.PlacementTarget = source;
+            GuiColorPalettePopup.IsOpen = true;
+            e.Handled = true;
+        }
+
+        private void GuiColorPalette_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement source
+                || source.Tag is not string colorText
+                || _activeGuiColorTextBox == null
+                || string.IsNullOrWhiteSpace(_activeGuiColorResourceKey))
+            {
+                return;
+            }
+
+            try
+            {
+                if (ColorConverter.ConvertFromString(colorText) is Color color)
+                {
+                    _activeGuiColorTextBox.Text = color.ToString();
+                    if (TryApplyColorText(_activeGuiColorTextBox, _activeGuiColorResourceKey))
+                    {
+                        EnableCustomGuiColors();
+                        RequestPersistGuiSetup("ColorPaletteChanged");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Warn($"[gui-setup] palette color '{colorText}' failed: {ex.Message}");
+            }
+            finally
+            {
+                if (GuiColorPalettePopup != null)
+                {
+                    GuiColorPalettePopup.IsOpen = false;
+                }
+            }
+
+            e.Handled = true;
+        }
+
+        private TextBox? ResolveGuiColorTextBox(string key)
+        {
+            return key switch
+            {
+                "UI.Brush.Foreground" => ForegroundColorBox,
+                "UI.Brush.Accent" => AccentColorBox,
+                "UI.Brush.ButtonBackground" => ButtonBackgroundColorBox,
+                "UI.Brush.ButtonBackgroundHover" => ButtonHoverBackgroundColorBox,
+                "UI.Brush.ButtonForeground" => ButtonForegroundColorBox,
+                "UI.Brush.GroupHeaderForeground" => GroupHeaderForegroundColorBox,
+                _ => null
+            };
+        }
+
         private void ApplyColorsButton_Click(object sender, RoutedEventArgs e)
         {
-            TryApplyColorText(ForegroundColorBox, "UI.Brush.Foreground");
-            TryApplyColorText(AccentColorBox, "UI.Brush.Accent");
-            TryApplyColorText(ButtonBackgroundColorBox, "UI.Brush.ButtonBackground");
-            TryApplyColorText(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
-            TryApplyColorText(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
-            TryApplyColorText(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
-            RequestPersistGuiSetup("ApplyColors");
+            var applied = false;
+            applied |= TryApplyColorText(ForegroundColorBox, "UI.Brush.Foreground");
+            applied |= TryApplyColorText(AccentColorBox, "UI.Brush.Accent");
+            applied |= TryApplyColorText(ButtonBackgroundColorBox, "UI.Brush.ButtonBackground");
+            applied |= TryApplyColorText(ButtonHoverBackgroundColorBox, "UI.Brush.ButtonBackgroundHover");
+            applied |= TryApplyColorText(ButtonForegroundColorBox, "UI.Brush.ButtonForeground");
+            applied |= TryApplyColorText(GroupHeaderForegroundColorBox, "UI.Brush.GroupHeaderForeground");
+            if (applied)
+            {
+                EnableCustomGuiColors();
+                RequestPersistGuiSetup("ApplyColors");
+            }
         }
 
         private void ResetGuiDefaultsButton_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var pair in _defaultGuiResources)
+            foreach (var pair in DefaultFontFamilies)
             {
-                if (pair.Value is SolidColorBrush brush)
-                {
-                    SetBrushResource(pair.Key, brush.Color);
-                }
-                else if (pair.Value is FontFamily family)
-                {
-                    SetFontFamilyResource(pair.Key, family.Source);
-                }
-                else if (pair.Value is double size)
-                {
-                    SetDoubleResource(pair.Key, size);
-                }
-                else
-                {
-                    SetResourceValue(pair.Key, pair.Value);
-                }
+                SetFontFamilyResource(pair.Key, pair.Value);
             }
 
+            foreach (var pair in DefaultFontSizes)
+            {
+                SetDoubleResource(pair.Key, pair.Value);
+            }
+
+            ClearCustomGuiColors();
+            GuiSetupSettingsService.ApplyThemeBrushes(Settings.Default.ThemePreference, this);
+            App.CurrentGuiSetup = GuiSetupSettingsService.CaptureCurrent(this, includeCustomColors: false);
             SyncSetupGuiControlsFromResources();
             RequestPersistGuiSetup("ResetDefaults");
         }
@@ -4286,6 +4466,12 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 if (ColorConverter.ConvertFromString(text) is Color color)
                 {
+                    if (TryGetCurrentResourceColor(key, out var currentColor) && currentColor == color)
+                    {
+                        textBox.Text = color.ToString();
+                        return false;
+                    }
+
                     SetBrushResource(key, color);
                     textBox.Text = color.ToString();
                     return true;
@@ -4297,6 +4483,29 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             SetColorTextFromResource(textBox, key);
+            return false;
+        }
+
+        private bool TryGetCurrentResourceColor(string key, out Color color)
+        {
+            color = default;
+            if (!GuiSetupSettingsService.TryGetEffectiveResource(this, key, out var value, out _))
+            {
+                return false;
+            }
+
+            if (value is SolidColorBrush brush)
+            {
+                color = brush.Color;
+                return true;
+            }
+
+            if (value is Color directColor)
+            {
+                color = directColor;
+                return true;
+            }
+
             return false;
         }
 
@@ -4328,6 +4537,11 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void SetResourceValue(string key, object value)
         {
+            if (Resources.Contains(key))
+            {
+                Resources[key] = value;
+            }
+
             if (Application.Current != null)
             {
                 Application.Current.Resources[key] = value;
@@ -4336,7 +4550,8 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void PersistGuiSetupNow(string reason)
         {
-            var settings = GuiSetupSettingsService.CaptureCurrent(this);
+            var includeCustomColors = ShouldCaptureGuiSetupColors(reason);
+            var settings = GuiSetupSettingsService.CaptureCurrent(this, includeCustomColors);
             App.CurrentGuiSetup = settings;
             GuiSetupSettingsService.Log($"[Persist] start reason={reason} path={GuiSetupSettingsService.ConfigPath}");
             GuiSetupSettingsService.Save(settings);
@@ -5291,6 +5506,11 @@ namespace BrakeDiscInspector_GUI_ROI
                     return false;
                 }
 
+                if (InspectionDatasetCreated(cfg))
+                {
+                    return false;
+                }
+
                 return string.Equals(roi.Id, _activeEditableRoiId, StringComparison.OrdinalIgnoreCase);
             }
 
@@ -5366,7 +5586,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 CaptureCurrentUiShapeIntoSlot(exitingId);
             }
 
-            _editModeActive = false;
+            SetEditModeActive(false);
             ResetInspectionEditingFlags();
             ResetEditState();
             RemoveAllRoiAdorners();
@@ -5484,7 +5704,7 @@ namespace BrakeDiscInspector_GUI_ROI
             ResetInspectionEditingFlags();
             _activeEditableRoiId = roiId;
             _globalUnlocked = true;
-            _editModeActive = true;
+            SetEditModeActive(true);
             _editingInspectionSlot = inspectionIndex;
             SetInspectionEditingFlag(inspectionIndex, true);
             UpdateEditableConfigState();
@@ -5530,7 +5750,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             ResetInspectionEditingFlags();
             ResetEditState();
-            _editModeActive = _editingM1 || _editingM2;
+            SetEditModeActive(_editingM1 || _editingM2);
             UpdateInspectionEditButtons();
 
             RemoveAllRoiAdorners();
@@ -5556,9 +5776,79 @@ namespace BrakeDiscInspector_GUI_ROI
             foreach (var cfg in ViewModel.InspectionRois)
             {
                 bool editable = hasActive && !string.IsNullOrWhiteSpace(cfg.Id)
-                    && string.Equals(cfg.Id, _activeEditableRoiId, StringComparison.OrdinalIgnoreCase);
+                    && string.Equals(cfg.Id, _activeEditableRoiId, StringComparison.OrdinalIgnoreCase)
+                    && !InspectionDatasetCreated(cfg);
                 cfg.IsEditable = editable;
             }
+        }
+
+        private const string InspectionDatasetLockedMessage =
+            "Inspection ROIs can't be modified once Dataset is created";
+
+        private bool InspectionDatasetCreated(InspectionRoiConfig? config)
+        {
+            if (config == null)
+            {
+                return false;
+            }
+
+            if (config.DatasetOkCount > 0 || config.DatasetKoCount > 0)
+            {
+                return true;
+            }
+
+            if ((config.OkPreview?.Count ?? 0) > 0 || (config.NgPreview?.Count ?? 0) > 0)
+            {
+                return true;
+            }
+
+            return DatasetPathContainsImages(config.DatasetPath);
+        }
+
+        private bool InspectionDatasetCreated(int index)
+            => InspectionDatasetCreated(GetInspectionConfigByIndex(index));
+
+        private static bool DatasetPathContainsImages(string? datasetPath)
+        {
+            var normalized = DatasetPathHelper.NormalizeDatasetPath(datasetPath);
+            if (string.IsNullOrWhiteSpace(normalized) || !Directory.Exists(normalized))
+            {
+                return false;
+            }
+
+            foreach (var labelDir in new[] { "ok", "ng", "ko" })
+            {
+                var folder = Path.Combine(normalized, labelDir);
+                if (!Directory.Exists(folder))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (Directory.EnumerateFiles(folder)
+                        .Any(file => ThumbnailImageExtensions.Contains(Path.GetExtension(file))))
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // If local enumeration fails, fall back to the backend-refreshed counters above.
+                }
+            }
+
+            return false;
+        }
+
+        private void ShowInspectionDatasetLockedWarning()
+        {
+            AppendLog($"[workflow-edit] blocked: {InspectionDatasetLockedMessage}");
+            MessageBox.Show(
+                InspectionDatasetLockedMessage,
+                "Warning",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
 
         private bool TryClearCurrentStatePersistedRoi(out RoiRole? clearedRole)
@@ -5578,6 +5868,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 MasterState.Ready => RoiRole.Inspection,
                 _ => GetCurrentStateRole()
             };
+
+            if (clearedRole == RoiRole.Inspection && InspectionDatasetCreated(_activeInspectionIndex))
+            {
+                ShowInspectionDatasetLockedWarning();
+                return false;
+            }
 
             switch (state)
             {
@@ -5656,7 +5952,176 @@ namespace BrakeDiscInspector_GUI_ROI
             LoadImage(dlg.FileName);
         }
 
-        private void LoadImage(string path)
+        private async void BtnOpenImageFolder_Click(object sender, RoutedEventArgs e)
+        {
+            using var dialog = new Forms.FolderBrowserDialog
+            {
+                Description = "Select the image folder.",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false
+            };
+
+            var initialFolder = GetInitialThumbnailFolder();
+            if (!string.IsNullOrWhiteSpace(initialFolder) && Directory.Exists(initialFolder))
+            {
+                dialog.SelectedPath = initialFolder;
+            }
+
+            if (dialog.ShowDialog() == Forms.DialogResult.OK && Directory.Exists(dialog.SelectedPath))
+            {
+                await LoadThumbnailFolderAsync(dialog.SelectedPath);
+            }
+        }
+
+        private string GetInitialThumbnailFolder()
+        {
+            if (!string.IsNullOrWhiteSpace(_thumbnailFolderPath) && Directory.Exists(_thumbnailFolderPath))
+            {
+                return _thumbnailFolderPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(_currentImagePathWin))
+            {
+                var currentFolder = Path.GetDirectoryName(_currentImagePathWin);
+                if (!string.IsNullOrWhiteSpace(currentFolder) && Directory.Exists(currentFolder))
+                {
+                    return currentFolder;
+                }
+            }
+
+            return Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+        }
+
+        private async Task LoadThumbnailFolderAsync(string folderPath)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                MessageBox.Show("No se pudo abrir la carpeta de imagenes.");
+                return;
+            }
+
+            IsThumbnailCollectionLoading = true;
+            await Dispatcher.Yield(DispatcherPriority.Render);
+
+            List<string> files;
+            try
+            {
+                files = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(IsSupportedThumbnailImage)
+                    .OrderBy(file => Path.GetFileName(file), StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al leer la carpeta: {ex.Message}");
+                IsThumbnailCollectionLoading = false;
+                return;
+            }
+
+            try
+            {
+                _thumbnailFolderPath = folderPath;
+                OnPropertyChanged(nameof(ThumbnailFolderDisplay));
+
+                _updatingThumbnailSelection = true;
+                try
+                {
+                    SelectedThumbnail = null;
+                    _imageThumbnails.Clear();
+
+                    foreach (var file in files)
+                    {
+                        var thumbnail = TryLoadThumbnail(file);
+                        if (thumbnail != null)
+                        {
+                            _imageThumbnails.Add(new ImageThumbnailItem(file, thumbnail));
+                        }
+                    }
+
+                    SelectThumbnailForPath(_currentImagePathWin);
+                }
+                finally
+                {
+                    _updatingThumbnailSelection = false;
+                }
+
+                AppendLog($"[thumbs] folder='{folderPath}' images={_imageThumbnails.Count}");
+            }
+            finally
+            {
+                IsThumbnailCollectionLoading = false;
+            }
+        }
+
+        private static bool IsSupportedThumbnailImage(string filePath)
+        {
+            var extension = Path.GetExtension(filePath);
+            return !string.IsNullOrWhiteSpace(extension) && ThumbnailImageExtensions.Contains(extension);
+        }
+
+        private ImageSource? TryLoadThumbnail(string filePath)
+        {
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 144;
+                bitmap.UriSource = new Uri(filePath);
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[thumbs] skip '{Path.GetFileName(filePath)}': {ex.Message}");
+                return null;
+            }
+        }
+
+        private void ThumbnailStrip_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_updatingThumbnailSelection)
+            {
+                return;
+            }
+
+            if (ThumbnailStripList?.SelectedItem is ImageThumbnailItem item && File.Exists(item.Path))
+            {
+                LoadImage(item.Path);
+            }
+        }
+
+        private void SelectThumbnailForPath(string? imagePath)
+        {
+            ImageThumbnailItem? match = null;
+            if (!string.IsNullOrWhiteSpace(imagePath))
+            {
+                match = _imageThumbnails.FirstOrDefault(item =>
+                    string.Equals(item.Path, imagePath, StringComparison.OrdinalIgnoreCase));
+            }
+
+            _updatingThumbnailSelection = true;
+            try
+            {
+                SelectedThumbnail = match;
+
+                if (ThumbnailStripList != null)
+                {
+                    ThumbnailStripList.SelectedItem = match;
+                    if (match != null)
+                    {
+                        ThumbnailStripList.ScrollIntoView(match);
+                    }
+                }
+            }
+            finally
+            {
+                _updatingThumbnailSelection = false;
+            }
+        }
+
+        private void LoadImage(string path, bool runAutoAnalyze = true)
         {
             _currentImagePathWin = path;
             _currentImagePathBackend = path;
@@ -5731,12 +6196,21 @@ namespace BrakeDiscInspector_GUI_ROI
             DumpUiShapesMap("imgload:post-redraw");
             ClearHeatmapOverlay();
 
-            Dispatcher.InvokeAsync(async () =>
+            if (runAutoAnalyze)
+            {
+                Dispatcher.InvokeAsync(async () =>
             {
                 await Dispatcher.Yield(DispatcherPriority.Loaded);
                 SyncOverlayToImage(scheduleResync: true);
                 await Dispatcher.Yield(DispatcherPriority.Render);
                 await Dispatcher.Yield(DispatcherPriority.Background);
+
+                if (ViewModel?.HasLoadedLayout != true)
+                {
+                    AppendLog("[auto-analyze] skipped: layout not loaded");
+                    Snack("Please load a layout");
+                    return;
+                }
 
                 if (HasAllMastersAndInspectionsDefined())
                 {
@@ -5745,6 +6219,7 @@ namespace BrakeDiscInspector_GUI_ROI
                         LogDebug("[auto-analyze] ImageLoaded → AnalyzeMaster()");
                         await AnalyzeMastersAsync(showFailureDialog: false);
                         ScheduleSyncOverlay(force: true, reason: "AutoAnalyzeAfterImageLoad");
+                        await AutoEvaluateEnabledRoisAfterImageLoadAsync();
                     }
                     catch (Exception ex)
                     {
@@ -5752,6 +6227,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     }
                 }
             }, DispatcherPriority.Loaded);
+            }
 
             UpdateRoiHud();
 
@@ -5835,7 +6311,29 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 _workflowViewModel.IsImageLoaded = true;
             }
+            SelectThumbnailForPath(path);
             EnablePresetsTab(true);
+        }
+
+        private async Task AutoEvaluateEnabledRoisAfterImageLoadAsync()
+        {
+            var vm = ViewModel;
+            if (vm?.InferEnabledRoisCommand?.CanExecute(null) != true)
+            {
+                AppendLog("[auto-eval] skipped: no enabled inspection ROIs or workflow busy");
+                return;
+            }
+
+            try
+            {
+                AppendLog("[auto-eval] evaluating enabled ROIs after image load");
+                await vm.EvaluateEnabledRoisForAutomationAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[auto-eval] failed after image load: {ex.Message}");
+                LogDebug($"[auto-eval] failed after image load: {ex.Message}");
+            }
         }
 
         private bool IsOverlayAligned()
@@ -7700,6 +8198,17 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            RoiHudStack.Children.Add(new TextBlock
+            {
+                Text = "OBJECT VISIBILITY",
+                Foreground = Brushes.Black,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 11,
+                FontWeight = FontWeights.Black,
+                Margin = new Thickness(2, 0, 2, 8),
+                TextAlignment = TextAlignment.Center
+            });
+
             // Masters (Patterns)
             if (_layout.Master1Pattern != null && IsRoiSaved(_layout.Master1Pattern))
             {
@@ -7745,12 +8254,21 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private FrameworkElement CreateHudItem(string label, Func<bool> getVisible, Action<bool> setVisible)
         {
+            if (UseModernHudVisibilityToggles)
+            {
+                return CreateHudVisibilityRow(label, getVisible(), now =>
+                {
+                    setVisible(now);
+                    try { RedrawAllRois(); } catch { }
+                });
+            }
+
             bool isVisible = getVisible();
 
             var text = new TextBlock
             {
                 Text = label,
-                Foreground = Brushes.White,
+                Foreground = Brushes.Black,
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
@@ -7761,11 +8279,13 @@ namespace BrakeDiscInspector_GUI_ROI
             var eye = new TextBlock
             {
                 Text = isVisible ? "👁" : "🚫",
-                Foreground = isVisible ? Brushes.Lime : Brushes.Gray,
+                Foreground = isVisible ? Brushes.Black : Brushes.DimGray,
                 FontSize = 12,
+                FontWeight = FontWeights.Bold,
                 Margin = new Thickness(6, 2, 0, 2),
                 VerticalAlignment = VerticalAlignment.Center
             };
+            eye.Text = isVisible ? "ON" : "OFF";
 
             var sp = new StackPanel { Orientation = Orientation.Horizontal };
             sp.Children.Add(text);
@@ -7774,8 +8294,8 @@ namespace BrakeDiscInspector_GUI_ROI
             var border = new Border
             {
                 CornerRadius = new CornerRadius(4),
-                Background = Brushes.Black,
-                BorderBrush = isVisible ? (Brush)new BrushConverter().ConvertFromString("#39FF14") : Brushes.DimGray,
+                Background = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = isVisible ? Brushes.Black : Brushes.DimGray,
                 BorderThickness = new Thickness(1.5),
                 Margin = new Thickness(0, 0, 0, 6),
                 Child = sp,
@@ -7787,7 +8307,9 @@ namespace BrakeDiscInspector_GUI_ROI
                 bool now = !getVisible();
                 setVisible(now);
                 eye.Text = now ? "👁" : "🚫";
-                border.BorderBrush = now ? (Brush)new BrushConverter().ConvertFromString("#39FF14") : Brushes.DimGray;
+                eye.Text = now ? "ON" : "OFF";
+                eye.Foreground = now ? Brushes.Black : Brushes.DimGray;
+                border.BorderBrush = now ? Brushes.Black : Brushes.DimGray;
                 try { RedrawAllRois(); } catch { }
                 e.Handled = true;
             };
@@ -7798,12 +8320,21 @@ namespace BrakeDiscInspector_GUI_ROI
         private FrameworkElement CreateRoiHudItem(RoiModel roi)
         {
             var labelText = ResolveRoiLabelText(roi) ?? roi.Label ?? "Inspection";
+            if (UseModernHudVisibilityToggles)
+            {
+                return CreateHudVisibilityRow(labelText, IsRoiRoleVisible(roi.Role), now =>
+                {
+                    SetRoiVisibility(roi.Role, now);
+                    try { RedrawAllRois(); } catch { }
+                });
+            }
+
             bool isVisible = IsRoiRoleVisible(roi.Role);
 
             var text = new TextBlock
             {
                 Text = labelText,
-                Foreground = Brushes.White,
+                Foreground = Brushes.Black,
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 12,
                 FontWeight = FontWeights.SemiBold,
@@ -7814,11 +8345,13 @@ namespace BrakeDiscInspector_GUI_ROI
             var eye = new TextBlock
             {
                 Text = isVisible ? "👁" : "🚫",
-                Foreground = isVisible ? (Brush)RoiHudAccentBrush : Brushes.Gray,
+                Foreground = isVisible ? Brushes.Black : Brushes.DimGray,
                 FontSize = 12,
+                FontWeight = FontWeights.Bold,
                 Margin = new Thickness(6, 2, 0, 2),
                 VerticalAlignment = VerticalAlignment.Center
             };
+            eye.Text = isVisible ? "ON" : "OFF";
 
             var stack = new StackPanel { Orientation = Orientation.Horizontal };
             stack.Children.Add(text);
@@ -7827,8 +8360,8 @@ namespace BrakeDiscInspector_GUI_ROI
             var border = new Border
             {
                 CornerRadius = new CornerRadius(4),
-                Background = Brushes.Black,
-                BorderBrush = isVisible ? (Brush)RoiHudAccentBrush : Brushes.DimGray,
+                Background = new SolidColorBrush(Color.FromArgb(0x66, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = isVisible ? Brushes.Black : Brushes.DimGray,
                 BorderThickness = new Thickness(1.5),
                 Margin = new Thickness(0, 0, 0, 6),
                 Child = stack,
@@ -7839,10 +8372,97 @@ namespace BrakeDiscInspector_GUI_ROI
             border.MouseLeftButtonUp += (s, e) =>
             {
                 ToggleRoiVisibility(roi.Role);
+                UpdateRoiHud();
                 e.Handled = true;
             };
 
             return border;
+        }
+
+        private static bool UseModernHudVisibilityToggles => true;
+
+        private FrameworkElement CreateHudVisibilityRow(string label, bool isVisible, Action<bool> setVisible)
+        {
+            var text = new TextBlock
+            {
+                Text = label,
+                Foreground = Brushes.Black,
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                Margin = new Thickness(0, 0, 12, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap
+            };
+
+            var toggle = CreateHudVisibilityToggle(isVisible);
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 120 });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(text);
+            Grid.SetColumn(toggle, 1);
+            row.Children.Add(toggle);
+
+            var border = new Border
+            {
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush(Color.FromArgb(0x4D, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = isVisible ? Brushes.Black : Brushes.DimGray,
+                BorderThickness = new Thickness(1.5),
+                Margin = new Thickness(0, 0, 0, 6),
+                Padding = new Thickness(8, 5, 8, 5),
+                Child = row,
+                Cursor = Cursors.Hand,
+                MinWidth = 180,
+                MaxWidth = 240
+            };
+
+            void Apply(bool now)
+            {
+                setVisible(now);
+                border.BorderBrush = now ? Brushes.Black : Brushes.DimGray;
+                toggle.ToolTip = now ? "Visible" : "Hidden";
+            }
+
+            toggle.Checked += (_, e) =>
+            {
+                Apply(true);
+                e.Handled = true;
+            };
+
+            toggle.Unchecked += (_, e) =>
+            {
+                Apply(false);
+                e.Handled = true;
+            };
+
+            return border;
+        }
+
+        private ToggleButton CreateHudVisibilityToggle(bool isVisible)
+        {
+            var toggle = new ToggleButton
+            {
+                Width = 46,
+                Height = 24,
+                IsChecked = isVisible,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = Brushes.Transparent,
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(0),
+                Cursor = Cursors.Hand,
+                ToolTip = isVisible ? "Visible" : "Hidden",
+                FocusVisualStyle = null
+            };
+
+            if (TryFindResource("HudVisibilityToggleTemplate") is ControlTemplate template)
+            {
+                toggle.Template = template;
+            }
+
+            return toggle;
         }
 
         private void ToggleRoiVisibility(RoiRole role)
@@ -7992,6 +8612,12 @@ namespace BrakeDiscInspector_GUI_ROI
             if (_layout == null)
             {
                 MessageBox.Show("No hay layout cargado.", $"Inspection {index}", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (InspectionDatasetCreated(index))
+            {
+                ShowInspectionDatasetLockedWarning();
                 return;
             }
 
@@ -8230,6 +8856,23 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            bool isActiveEditing =
+                _editingInspectionSlot.HasValue &&
+                _editingInspectionSlot.Value == index;
+
+            bool makeEditable = !isActiveEditing;
+            if (makeEditable && InspectionDatasetCreated(config))
+            {
+                roiModel.IsFrozen = true;
+                config.IsEditable = false;
+                RemoveAllRoiAdorners();
+                ApplyInspectionInteractionPolicy($"dataset-lock:{roiId}");
+                RedrawOverlaySafe();
+                GuiLog.Warn($"[workflow-edit] ToggleInspectionEdit blocked by dataset lock roi='{roiId}' index={index}");
+                ShowInspectionDatasetLockedWarning();
+                return;
+            }
+
             bool switchingRoi = _editingInspectionSlot.HasValue && _editingInspectionSlot.Value != index;
             if (switchingRoi)
             {
@@ -8249,14 +8892,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
             // Determine if THIS slot is currently the active inspection being edited,
             // using the global state (_editingInspectionSlot), not only config.IsEditable.
-            bool isActiveEditing =
+            isActiveEditing =
                 _editingInspectionSlot.HasValue &&
                 _editingInspectionSlot.Value == index;
 
             // If this ROI is NOT currently active → we want to ENTER edit mode.
             // If it IS the active one → we want to EXIT edit mode.
-            bool makeEditable = !isActiveEditing;
-
             GuiLog.Info(
                 $"[workflow-edit] decision roi='{roiId}' index={index} " +
                 $"isActiveEditing={isActiveEditing} makeEditable={makeEditable} " +
@@ -8329,6 +8970,13 @@ namespace BrakeDiscInspector_GUI_ROI
                 return;
             }
 
+            var config = GetInspectionConfigByIndex(index);
+            if (InspectionDatasetCreated(config))
+            {
+                ShowInspectionDatasetLockedWarning();
+                return;
+            }
+
             if (HasInspectionRoi(index))
             {
                 Snack($"Inspection {index} ya existe.");
@@ -8351,7 +8999,6 @@ namespace BrakeDiscInspector_GUI_ROI
 
             SetActiveInspectionIndex(index);
 
-            var config = GetInspectionConfigByIndex(index);
             if (config != null)
             {
                 ToggleInspectionEdit(config);
@@ -8484,6 +9131,12 @@ namespace BrakeDiscInspector_GUI_ROI
             var roiModel = GetInspectionSlotModel(index);
             if (roiModel == null)
                 return;
+
+            if (InspectionDatasetCreated(index))
+            {
+                ShowInspectionDatasetLockedWarning();
+                return;
+            }
 
             bool wasActive = !string.IsNullOrWhiteSpace(_activeEditableRoiId)
                 && !string.IsNullOrWhiteSpace(roiModel.Id)
@@ -8683,7 +9336,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (changed)
             {
-                _editModeActive = false;
+                SetEditModeActive(false);
             }
 
             UpdateWorkflowMasterEditState();
@@ -8970,6 +9623,17 @@ namespace BrakeDiscInspector_GUI_ROI
 
             WireExistingHeatmapControls();
             SyncDrawToolFromViewModel();
+
+            try
+            {
+                GuiLog.Info($"[BOOT] MainWindow_Loaded -> BackendAutoStarter BEGIN");
+                await BackendAutoStarter.EnsureStartedAsync(_appConfig.Backend);
+                GuiLog.Info($"[BOOT] MainWindow_Loaded -> BackendAutoStarter END");
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] MainWindow_Loaded: BackendAutoStarter FAILED", ex);
+            }
 
             try
             {
@@ -9690,6 +10354,24 @@ namespace BrakeDiscInspector_GUI_ROI
                     int.TryParse(tag, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index))
                 {
                     config = GetInspectionConfigByIndex(index);
+                    if (config != null && InspectionDatasetCreated(config))
+                    {
+                        var previousShape = e.RemovedItems.OfType<RoiShape>().FirstOrDefault();
+                        _updatingDrawToolUi = true;
+                        try
+                        {
+                            config.Shape = previousShape;
+                            combo.SelectedItem = previousShape;
+                        }
+                        finally
+                        {
+                            _updatingDrawToolUi = false;
+                        }
+
+                        ShowInspectionDatasetLockedWarning();
+                        return;
+                    }
+
                     if (config != null && config.Shape != shape)
                     {
                         config.Shape = shape;
@@ -10953,7 +11635,7 @@ namespace BrakeDiscInspector_GUI_ROI
             var savedSummary = savedRoi != null
                 ? $"{savedRole}: {DescribeRoi(savedRoi)}"
                 : "<sin ROI>";
-            _editModeActive = false;
+            SetEditModeActive(false);
             Snack($"Guardado. {savedSummary}");
         }
 
@@ -13820,7 +14502,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 ApplyLayout(loaded ?? new MasterLayout(), "manual-load", selectedPath);
                 _dataRoot = EnsureDataRoot();
                 EnsureInspectionDatasetStructure();
-                _editModeActive = false;
+                SetEditModeActive(false);
                 Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
             }
             catch (Exception ex)
@@ -14902,7 +15584,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (_isSyncRunning)
                 {
                     AppendLog($"[sync] Runner defers (already running) seq={mySeq}");
-                    Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
+                    _ = Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
                     return;
                 }
 
@@ -14920,7 +15602,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 }
             }
 
-            Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
+            _ = Dispatcher.BeginInvoke((Action)Runner, System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private void RunSyncOverlayCore(int seq, string reason)
@@ -15257,7 +15939,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _activeMaster1Role = null;
             }
 
-            _editModeActive = true;
+            SetEditModeActive(true);
             _state = state;
             var shape = ReadShapeFrom(shapeCombo);
             GuiLog.Info(
@@ -15348,7 +16030,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 if (cleared)
                 {
                     _activeEditableRoiId = null;
-                    _editModeActive = false;
+                    SetEditModeActive(false);
                     _isDrawing = false;
                     _tmpBuffer = null;
                     AppendLog($"[align] cleared {role}");
@@ -15417,7 +16099,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
         private void CancelActiveDrawing()
         {
-            _editModeActive = false;
+            SetEditModeActive(false);
             _editingM1 = false;
             _editingM2 = false;
             _activeEditableRoiId = null;
@@ -15601,12 +16283,12 @@ namespace BrakeDiscInspector_GUI_ROI
                 var targetState = ResolveMasterState(targetRole);
                 SaveFor(targetState);
 
-                _editModeActive = false;
+                SetEditModeActive(false);
                 _isDrawing = false;
                 _activeEditableRoiId = null;
                 _activeMaster1Role = null;
                 _editingM1 = false;
-                _editModeActive = _editingM2;
+                SetEditModeActive(_editingM2);
                 UpdateMasterEditButtonVisuals();
                 _state = MasterState.Ready;
 
@@ -15633,7 +16315,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM1 = true;
-                _editModeActive = true;
+                SetEditModeActive(true);
                 UpdateMasterEditButtonVisuals();
 
                 RemoveAdornersForMaster(1);
@@ -15649,7 +16331,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 RemoveAdornersForMaster(1);
                 _editingM1 = false;
                 _activeMaster1Role = null;
-                _editModeActive = _editingM2;
+                SetEditModeActive(_editingM2);
                 UpdateMasterEditButtonVisuals();
                 RedrawOverlaySafe();
                 Snack("Master 1 válido.");
@@ -15746,7 +16428,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 _state = MasterState.Ready;
                 _isDrawing = false;
                 _editingM2 = true;
-                _editModeActive = true;
+                SetEditModeActive(true);
                 UpdateMasterEditButtonVisuals();
 
                 RemoveAdornersForMaster(2);
@@ -15762,7 +16444,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 RemoveAdornersForMaster(2);
                 _editingM2 = false;
                 _activeMaster2Role = null;
-                _editModeActive = _editingM1;
+                SetEditModeActive(_editingM1);
                 UpdateMasterEditButtonVisuals();
                 RedrawOverlaySafe();
                 Snack("Master 2 válido.");
@@ -15942,6 +16624,12 @@ namespace BrakeDiscInspector_GUI_ROI
 
             if (result != MessageBoxResult.Yes)
             {
+                return;
+            }
+
+            if (ViewModel?.InspectionRois?.Any(InspectionDatasetCreated) == true)
+            {
+                ShowInspectionDatasetLockedWarning();
                 return;
             }
 

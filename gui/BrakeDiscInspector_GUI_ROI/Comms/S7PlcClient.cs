@@ -42,7 +42,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                     try
                     {
                         _plc.Open();
-                        GuiLog.Info($"[plc] Connected to {Config.IpAddress} rack={Config.Rack} slot={Config.Slot}");
+                        GuiLog.Info($"[plc] Connected to {Config.IpAddress} rack={Config.Rack} slot={Config.Slot} db={Config.DbNumber}");
                     }
                     catch (Exception ex)
                     {
@@ -87,7 +87,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 byte[] buffer;
                 lock (_sync)
                 {
-                    buffer = _plc.ReadBytes(DataType.DataBlock, PlcSignals.DbNumber, 0, 4) ?? Array.Empty<byte>();
+                    buffer = _plc.ReadBytes(DataType.DataBlock, Config.DbNumber, 0, 4) ?? Array.Empty<byte>();
                 }
 
                 var data = buffer.Length >= 4 ? buffer : buffer.Concat(new byte[4 - buffer.Length]).ToArray();
@@ -118,7 +118,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 byte[] buffer;
                 lock (_sync)
                 {
-                    buffer = _plc.ReadBytes(DataType.DataBlock, PlcSignals.DbNumber, 0, 4) ?? new byte[4];
+                    buffer = _plc.ReadBytes(DataType.DataBlock, Config.DbNumber, 0, 4) ?? new byte[4];
                 }
 
                 if (buffer.Length < 4)
@@ -139,7 +139,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
                 lock (_sync)
                 {
-                    _plc.WriteBytes(DataType.DataBlock, PlcSignals.DbNumber, 0, buffer);
+                    _plc.WriteBytes(DataType.DataBlock, Config.DbNumber, 0, buffer);
                 }
             }, ct);
         }

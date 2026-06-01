@@ -13,6 +13,10 @@
     <sys:Double x:Key="UI.FontSize.CheckBox">13</sys:Double>
 
     <SolidColorBrush x:Key="UI.Brush.Foreground" Color="Black" />
+    <SolidColorBrush x:Key="UI.Brush.Surface" Color="White" />
+    <SolidColorBrush x:Key="UI.Brush.ControlBackground" Color="White" />
+    <SolidColorBrush x:Key="UI.Brush.ControlBackgroundHover" Color="#FFF3F4F6" />
+    <SolidColorBrush x:Key="UI.Brush.ControlBorder" Color="#FFB8C0CC" />
     <SolidColorBrush x:Key="UI.Brush.ButtonForeground" Color="Black" />
     <SolidColorBrush x:Key="UI.Brush.ButtonBackground" Color="#FFE5E5E5" />
     <SolidColorBrush x:Key="UI.Brush.ButtonBackgroundHover" Color="#FFD5D5D5" />

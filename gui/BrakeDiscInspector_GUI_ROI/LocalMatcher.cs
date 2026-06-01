@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using OpenCvSharp;
@@ -7,6 +8,73 @@ namespace BrakeDiscInspector_GUI_ROI
 {
     public static class LocalMatcher
     {
+        internal sealed class TemplateVariant : IDisposable
+        {
+            public TemplateVariant(Mat image, double scale, int angleDeg)
+            {
+                Image = image;
+                Scale = scale;
+                AngleDeg = angleDeg;
+            }
+
+            public Mat Image { get; }
+            public double Scale { get; }
+            public int AngleDeg { get; }
+
+            public void Dispose() => Image.Dispose();
+        }
+
+        public sealed class TemplateVariantSet : IDisposable
+        {
+            private readonly System.Collections.Generic.List<TemplateVariant> _variants = new();
+            private bool _disposed;
+
+            internal TemplateVariantSet(Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax)
+            {
+                PatternWidth = patternGray.Width;
+                PatternHeight = patternGray.Height;
+                PatternType = patternGray.Type();
+                RotRangeDeg = rotRangeDeg;
+                ScaleMin = Math.Min(scaleMin, scaleMax);
+                ScaleMax = Math.Max(scaleMin, scaleMax);
+            }
+
+            public int PatternWidth { get; }
+            public int PatternHeight { get; }
+            public MatType PatternType { get; }
+            public int RotRangeDeg { get; }
+            public double ScaleMin { get; }
+            public double ScaleMax { get; }
+            public int Count => _variants.Count;
+
+            internal IReadOnlyList<TemplateVariant> Variants => _variants;
+
+            internal void Add(Mat image, double scale, int angleDeg)
+                => _variants.Add(new TemplateVariant(image, scale, angleDeg));
+
+            public bool Matches(Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax)
+            {
+                if (_disposed || patternGray == null || patternGray.Empty()) return false;
+                return PatternWidth == patternGray.Width
+                       && PatternHeight == patternGray.Height
+                       && PatternType == patternGray.Type()
+                       && RotRangeDeg == rotRangeDeg
+                       && NearlyEqual(ScaleMin, Math.Min(scaleMin, scaleMax))
+                       && NearlyEqual(ScaleMax, Math.Max(scaleMin, scaleMax));
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                foreach (var variant in _variants)
+                {
+                    variant.Dispose();
+                }
+                _variants.Clear();
+            }
+        }
+
         public sealed class LocalMatchResult
         {
             public Point2d? Center { get; init; }
@@ -38,6 +106,40 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private static void Log(Action<string>? log, string message) => log?.Invoke(message);
+
+        private static bool NearlyEqual(double a, double b) => Math.Abs(a - b) <= 1e-9;
+
+        private static IEnumerable<double> GenerateScales(double scaleMin, double scaleMax)
+        {
+            var minScale = Math.Min(scaleMin, scaleMax);
+            var maxScale = Math.Max(scaleMin, scaleMax);
+            const int steps = 5;
+            return Enumerable.Range(0, steps + 1)
+                             .Select(i => minScale + i * (maxScale - minScale) / Math.Max(steps, 1))
+                             .Distinct();
+        }
+
+        public static TemplateVariantSet BuildTemplateVariantSet(Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax)
+        {
+            if (patternGray == null) throw new ArgumentNullException(nameof(patternGray));
+
+            using var converted = patternGray.Channels() == 1 ? null : ToGray(patternGray);
+            var source = converted ?? patternGray;
+            var variants = new TemplateVariantSet(source, rotRangeDeg, scaleMin, scaleMax);
+
+            foreach (var scale in GenerateScales(scaleMin, scaleMax))
+            {
+                for (int angle = -rotRangeDeg; angle <= rotRangeDeg; angle += 2)
+                {
+                    Mat image = NearlyEqual(angle, 0) && NearlyEqual(scale, 1.0)
+                        ? source.Clone()
+                        : RotateAndScale(source, angle, scale);
+                    variants.Add(image, scale, angle);
+                }
+            }
+
+            return variants;
+        }
 
         private static Mat PackPoints(Point2f[] pts)
         {
@@ -84,7 +186,7 @@ namespace BrakeDiscInspector_GUI_ROI
         }
 
         private static (Point2d? center, int score, string? failure, double bestCorr, double secondBestCorr, double corrMargin, double bestScale, double bestAngleDeg, Point bestLoc, int candidatesEvaluated) MatchTemplateRot(
-            Mat imageGray, Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax, Action<string>? log, string roleTag)
+            Mat imageGray, Mat patternGray, int rotRangeDeg, double scaleMin, double scaleMax, Action<string>? log, string roleTag, TemplateVariantSet? templateVariants = null)
         {
             if (imageGray.Empty() || patternGray.Empty())
                 return (null, 0, "imgs vacías", 0, 0, 0, 1.0, 0.0, new Point(), 0);
@@ -96,38 +198,46 @@ namespace BrakeDiscInspector_GUI_ROI
             double bestScale = 1.0;
             var candidates = new System.Collections.Generic.List<(double corr, Point loc, double scale, double angle, int w, int h)>();
 
-            var minScale = Math.Min(scaleMin, scaleMax);
-            var maxScale = Math.Max(scaleMin, scaleMax);
-            int steps = 5;
-            var scales = Enumerable.Range(0, steps + 1)
-                                   .Select(i => minScale + i * (maxScale - minScale) / Math.Max(steps, 1))
-                                   .Distinct();
+            TemplateVariantSet? generatedVariants = null;
+            var activeVariants = templateVariants != null && templateVariants.Matches(patternGray, rotRangeDeg, scaleMin, scaleMax)
+                ? templateVariants
+                : null;
 
-            foreach (var scale in scales)
+            if (activeVariants == null)
             {
-                for (int angle = -rotRangeDeg; angle <= rotRangeDeg; angle += 2)
+                generatedVariants = BuildTemplateVariantSet(patternGray, rotRangeDeg, scaleMin, scaleMax);
+                activeVariants = generatedVariants;
+            }
+
+            try
+            {
+                foreach (var variant in activeVariants.Variants)
                 {
-                    using var rotated = RotateAndScale(patternGray, angle, scale);
+                    var rotated = variant.Image;
                     if (rotated.Width > imageGray.Width || rotated.Height > imageGray.Height)
                     {
-                        Log(log, $"[TM] skip: rotPat({rotated.Width}x{rotated.Height}) > img({imageGray.Width}x{imageGray.Height}) @ang={angle},scale={scale:F3}");
+                        Log(log, $"[TM] skip: rotPat({rotated.Width}x{rotated.Height}) > img({imageGray.Width}x{imageGray.Height}) @ang={variant.AngleDeg},scale={variant.Scale:F3}");
                         continue;
                     }
 
                     using var response = new Mat();
                     Cv2.MatchTemplate(imageGray, rotated, response, TemplateMatchModes.CCoeffNormed);
                     Cv2.MinMaxLoc(response, out _, out double maxVal, out _, out Point maxLoc);
-                    candidates.Add((maxVal, maxLoc, scale, angle, rotated.Width, rotated.Height));
+                    candidates.Add((maxVal, maxLoc, variant.Scale, variant.AngleDeg, rotated.Width, rotated.Height));
 
                     if (maxVal > best)
                     {
                         best = maxVal;
                         bestPoint = new Point2d(maxLoc.X + rotated.Width / 2.0, maxLoc.Y + rotated.Height / 2.0);
-                        bestAngle = angle;
-                        bestScale = scale;
+                        bestAngle = variant.AngleDeg;
+                        bestScale = variant.Scale;
                         bestLoc = maxLoc;
                     }
                 }
+            }
+            finally
+            {
+                generatedVariants?.Dispose();
             }
 
             string? failure = bestPoint == null ? "sin correlación" : $"maxCorr={Math.Max(best, 0):F4}";
@@ -304,9 +414,10 @@ namespace BrakeDiscInspector_GUI_ROI
             double scaleMax,
             Mat? patternOverride = null,
             Action<string>? log = null,
-            string role = "")
+            string role = "",
+            TemplateVariantSet? templateVariants = null)
         {
-            var detailed = MatchInSearchROIWithDetails(fullImageBgr, patternRoi, searchRoi, feature, threshold, rotRange, scaleMin, scaleMax, patternOverride, log, role);
+            var detailed = MatchInSearchROIWithDetails(fullImageBgr, patternRoi, searchRoi, feature, threshold, rotRange, scaleMin, scaleMax, patternOverride, log, role, templateVariants);
             return (detailed.Center, detailed.Score);
         }
 
@@ -321,7 +432,8 @@ namespace BrakeDiscInspector_GUI_ROI
             double scaleMax,
             Mat? patternOverride = null,
             Action<string>? log = null,
-            string role = "")
+            string role = "",
+            TemplateVariantSet? templateVariants = null)
         {
             if (fullImageBgr == null) throw new ArgumentNullException(nameof(fullImageBgr));
 
@@ -337,7 +449,8 @@ namespace BrakeDiscInspector_GUI_ROI
                 scaleMax,
                 patternOverride,
                 log,
-                role);
+                role,
+                templateVariants);
         }
 
         public static LocalMatchResult MatchInSearchROIWithDetailsGray(
@@ -351,7 +464,8 @@ namespace BrakeDiscInspector_GUI_ROI
             double scaleMax,
             Mat? patternOverride = null,
             Action<string>? log = null,
-            string role = "")
+            string role = "",
+            TemplateVariantSet? templateVariants = null)
         {
             if (fullImageGray == null) throw new ArgumentNullException(nameof(fullImageGray));
             if (searchRoi == null) throw new ArgumentNullException(nameof(searchRoi));
@@ -509,7 +623,7 @@ namespace BrakeDiscInspector_GUI_ROI
 
                     if (mode == "tm_rot")
                     {
-                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag);
+                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag, templateVariants);
 
                         bool acceptedByThreshold = tm.center is not null && tm.score >= threshold;
                         Log(log, $"[PATTERN][TM] role={roleTag} requested=tm_rot used=tm_rot search={searchRect.Width}x{searchRect.Height} pattern={patternGray.Width}x{patternGray.Height} candidates={tm.candidatesEvaluated} best={tm.bestCorr:F4} second={tm.secondBestCorr:F4} margin={tm.corrMargin:F4} score={tm.score} threshold={threshold} angle={tm.bestAngleDeg:F3} scale={tm.bestScale:F3} center=({(tm.center?.X):F3},{(tm.center?.Y):F3}) acceptedByThreshold={acceptedByThreshold}");
@@ -534,7 +648,7 @@ namespace BrakeDiscInspector_GUI_ROI
                     // 2) AUTO: fallback a TM si fallan features
                     if (mode == "auto" && (feat.center is null || feat.score < threshold))
                     {
-                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag);
+                        var tm = MatchTemplateRot(searchGray, patternGray, rotRange, scaleMin, scaleMax, log, roleTag, templateVariants);
                         bool tmAcceptedByThreshold = tm.center is not null && tm.score >= threshold;
                         Log(log, $"[PATTERN][AUTO] role={roleTag} requested=auto used=tm_fallback fallback=True causeFeat={feat.failure ?? "<none>"} featScore={feat.score} tmScore={tm.score} threshold={threshold} acceptedByThreshold={tmAcceptedByThreshold}");
 

@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
     <sys:String x:Key="LoadImage">Load Image</sys:String>
+    <sys:String x:Key="OpenImageFolder">Open Folder</sys:String>
     <sys:String x:Key="LoadLayout">Load Layout</sys:String>
     <sys:String x:Key="SaveLayout">Save Layout</sys:String>
     <sys:String x:Key="LayoutAutosave">Layout Autosave</sys:String>
@@ -19,6 +20,9 @@
     <sys:String x:Key="StatusBusy">Working</sys:String>
     <sys:String x:Key="StatusIdle">Idle</sys:String>
     <sys:String x:Key="LoadPictureTooltip">Open an image file (Ctrl+O)</sys:String>
+    <sys:String x:Key="OpenImageFolderTooltip">Open an image folder (Ctrl+O)</sys:String>
+    <sys:String x:Key="ImageFolderEmpty">Open a folder to show image thumbnails.</sys:String>
+    <sys:String x:Key="ImageFolderLoading">Cargando coleccion de imagenes...</sys:String>
     <sys:String x:Key="SaveLayoutTooltip">Save the current layout (Ctrl+S)</sys:String>
     <sys:String x:Key="LoadLayoutTooltip">Load an existing layout (Ctrl+L)</sys:String>
     <sys:String x:Key="PrimaryActions">Primary actions</sys:String>

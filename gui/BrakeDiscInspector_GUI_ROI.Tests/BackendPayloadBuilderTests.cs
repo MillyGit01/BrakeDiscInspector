@@ -1,7 +1,6 @@
-using System;
-using System.Reflection;
 using System.Text.Json;
 using BrakeDiscInspector_GUI_ROI;
+using OpenCvSharp;
 using Xunit;
 
 namespace BrakeDiscInspector_GUI_ROI.Tests;
@@ -9,31 +8,36 @@ namespace BrakeDiscInspector_GUI_ROI.Tests;
 public class BackendPayloadBuilderTests
 {
     [Fact]
-    public void SerializeRoiToJson_EmitsCenterCoordinates()
+    public void TryPrepareCanonicalRoi_RectangleShapeUsesCanonicalCropDimensions()
     {
+        using var src = new Mat(new Size(220, 180), MatType.CV_8UC3, Scalar.Black);
         var roi = new RoiModel
         {
             Shape = RoiShape.Rectangle,
             Width = 48,
             Height = 32,
-            AngleDeg = 37.5
+            AngleDeg = 0
         };
         roi.Left = 120;
         roi.Top = 80;
 
-        string json = InvokeSerializeRoiToJson(roi);
+        Assert.True(BackendAPI.TryPrepareCanonicalRoi(src, roi, out var payload, out _));
+        Assert.NotNull(payload);
 
-        using var doc = JsonDocument.Parse(json);
+        using var doc = JsonDocument.Parse(payload!.ShapeJson ?? "{}");
         var root = doc.RootElement;
 
-        Assert.Equal(roi.X, root.GetProperty("x").GetDouble());
-        Assert.Equal(roi.Y, root.GetProperty("y").GetDouble());
-        Assert.Equal(roi.AngleDeg, root.GetProperty("angle_deg").GetDouble());
+        Assert.Equal("rect", root.GetProperty("kind").GetString());
+        Assert.Equal(0, root.GetProperty("x").GetDouble());
+        Assert.Equal(0, root.GetProperty("y").GetDouble());
+        Assert.Equal(payload.Width, root.GetProperty("w").GetDouble());
+        Assert.Equal(payload.Height, root.GetProperty("h").GetDouble());
     }
 
     [Fact]
-    public void SerializeRoiToJson_AnnulusIncludesInnerRadius()
+    public void TryPrepareCanonicalRoi_AnnulusShapeIncludesInnerRadius()
     {
+        using var src = new Mat(new Size(260, 220), MatType.CV_8UC3, Scalar.Black);
         var roi = new RoiModel
         {
             Shape = RoiShape.Annulus,
@@ -41,21 +45,22 @@ public class BackendPayloadBuilderTests
             CY = 120,
             R = 48,
             RInner = 20,
-            AngleDeg = 15
+            AngleDeg = 0
         };
 
-        string json = InvokeSerializeRoiToJson(roi);
+        Assert.True(BackendAPI.TryPrepareCanonicalRoi(src, roi, out var payload, out _));
+        Assert.NotNull(payload);
 
-        using var doc = JsonDocument.Parse(json);
+        using var doc = JsonDocument.Parse(payload!.ShapeJson ?? "{}");
         var root = doc.RootElement;
 
-        Assert.Equal("annulus", root.GetProperty("shape").GetString());
+        Assert.Equal("annulus", root.GetProperty("kind").GetString());
         Assert.Equal(roi.R, root.GetProperty("r").GetDouble());
-        Assert.Equal(roi.RInner, root.GetProperty("ri").GetDouble());
+        Assert.Equal(roi.RInner, root.GetProperty("r_inner").GetDouble());
     }
 
     [Fact]
-    public void TryGetSearchRect_UsesLeftTopForRectangle()
+    public void TryBuildRoiCropInfo_UsesLeftTopForRectangle()
     {
         var roi = new RoiModel
         {
@@ -66,30 +71,10 @@ public class BackendPayloadBuilderTests
         roi.Left = 50;
         roi.Top = 30;
 
-        object[] args = { roi, 0, 0, 0, 0 };
-        bool ok = (bool)TryGetSearchRectMethod().Invoke(null, args)!;
-
-        Assert.True(ok);
-        Assert.Equal((int)Math.Round(roi.Left), (int)args[1]);
-        Assert.Equal((int)Math.Round(roi.Top), (int)args[2]);
-        Assert.Equal((int)Math.Round(roi.Width), (int)args[3]);
-        Assert.Equal((int)Math.Round(roi.Height), (int)args[4]);
-    }
-
-    private static string InvokeSerializeRoiToJson(RoiModel roi)
-    {
-        return (string)SerializeRoiToJsonMethod().Invoke(null, new object[] { roi })!;
-    }
-
-    private static MethodInfo SerializeRoiToJsonMethod()
-    {
-        return typeof(MainWindow).GetMethod("SerializeRoiToJson", BindingFlags.NonPublic | BindingFlags.Static)
-               ?? throw new InvalidOperationException("SerializeRoiToJson not found");
-    }
-
-    private static MethodInfo TryGetSearchRectMethod()
-    {
-        return typeof(BackendAPI).GetMethod("TryGetSearchRect", BindingFlags.NonPublic | BindingFlags.Static)
-               ?? throw new InvalidOperationException("TryGetSearchRect not found");
+        Assert.True(RoiCropUtils.TryBuildRoiCropInfo(roi, out var info));
+        Assert.Equal(roi.Left, info.Left);
+        Assert.Equal(roi.Top, info.Top);
+        Assert.Equal(roi.Width, info.Width);
+        Assert.Equal(roi.Height, info.Height);
     }
 }

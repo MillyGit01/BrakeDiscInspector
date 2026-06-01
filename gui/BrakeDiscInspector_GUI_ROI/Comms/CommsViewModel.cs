@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Workflow;
+using Forms = System.Windows.Forms;
 
 namespace BrakeDiscInspector_GUI_ROI.Comms
 {
@@ -54,15 +55,45 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
     public sealed class CommsViewModel : INotifyPropertyChanged, IDisposable
     {
-        private readonly Func<PlcConfig, IPlcClient> _clientFactory;
+        private readonly Func<PlcConfig, string, IPlcClient> _clientFactory;
+        private readonly Func<CameraConfig, ICameraClient> _cameraFactory;
+        private readonly Func<string, CancellationToken, Task<bool?>>? _inspectImageAsync;
         private IPlcClient _client;
+        private ICameraClient _camera;
+        private string _clientMode;
         private readonly SynchronizationContext? _uiContext;
         private CancellationTokenSource? _pollingCts;
         private Task? _pollingTask;
+        private readonly int _pollIntervalMs;
+        private readonly bool _requirePartPresent;
+        private readonly object _cycleSync = new();
+        private readonly Dictionary<PlcSignalId, bool> _lastSignals = new();
+        private CancellationTokenSource? _cycleCts;
         private string _plcIpAddress;
+        private short _rack;
+        private short _slot;
+        private int _dbNumber;
+        private string _plcMode;
         private string _connectionStatus = "Disconnected";
+        private string _cameraProvider;
+        private string _cameraSource;
+        private string _cameraOutputDirectory;
+        private string _cameraStatus = "Camera disconnected";
+        private string _lastAcquiredImagePath = string.Empty;
+        private string _cycleStatus = "Idle";
+        private bool _autoRunInspection;
+        private bool _cycleInProgress;
 
-        public CommsViewModel(PlcConfig config, Func<PlcConfig, IPlcClient> clientFactory)
+        public CommsViewModel(
+            PlcConfig config,
+            string plcMode,
+            Func<PlcConfig, string, IPlcClient> clientFactory,
+            CameraConfig cameraConfig,
+            Func<CameraConfig, ICameraClient> cameraFactory,
+            Func<string, CancellationToken, Task<bool?>>? inspectImageAsync,
+            int pollIntervalMs,
+            bool requirePartPresent,
+            bool autoRunInspection)
         {
             if (config == null)
             {
@@ -70,11 +101,23 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
 
             _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
-            _client = _clientFactory(config);
+            _cameraFactory = cameraFactory ?? throw new ArgumentNullException(nameof(cameraFactory));
+            _inspectImageAsync = inspectImageAsync;
+            _clientMode = NormalizePlcMode(plcMode);
+            _client = _clientFactory(config, _clientMode);
+            _camera = _cameraFactory(cameraConfig ?? new CameraConfig(BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Disabled, string.Empty, string.Empty));
             _uiContext = SynchronizationContext.Current;
+            _pollIntervalMs = Math.Max(50, pollIntervalMs);
+            _requirePartPresent = requirePartPresent;
             _plcIpAddress = config.IpAddress;
-            Rack = config.Rack;
-            Slot = config.Slot;
+            _rack = config.Rack;
+            _slot = config.Slot;
+            _dbNumber = config.DbNumber;
+            _plcMode = _clientMode;
+            _cameraProvider = cameraConfig?.Provider ?? BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Disabled;
+            _cameraSource = cameraConfig?.Source ?? string.Empty;
+            _cameraOutputDirectory = cameraConfig?.OutputDirectory ?? string.Empty;
+            _autoRunInspection = autoRunInspection;
 
             Inputs = new ObservableCollection<PlcIoPointViewModel>();
             Outputs = new ObservableCollection<PlcIoPointViewModel>();
@@ -96,11 +139,33 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             DisconnectCommand = new AsyncCommand(_ => DisconnectAsync());
             ToggleOutputCommand = new AsyncCommand(param => ToggleOutputAsync(param));
             ToggleInputCommand = new AsyncCommand(param => ToggleInputAsync(param));
+            ConnectCameraCommand = new AsyncCommand(_ => ConnectCameraAsync());
+            DisconnectCameraCommand = new AsyncCommand(_ => DisconnectCameraAsync());
+            AcquireImageCommand = new AsyncCommand(_ => AcquireImageCycleAsync("manual"));
+            BrowseCameraSourceCommand = new AsyncCommand(_ => BrowseCameraSourceAsync(), _ => IsFolderCameraProvider);
         }
 
         public ObservableCollection<PlcIoPointViewModel> Inputs { get; }
 
         public ObservableCollection<PlcIoPointViewModel> Outputs { get; }
+
+        public IReadOnlyList<string> PlcModes { get; } = new[] { "Simulation", "S7" };
+
+        public IReadOnlyList<string> CameraProviders { get; } = BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.All;
+
+        public string PlcMode
+        {
+            get => _plcMode;
+            set
+            {
+                var normalized = NormalizePlcMode(value);
+                if (_plcMode != normalized)
+                {
+                    _plcMode = normalized;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public string PlcIpAddress
         {
@@ -115,9 +180,45 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
         }
 
-        public short Rack { get; }
+        public short Rack
+        {
+            get => _rack;
+            set
+            {
+                if (_rack != value)
+                {
+                    _rack = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
-        public short Slot { get; }
+        public short Slot
+        {
+            get => _slot;
+            set
+            {
+                if (_slot != value)
+                {
+                    _slot = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int DbNumber
+        {
+            get => _dbNumber;
+            set
+            {
+                var normalized = Math.Max(1, value);
+                if (_dbNumber != normalized)
+                {
+                    _dbNumber = normalized;
+                    OnPropertyChanged();
+                }
+            }
+        }
 
         public string ConnectionStatus
         {
@@ -132,6 +233,110 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
         }
 
+        public string CameraProvider
+        {
+            get => _cameraProvider;
+            set
+            {
+                var normalized = string.IsNullOrWhiteSpace(value) ? BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Disabled : value.Trim();
+                if (_cameraProvider != normalized)
+                {
+                    _cameraProvider = normalized;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(IsFolderCameraProvider));
+                    OnPropertyChanged(nameof(CameraSourceDisplay));
+                    BrowseCameraSourceCommand?.RaiseCanExecuteChanged();
+                }
+            }
+        }
+
+        public bool IsFolderCameraProvider
+            => string.Equals(CameraProvider, BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Folder, StringComparison.OrdinalIgnoreCase);
+
+        public string CameraSource
+        {
+            get => _cameraSource;
+            set
+            {
+                if (_cameraSource != value)
+                {
+                    _cameraSource = value ?? string.Empty;
+                    OnPropertyChanged();
+                    OnPropertyChanged(nameof(CameraSourceDisplay));
+                }
+            }
+        }
+
+        public string CameraSourceDisplay
+            => IsFolderCameraProvider
+                ? (string.IsNullOrWhiteSpace(CameraSource) ? "No source folder selected" : CameraSource)
+                : "Source is only used by the Folder provider";
+
+        public string CameraOutputDirectory
+        {
+            get => _cameraOutputDirectory;
+            set
+            {
+                if (_cameraOutputDirectory != value)
+                {
+                    _cameraOutputDirectory = value ?? string.Empty;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool AutoRunInspection
+        {
+            get => _autoRunInspection;
+            set
+            {
+                if (_autoRunInspection != value)
+                {
+                    _autoRunInspection = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string CameraStatus
+        {
+            get => _cameraStatus;
+            private set
+            {
+                if (_cameraStatus != value)
+                {
+                    _cameraStatus = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string LastAcquiredImagePath
+        {
+            get => _lastAcquiredImagePath;
+            private set
+            {
+                if (_lastAcquiredImagePath != value)
+                {
+                    _lastAcquiredImagePath = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string CycleStatus
+        {
+            get => _cycleStatus;
+            private set
+            {
+                if (_cycleStatus != value)
+                {
+                    _cycleStatus = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public AsyncCommand ConnectCommand { get; }
 
         public AsyncCommand DisconnectCommand { get; }
@@ -139,6 +344,14 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         public AsyncCommand ToggleOutputCommand { get; }
 
         public AsyncCommand ToggleInputCommand { get; }
+
+        public AsyncCommand ConnectCameraCommand { get; }
+
+        public AsyncCommand DisconnectCameraCommand { get; }
+
+        public AsyncCommand AcquireImageCommand { get; }
+
+        public AsyncCommand BrowseCameraSourceCommand { get; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -158,6 +371,12 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             {
                 await _client.ConnectAsync().ConfigureAwait(false);
                 ConnectionStatus = "Connected";
+                await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+                {
+                    [PlcSignalId.SystemReady] = true,
+                    [PlcSignalId.Busy] = false,
+                    [PlcSignalId.Error] = false
+                }).ConfigureAwait(false);
                 StartPolling();
             }
             catch (Exception ex)
@@ -173,6 +392,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
             try
             {
+                CancelCycle("disconnect");
                 await _client.DisconnectAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -218,7 +438,81 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             var vm = Inputs.FirstOrDefault(i => i.Id == signalId);
             if (vm != null)
             {
-                vm.IsOn = !vm.IsOn;
+                var newValue = !vm.IsOn;
+                vm.IsOn = newValue;
+                if (_client is ISimulatedPlcClient sim)
+                {
+                    return sim.SetInputAsync(signalId, newValue);
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public async Task ConnectCameraAsync()
+        {
+            EnsureCameraMatchesConfig();
+
+            if (_camera.IsConnected)
+            {
+                CameraStatus = "Camera connected";
+                return;
+            }
+
+            CameraStatus = "Camera connecting...";
+            try
+            {
+                await _camera.ConnectAsync().ConfigureAwait(false);
+                CameraStatus = "Camera connected";
+            }
+            catch (Exception ex)
+            {
+                CameraStatus = $"Camera disconnected: {ex.Message}";
+                GuiLog.Error("[camera] Connection failed", ex);
+            }
+        }
+
+        public async Task DisconnectCameraAsync()
+        {
+            try
+            {
+                await _camera.DisconnectAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[camera] Disconnect failed", ex);
+            }
+
+            CameraStatus = "Camera disconnected";
+        }
+
+        public async Task AcquireImageCycleAsync(string reason = "manual")
+        {
+            await RunInspectionCycleAsync(reason, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        private Task BrowseCameraSourceAsync()
+        {
+            if (!IsFolderCameraProvider)
+            {
+                return Task.CompletedTask;
+            }
+
+            using var dialog = new Forms.FolderBrowserDialog
+            {
+                Description = "Select the folder used by the Folder camera provider.",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false
+            };
+
+            if (!string.IsNullOrWhiteSpace(CameraSource) && System.IO.Directory.Exists(CameraSource))
+            {
+                dialog.SelectedPath = CameraSource;
+            }
+
+            if (dialog.ShowDialog() == Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+            {
+                CameraSource = dialog.SelectedPath;
             }
 
             return Task.CompletedTask;
@@ -229,6 +523,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             var payload = new Dictionary<PlcSignalId, bool>
             {
                 [PlcSignalId.Busy] = true,
+                [PlcSignalId.Error] = false,
                 [PlcSignalId.ResultOk] = false,
                 [PlcSignalId.ResultNg] = false
             };
@@ -285,7 +580,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                     {
                         var values = await _client.ReadAsync(token).ConfigureAwait(false);
                         UpdateSignals(values);
-                        await Task.Delay(100, token).ConfigureAwait(false);
+                        await HandleInputTransitionsAsync(values, token).ConfigureAwait(false);
+                        await Task.Delay(_pollIntervalMs, token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -345,21 +641,203 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
         }
 
+        private async Task HandleInputTransitionsAsync(IDictionary<PlcSignalId, bool> values, CancellationToken ct)
+        {
+            var startNow = values.TryGetValue(PlcSignalId.StartInspection, out var start) && start;
+            var startWas = _lastSignals.TryGetValue(PlcSignalId.StartInspection, out var previousStart) && previousStart;
+            var stopNow = values.TryGetValue(PlcSignalId.StopInspection, out var stop) && stop;
+            var stopWas = _lastSignals.TryGetValue(PlcSignalId.StopInspection, out var previousStop) && previousStop;
+            var partPresent = values.TryGetValue(PlcSignalId.PartPresent, out var present) && present;
+            var resetError = values.TryGetValue(PlcSignalId.ResetError, out var reset) && reset;
+
+            foreach (var kvp in values)
+            {
+                _lastSignals[kvp.Key] = kvp.Value;
+            }
+
+            if (resetError)
+            {
+                await NotifyError(false).ConfigureAwait(false);
+            }
+
+            if (stopNow && !stopWas)
+            {
+                CancelCycle("plc-stop");
+            }
+
+            if (!startNow || startWas)
+            {
+                return;
+            }
+
+            if (_requirePartPresent && !partPresent)
+            {
+                CycleStatus = "Start ignored: part not present";
+                GuiLog.Warn("[plc] StartInspection ignored because PartPresent is false");
+                return;
+            }
+
+            StartCycleFromPolling("plc-start", ct);
+            await Task.CompletedTask.ConfigureAwait(false);
+        }
+
+        private void StartCycleFromPolling(string reason, CancellationToken pollingToken)
+        {
+            lock (_cycleSync)
+            {
+                if (_cycleInProgress)
+                {
+                    CycleStatus = "Cycle already running";
+                    GuiLog.Warn($"[comms] cycle ignored reason={reason}: already running");
+                    return;
+                }
+
+                _cycleCts?.Dispose();
+                _cycleCts = CancellationTokenSource.CreateLinkedTokenSource(pollingToken);
+                var cycleToken = _cycleCts.Token;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await RunInspectionCycleAsync(reason, cycleToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        GuiLog.Error("[comms] background cycle failed", ex);
+                    }
+                }, CancellationToken.None);
+            }
+        }
+
+        private void CancelCycle(string reason)
+        {
+            try
+            {
+                _cycleCts?.Cancel();
+                CycleStatus = $"Cycle cancel requested ({reason})";
+            }
+            catch
+            {
+                // Ignore cancellation errors.
+            }
+        }
+
+        private async Task RunInspectionCycleAsync(string reason, CancellationToken ct)
+        {
+            lock (_cycleSync)
+            {
+                if (_cycleInProgress)
+                {
+                    CycleStatus = "Cycle already running";
+                    GuiLog.Warn($"[comms] cycle ignored reason={reason}: already running");
+                    return;
+                }
+
+                _cycleInProgress = true;
+            }
+
+            try
+            {
+                CycleStatus = $"Cycle starting ({reason})";
+                await NotifyInspectionStarted().ConfigureAwait(false);
+
+                if (!_camera.IsConnected)
+                {
+                    await ConnectCameraAsync().ConfigureAwait(false);
+                }
+
+                var frame = await _camera.AcquireAsync(ct).ConfigureAwait(false);
+                LastAcquiredImagePath = frame.FilePath;
+                CycleStatus = $"Image acquired: {System.IO.Path.GetFileName(frame.FilePath)}";
+
+                bool? ok = null;
+                if (AutoRunInspection && _inspectImageAsync != null)
+                {
+                    CycleStatus = "Inspection running";
+                    ok = await _inspectImageAsync(frame.FilePath, ct).ConfigureAwait(false);
+                }
+
+                if (ok.HasValue)
+                {
+                    await NotifyInspectionFinished(ok.Value).ConfigureAwait(false);
+                    CycleStatus = ok.Value ? "Cycle finished: OK" : "Cycle finished: NG";
+                }
+                else
+                {
+                    await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+                    {
+                        [PlcSignalId.Busy] = false
+                    }).ConfigureAwait(false);
+                    CycleStatus = AutoRunInspection ? "Cycle finished: result unknown" : "Image acquired";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                CycleStatus = "Cycle cancelled";
+                await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+                {
+                    [PlcSignalId.Busy] = false
+                }).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                CycleStatus = $"Cycle error: {ex.Message}";
+                GuiLog.Error("[comms] Inspection cycle failed", ex);
+                await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+                {
+                    [PlcSignalId.Busy] = false,
+                    [PlcSignalId.Error] = true
+                }).ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (_cycleSync)
+                {
+                    _cycleInProgress = false;
+                }
+            }
+        }
+
         private void EnsureClientMatchesConfig()
         {
-            var desired = new PlcConfig(PlcIpAddress, Rack, Slot);
+            var desiredMode = NormalizePlcMode(PlcMode);
+            var desired = new PlcConfig(PlcIpAddress, Rack, Slot, DbNumber);
 
             if (_client.Config.IpAddress == desired.IpAddress &&
                 _client.Config.Rack == desired.Rack &&
-                _client.Config.Slot == desired.Slot)
+                _client.Config.Slot == desired.Slot &&
+                _client.Config.DbNumber == desired.DbNumber &&
+                string.Equals(_clientMode, desiredMode, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
             StopPolling();
             _client.Dispose();
-            _client = _clientFactory(desired);
+            _clientMode = desiredMode;
+            _client = _clientFactory(desired, desiredMode);
+            _lastSignals.Clear();
         }
+
+        private void EnsureCameraMatchesConfig()
+        {
+            var desired = new CameraConfig(CameraProvider, CameraSource, CameraOutputDirectory);
+            if (string.Equals(_camera.Config.Provider, desired.Provider, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_camera.Config.Source, desired.Source, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_camera.Config.OutputDirectory, desired.OutputDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _camera.Dispose();
+            _camera = _cameraFactory(desired);
+        }
+
+        private static string NormalizePlcMode(string? mode)
+            => string.Equals(mode, "S7", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "SiemensS7", StringComparison.OrdinalIgnoreCase)
+                    ? "S7"
+                    : "Simulation";
 
         private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
@@ -369,8 +847,11 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         public void Dispose()
         {
             StopPolling();
+            CancelCycle("dispose");
             _pollingCts?.Dispose();
+            _cycleCts?.Dispose();
             _client.Dispose();
+            _camera.Dispose();
         }
     }
 }

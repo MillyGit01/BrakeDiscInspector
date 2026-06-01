@@ -18,9 +18,13 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             ResetLogsOnStartup();
             var guiSettings = GuiSetupSettingsService.LoadOrDefault();
+            var themePreference = string.IsNullOrWhiteSpace(guiSettings.Theme)
+                ? Settings.Default.ThemePreference
+                : guiSettings.Theme;
+            guiSettings.Theme = themePreference;
             CurrentGuiSetup = guiSettings;
-            GuiSetupSettingsService.Apply(guiSettings);
-            ApplyThemePreference(guiSettings.Theme);
+            ApplyThemePreference(themePreference);
+            GuiSetupSettingsService.ApplyThemeBrushes(themePreference);
             GuiSetupSettingsService.Apply(CurrentGuiSetup);
             base.OnStartup(e);
         }

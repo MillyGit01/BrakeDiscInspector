@@ -6,8 +6,20 @@ This document covers how to run the **backend** and connect the GUI.
 
 ### Standalone (GUI + backend on one machine)
 1. Install Python 3.11+ and (optionally) CUDA.
-2. Run the backend (`uvicorn backend.app:app --host 0.0.0.0 --port 8000`).
+2. Either run the backend manually (`uvicorn backend.app:app --host 0.0.0.0 --port 8000`) or enable GUI backend auto-start in `config/appsettings.json`.
 3. Launch the GUI and point `Backend.BaseUrl` to `http://127.0.0.1:8000`.
+
+### GUI backend auto-start (WSL)
+The GUI can start the backend automatically when `Backend.AutoStart=true`.
+
+Important keys in `config/appsettings.json`:
+- `Backend.AutoStartMode`: `WslVenv`, `WslConda`, or `WslAuto`.
+- `Backend.WslDistro`: WSL distro name, for example `Ubuntu`.
+- `Backend.WslVenvPath`: virtualenv path for `WslVenv` / `WslAuto`.
+- `Backend.WslCondaEnvironment`: conda environment for `WslConda` / `WslAuto`.
+- `Backend.AutoStartWorkingDirectory`: optional repo/backend working directory override.
+- `Backend.AutoStartModelsDirectory`: optional value exported as `BDI_MODELS_DIR`.
+- `Backend.StartupTimeoutSeconds`: health-check wait budget.
 
 ### Separate backend server
 1. Provision a Linux host with NVIDIA drivers if GPU is required.
@@ -27,6 +39,12 @@ This document covers how to run the **backend** and connect the GUI.
 ## Storage and volumes
 - Model artifacts and datasets are stored under `BDI_MODELS_DIR`.
 - For Docker or multi-worker deployments, mount a shared volume for `BDI_MODELS_DIR`.
+
+## PLC/camera integration
+- Use `Comms.Plc.Mode=Simulation` and `Comms.Camera.Provider=Folder` for no-hardware integration tests.
+- Use `Comms.Plc.Mode=S7` with the configured IP/rack/slot/DB for Siemens S7-1200.
+- `FlirBlackfly` and `Cognex` camera providers are placeholders until the vendor SDK/protocol integration is wired.
+- The camera `Source` path is used only by the `Folder` provider.
 
 ## Logs
 - GUI logs: `%LOCALAPPDATA%\BrakeDiscInspector\logs\`.

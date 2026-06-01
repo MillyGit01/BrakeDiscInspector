@@ -45,7 +45,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
     public static class PlcSignals
     {
-        public const int DbNumber = 1;
+        public const int DefaultDbNumber = 1;
 
         public static readonly IReadOnlyList<PlcSignalDefinition> Definitions = new[]
         {

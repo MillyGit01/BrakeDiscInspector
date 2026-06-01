@@ -12,7 +12,7 @@
         Topmost="True">
 
     <Border CornerRadius="12"
-            Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+            Background="{DynamicResource UI.Brush.Surface}"
             Padding="22"
             SnapsToDevicePixels="True">
         <Border.Effect>

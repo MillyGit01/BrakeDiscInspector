@@ -11,6 +11,8 @@ The GUI is the **source of truth for ROI geometry and canonical crops**; the bac
 - **ROI drawing and export (GUI):** ROIs are drawn in WPF and exported as canonical crops (post-rotation) with a `shape` JSON mask that matches the exported image space.
 - **Dataset management (backend):** OK/NG samples are uploaded to the backend dataset endpoints and persisted under `BDI_MODELS_DIR` (see `docs/BACKEND.md`). The GUI caches previews locally under `%LOCALAPPDATA%\BrakeDiscInspector\cache\datasets\...`.
 - **Training and inference (backend):** The backend runs PatchCore + DINOv2, stores model artifacts per `recipe_id` and `model_key`, and returns `score`, `threshold`, optional `heatmap_png_base64`, and `regions`.
+- **Operator GUI workflow:** the GUI can open a folder as an image collection, show thumbnails under the canvas, load a selected image, analyze masters, and evaluate enabled inspection ROIs when a layout is loaded.
+- **Production communication:** the GUI includes a Siemens S7-1200 communication layer, a simulation PLC, and camera provider slots for `Folder`, `FlirBlackfly`, and `Cognex` (see `docs/COMMS.md`).
 
 ## Quick start
 
@@ -19,6 +21,8 @@ The GUI is the **source of truth for ROI geometry and canonical crops**; the bac
 - **Backend:** Python 3.11+; CUDA GPU is required by default (`BDI_REQUIRE_CUDA=1`). Set `BDI_REQUIRE_CUDA=0` for CPU-only startup.
 
 ### Launch the backend
+The GUI can auto-start the backend through WSL when `Backend.AutoStart=true` in `config/appsettings.json`, using either a WSL venv or conda environment. Manual launch is still supported:
+
 ```bash
 cd backend
 python -m venv .venv
@@ -31,13 +35,17 @@ Config keys are defined in `backend/config.py` and `backend/app.py` (see `docs/B
 ### Launch the GUI
 1. Open `gui/BrakeDiscInspector_GUI_ROI/BrakeDiscInspector_GUI_ROI.sln` in Visual Studio.
 2. Update `config/appsettings.json` or set `BDI_BACKEND_BASEURL` if the backend is not running on `http://127.0.0.1:8000`.
-3. Run the app. Layouts and master patterns are stored under `<exe>/Recipes/<LayoutName>/`.
+3. Run the app. If backend auto-start is enabled, the GUI checks `/health` and starts the configured WSL backend if needed.
+4. Layouts and master patterns are stored under `<exe>/Recipes/<LayoutName>/`.
 
 ### Minimal end-to-end run
-1. Load an image, define Master 1/2 ROIs and at least one inspection ROI.
-2. Add OK/NG samples (uploads the canonical ROI to the backend dataset).
-3. Run **fit_ok** and **calibrate** from the dataset tab (backend operations).
-4. Evaluate a single image or run batch analysis.
+1. Load a layout, then open an image folder from the canvas thumbnail strip or load an image through an acquisition provider.
+2. Define Master 1/2 ROIs and at least one inspection ROI.
+3. Add OK/NG samples (uploads the canonical ROI to the backend dataset).
+4. Run **fit_ok** and **calibrate** from the dataset tab (backend operations).
+5. Evaluate a single image or run batch analysis.
+
+Once a dataset exists for an inspection ROI, that inspection ROI is locked against geometry edits, resize/move operations, shape changes, removal, and canvas clearing. Additional dataset images can still be added. Master ROIs remain editable because they do not invalidate trained inspection models.
 
 ## Documentation map
 - [`docs/INDEX.md`](docs/INDEX.md) — complete documentation index.
@@ -45,6 +53,7 @@ Config keys are defined in `backend/config.py` and `backend/app.py` (see `docs/B
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — component boundaries and data flow.
 - [`docs/FRONTEND.md`](docs/FRONTEND.md) — WPF UI behavior, ROI workflows, UI specs.
 - [`docs/BACKEND.md`](docs/BACKEND.md) — FastAPI configuration, persistence, failure modes.
+- [`docs/COMMS.md`](docs/COMMS.md) — PLC/camera communication modes and signal map.
 - [`docs/API_CONTRACTS.md`](docs/API_CONTRACTS.md) — exact HTTP contracts.
 - [`LOGGING.md`](LOGGING.md) — **source of truth** for logs and diagnostics.
 

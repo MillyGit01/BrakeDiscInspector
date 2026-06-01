@@ -77,7 +77,7 @@ public class RoiCropUtilsTests
         using var _ = crop;
 
         var pivot = new Point2f((float)info.PivotX, (float)info.PivotY);
-        using var rotation = Cv2.GetRotationMatrix2D(pivot, -angleDeg, 1.0);
+        using var rotation = Cv2.GetRotationMatrix2D(pivot, angleDeg, 1.0);
 
         static Point2f Apply(Mat matrix, Point2f p)
         {
@@ -119,7 +119,7 @@ public class RoiCropUtilsTests
     private static Mat BuildExpectedCrop(Mat source, RoiCropInfo info, double angleDeg, Rect expectedRect)
     {
         var pivot = new Point2f((float)info.PivotX, (float)info.PivotY);
-        using var rotation = Cv2.GetRotationMatrix2D(pivot, -angleDeg, 1.0);
+        using var rotation = Cv2.GetRotationMatrix2D(pivot, angleDeg, 1.0);
         var border = source.Channels() == 4 ? new Scalar(0, 0, 0, 0) : Scalar.All(0);
         using var rotated = new Mat();
         Cv2.WarpAffine(source, rotated, rotation, source.Size(), InterpolationFlags.Linear, BorderTypes.Constant, border);

@@ -7,11 +7,12 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 {
     public sealed class PlcConfig
     {
-        public PlcConfig(string ipAddress, short rack, short slot)
+        public PlcConfig(string ipAddress, short rack, short slot, int dbNumber = 1)
         {
             IpAddress = ipAddress;
             Rack = rack;
             Slot = slot;
+            DbNumber = dbNumber > 0 ? dbNumber : 1;
         }
 
         public string IpAddress { get; }
@@ -19,6 +20,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         public short Rack { get; }
 
         public short Slot { get; }
+
+        public int DbNumber { get; }
     }
 
     public interface IPlcClient : IDisposable

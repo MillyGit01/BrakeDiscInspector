@@ -7,12 +7,20 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 {
     public sealed class PlcConfig
     {
-        public PlcConfig(string ipAddress, short rack, short slot, int dbNumber = 1)
+        public PlcConfig(
+            string ipAddress,
+            short rack,
+            short slot,
+            int dbNumber = PlcSignals.DefaultPcToPlcDbNumber,
+            int plcToPcDbNumber = PlcSignals.DefaultPlcToPcDbNumber,
+            int diagnosticDbNumber = PlcSignals.DefaultDiagnosticDbNumber)
         {
             IpAddress = ipAddress;
             Rack = rack;
             Slot = slot;
-            DbNumber = dbNumber > 0 ? dbNumber : 1;
+            DbNumber = NormalizeDbNumber(dbNumber, PlcSignals.DefaultPcToPlcDbNumber);
+            PlcToPcDbNumber = NormalizeDbNumber(plcToPcDbNumber, PlcSignals.DefaultPlcToPcDbNumber);
+            DiagnosticDbNumber = NormalizeDbNumber(diagnosticDbNumber, PlcSignals.DefaultDiagnosticDbNumber);
         }
 
         public string IpAddress { get; }
@@ -21,7 +29,16 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
         public short Slot { get; }
 
+        public int PcToPlcDbNumber => DbNumber;
+
         public int DbNumber { get; }
+
+        public int PlcToPcDbNumber { get; }
+
+        public int DiagnosticDbNumber { get; }
+
+        private static int NormalizeDbNumber(int value, int fallback)
+            => value > 0 ? value : fallback;
     }
 
     public interface IPlcClient : IDisposable

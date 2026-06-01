@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BrakeDiscInspector_GUI_ROI.Util;
@@ -42,7 +41,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                     try
                     {
                         _plc.Open();
-                        GuiLog.Info($"[plc] Connected to {Config.IpAddress} rack={Config.Rack} slot={Config.Slot} db={Config.DbNumber}");
+                        GuiLog.Info($"[plc] Connected to {Config.IpAddress} rack={Config.Rack} slot={Config.Slot} pc_to_plc_db={Config.PcToPlcDbNumber} plc_to_pc_db={Config.PlcToPcDbNumber} diag_db={Config.DiagnosticDbNumber}");
                     }
                     catch (Exception ex)
                     {
@@ -84,22 +83,17 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 ct.ThrowIfCancellationRequested();
                 EnsureConnected();
 
-                byte[] buffer;
+                byte[] plcToPcBytes;
+                byte[] pcToPlcBytes;
                 lock (_sync)
                 {
-                    buffer = _plc.ReadBytes(DataType.DataBlock, Config.DbNumber, 0, 4) ?? Array.Empty<byte>();
+                    plcToPcBytes = _plc.ReadBytes(DataType.DataBlock, Config.PlcToPcDbNumber, 0, PlcSignals.PlcToPcReadLength) ?? Array.Empty<byte>();
+                    pcToPlcBytes = _plc.ReadBytes(DataType.DataBlock, Config.PcToPlcDbNumber, 0, PlcSignals.PcToPlcBoolWriteLength) ?? Array.Empty<byte>();
                 }
 
-                var data = buffer.Length >= 4 ? buffer : buffer.Concat(new byte[4 - buffer.Length]).ToArray();
-                var result = new Dictionary<PlcSignalId, bool>();
-
-                foreach (var signal in PlcSignals.Definitions)
-                {
-                    var bit = GetBit(data, signal.ByteOffset, signal.BitOffset);
-                    result[signal.Id] = bit;
-                }
-
-                return (IDictionary<PlcSignalId, bool>)result;
+                return PlcSignals.Decode(
+                    EnsureLength(plcToPcBytes, PlcSignals.PlcToPcReadLength),
+                    EnsureLength(pcToPlcBytes, PlcSignals.PcToPlcBoolWriteLength));
             }, ct);
         }
 
@@ -118,28 +112,19 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 byte[] buffer;
                 lock (_sync)
                 {
-                    buffer = _plc.ReadBytes(DataType.DataBlock, Config.DbNumber, 0, 4) ?? new byte[4];
+                    buffer = _plc.ReadBytes(DataType.DataBlock, Config.PcToPlcDbNumber, 0, PlcSignals.PcToPlcBoolWriteLength) ?? new byte[PlcSignals.PcToPlcBoolWriteLength];
                 }
 
-                if (buffer.Length < 4)
+                if (buffer.Length < PlcSignals.PcToPlcBoolWriteLength)
                 {
-                    Array.Resize(ref buffer, 4);
+                    Array.Resize(ref buffer, PlcSignals.PcToPlcBoolWriteLength);
                 }
 
-                foreach (var kvp in outputs)
-                {
-                    var definition = PlcSignals.Definitions.FirstOrDefault(d => d.Id == kvp.Key && d.Direction == PlcSignalDirection.Output);
-                    if (definition == null)
-                    {
-                        continue;
-                    }
-
-                    SetBit(buffer, definition.ByteOffset, definition.BitOffset, kvp.Value);
-                }
+                PlcSignals.EncodeOutputs(buffer, outputs);
 
                 lock (_sync)
                 {
-                    _plc.WriteBytes(DataType.DataBlock, Config.DbNumber, 0, buffer);
+                    _plc.WriteBytes(DataType.DataBlock, Config.PcToPlcDbNumber, 0, buffer);
                 }
             }, ct);
         }
@@ -170,36 +155,15 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
         }
 
-        private static bool GetBit(IReadOnlyList<byte> buffer, int byteIndex, int bitIndex)
+        private static byte[] EnsureLength(byte[] buffer, int length)
         {
-            if (byteIndex < 0 || bitIndex < 0 || bitIndex > 7 || byteIndex >= buffer.Count)
+            if (buffer.Length >= length)
             {
-                return false;
+                return buffer;
             }
 
-            return (buffer[byteIndex] & (1 << bitIndex)) != 0;
-        }
-
-        private static void SetBit(IList<byte> buffer, int byteIndex, int bitIndex, bool value)
-        {
-            if (byteIndex < 0 || bitIndex < 0 || bitIndex > 7)
-            {
-                return;
-            }
-
-            if (byteIndex >= buffer.Count)
-            {
-                return;
-            }
-
-            if (value)
-            {
-                buffer[byteIndex] = (byte)(buffer[byteIndex] | (1 << bitIndex));
-            }
-            else
-            {
-                buffer[byteIndex] = (byte)(buffer[byteIndex] & ~(1 << bitIndex));
-            }
+            Array.Resize(ref buffer, length);
+            return buffer;
         }
 
         private void EnsureConnected()

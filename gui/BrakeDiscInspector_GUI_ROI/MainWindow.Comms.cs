@@ -26,7 +26,9 @@ namespace BrakeDiscInspector_GUI_ROI
                     plcSettings.IpAddress,
                     plcSettings.Rack,
                     plcSettings.Slot,
-                    plcSettings.DbNumber);
+                    plcSettings.DbNumber,
+                    plcSettings.PlcToPcDbNumber,
+                    plcSettings.DiagnosticDbNumber);
                 var cameraConfig = new CameraConfig(
                     cameraSettings.Provider,
                     cameraSettings.Source,

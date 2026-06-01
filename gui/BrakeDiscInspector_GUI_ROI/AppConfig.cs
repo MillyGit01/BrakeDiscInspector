@@ -62,7 +62,9 @@ namespace BrakeDiscInspector_GUI_ROI
             public string IpAddress { get; set; } = "192.168.0.10";
             public short Rack { get; set; } = 0;
             public short Slot { get; set; } = 1;
-            public int DbNumber { get; set; } = 1;
+            public int DbNumber { get; set; } = 150;
+            public int PlcToPcDbNumber { get; set; } = 151;
+            public int DiagnosticDbNumber { get; set; } = 8;
             public int PollIntervalMs { get; set; } = 100;
         }
 
@@ -230,6 +232,16 @@ namespace BrakeDiscInspector_GUI_ROI
                         target.Comms.Plc.DbNumber = source.Comms.Plc.DbNumber;
                     }
 
+                    if (source.Comms.Plc.PlcToPcDbNumber > 0)
+                    {
+                        target.Comms.Plc.PlcToPcDbNumber = source.Comms.Plc.PlcToPcDbNumber;
+                    }
+
+                    if (source.Comms.Plc.DiagnosticDbNumber > 0)
+                    {
+                        target.Comms.Plc.DiagnosticDbNumber = source.Comms.Plc.DiagnosticDbNumber;
+                    }
+
                     if (source.Comms.Plc.PollIntervalMs > 0)
                     {
                         target.Comms.Plc.PollIntervalMs = source.Comms.Plc.PollIntervalMs;
@@ -289,6 +301,8 @@ namespace BrakeDiscInspector_GUI_ROI
             OverrideInt("BDI_PLC_RACK", value => config.Comms.Plc.Rack = (short)value);
             OverrideInt("BDI_PLC_SLOT", value => config.Comms.Plc.Slot = (short)value);
             OverrideInt("BDI_PLC_DB", value => config.Comms.Plc.DbNumber = Math.Max(1, value));
+            OverrideInt("BDI_PLC_TO_PC_DB", value => config.Comms.Plc.PlcToPcDbNumber = Math.Max(1, value));
+            OverrideInt("BDI_PLC_DIAG_DB", value => config.Comms.Plc.DiagnosticDbNumber = Math.Max(1, value));
             OverrideInt("BDI_PLC_POLL_MS", value => config.Comms.Plc.PollIntervalMs = Math.Max(50, value));
             OverrideString("BDI_CAMERA_PROVIDER", value => config.Comms.Camera.Provider = value);
             OverrideString("BDI_CAMERA_SOURCE", value => config.Comms.Camera.Source = value);

@@ -48,7 +48,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 _signals[PlcSignalId.SystemReady] = true;
             }
 
-            GuiLog.Info($"[plc-sim] Connected db={Config.DbNumber}");
+            GuiLog.Info($"[plc-sim] Connected pc_to_plc_db={Config.PcToPlcDbNumber} plc_to_pc_db={Config.PlcToPcDbNumber} diag_db={Config.DiagnosticDbNumber}");
             return Task.CompletedTask;
         }
 

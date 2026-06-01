@@ -45,6 +45,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private Point _rotationPivotWorld;
         private UIElement? _rotationReferenceElement;
         private double _rotationPointerAngleAtDragStartDeg;
+        private const double RotationThumbSize = 28.0;
 
         public RoiAdorner(UIElement adornedElement, RoiOverlay overlay, Action<RoiAdornerChangeKind, RoiModel> onChanged, Action<string> log)
             : base(adornedElement)
@@ -55,6 +56,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _log = log ?? (_ => { });
 
             IsHitTestVisible = true;
+            ClipToBounds = false;
 
             // Estilos básicos
             StyleThumb(_moveThumb, 0, 0, 0, 0, Cursors.Arrow, 0.0, 0.0, 0.0, 0.0);
@@ -216,7 +218,17 @@ namespace BrakeDiscInspector_GUI_ROI
             for (int i = 0; i < _corners.Length; i++)
             {
                 Point corner = cornerPositions[i];
-                _corners[i].Arrange(new Rect(corner.X - r, corner.Y - r, 2 * r, 2 * r));
+                if (_corners[i] == _rotationThumb)
+                {
+                    double size = RotationThumbSize;
+                    _rotationThumb.Visibility = Visibility.Visible;
+                    _rotationThumb.IsHitTestVisible = true;
+                    _rotationThumb.Arrange(new Rect(corner.X - size * 0.35, corner.Y - size * 0.65, size, size));
+                }
+                else
+                {
+                    _corners[i].Arrange(new Rect(corner.X - r, corner.Y - r, 2 * r, 2 * r));
+                }
             }
 
             bool hideEdges = isAnnulus || isCircle;
@@ -599,15 +611,16 @@ namespace BrakeDiscInspector_GUI_ROI
         private static void StyleRotationThumb(Thumb thumb)
         {
             thumb.Cursor = Cursors.Hand;
-            thumb.Width = 14;
-            thumb.Height = 14;
-            thumb.MinWidth = 14;
-            thumb.MinHeight = 14;
+            thumb.Width = RotationThumbSize;
+            thumb.Height = RotationThumbSize;
+            thumb.MinWidth = RotationThumbSize;
+            thumb.MinHeight = RotationThumbSize;
             thumb.Background = Brushes.Transparent;
             thumb.BorderBrush = Brushes.Transparent;
             thumb.BorderThickness = new Thickness(0);
             thumb.Opacity = 1.0;
             thumb.Margin = new Thickness(0);
+            thumb.ClipToBounds = false;
             thumb.Template = CreateArcThumbTemplate();
         }
 
@@ -626,23 +639,36 @@ namespace BrakeDiscInspector_GUI_ROI
         {
             var template = new ControlTemplate(typeof(Thumb));
             var canvas = new FrameworkElementFactory(typeof(Canvas));
-            canvas.SetValue(FrameworkElement.WidthProperty, 22.0);
-            canvas.SetValue(FrameworkElement.HeightProperty, 22.0);
+            canvas.SetValue(FrameworkElement.WidthProperty, RotationThumbSize);
+            canvas.SetValue(FrameworkElement.HeightProperty, RotationThumbSize);
+            canvas.SetValue(UIElement.ClipToBoundsProperty, false);
+
+            var background = new FrameworkElementFactory(typeof(Ellipse));
+            background.SetValue(FrameworkElement.WidthProperty, 24.0);
+            background.SetValue(FrameworkElement.HeightProperty, 24.0);
+            background.SetValue(Canvas.LeftProperty, 2.0);
+            background.SetValue(Canvas.TopProperty, 2.0);
+            background.SetValue(Shape.FillProperty, new SolidColorBrush(Color.FromArgb(230, 255, 255, 255)));
+            background.SetValue(Shape.StrokeProperty, Brushes.Black);
+            background.SetValue(Shape.StrokeThicknessProperty, 1.2);
+            canvas.AppendChild(background);
 
             var arcPath = new FrameworkElementFactory(typeof(Path));
-            arcPath.SetValue(Shape.StrokeProperty, Brushes.SteelBlue);
-            arcPath.SetValue(Shape.StrokeThicknessProperty, 1.5);
-            arcPath.SetValue(Path.DataProperty, Geometry.Parse("M5,14 A7,7 0 0 1 17,14"));
+            arcPath.SetValue(Shape.StrokeProperty, Brushes.Black);
+            arcPath.SetValue(Shape.StrokeThicknessProperty, 2.0);
+            arcPath.SetValue(Shape.StrokeStartLineCapProperty, PenLineCap.Round);
+            arcPath.SetValue(Shape.StrokeEndLineCapProperty, PenLineCap.Round);
+            arcPath.SetValue(Path.DataProperty, Geometry.Parse("M8,18 A8,8 0 0 1 20,10"));
             canvas.AppendChild(arcPath);
 
             var arrowStart = new FrameworkElementFactory(typeof(Path));
-            arrowStart.SetValue(Shape.FillProperty, Brushes.SteelBlue);
-            arrowStart.SetValue(Path.DataProperty, Geometry.Parse("M5,14 L8,11 L8,17 Z"));
+            arrowStart.SetValue(Shape.FillProperty, Brushes.Black);
+            arrowStart.SetValue(Path.DataProperty, Geometry.Parse("M8,18 L8,13 L12,17 Z"));
             canvas.AppendChild(arrowStart);
 
             var arrowEnd = new FrameworkElementFactory(typeof(Path));
-            arrowEnd.SetValue(Shape.FillProperty, Brushes.SteelBlue);
-            arrowEnd.SetValue(Path.DataProperty, Geometry.Parse("M17,14 L14,11 L14,17 Z"));
+            arrowEnd.SetValue(Shape.FillProperty, Brushes.Black);
+            arrowEnd.SetValue(Path.DataProperty, Geometry.Parse("M20,10 L15,10 L19,14 Z"));
             canvas.AppendChild(arrowEnd);
 
             template.VisualTree = canvas;

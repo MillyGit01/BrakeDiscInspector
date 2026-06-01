@@ -34,3 +34,22 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t brakedisc-backend -f docker/Dockerfile .
+
+  gui-ci:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore GUI tests
+        run: dotnet restore gui/BrakeDiscInspector_GUI_ROI.Tests/BrakeDiscInspector_GUI_ROI.Tests.csproj
+
+      - name: Build GUI tests
+        run: dotnet build gui/BrakeDiscInspector_GUI_ROI.Tests/BrakeDiscInspector_GUI_ROI.Tests.csproj --configuration Release --no-restore
+
+      - name: Run GUI tests
+        run: dotnet test gui/BrakeDiscInspector_GUI_ROI.Tests/BrakeDiscInspector_GUI_ROI.Tests.csproj --configuration Release --no-build --verbosity normal

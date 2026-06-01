@@ -26,9 +26,40 @@
         <conv:BatchCellStatusToBrushConverter x:Key="BatchCellStatusToBrush" />
         <conv:RoiPanelModeToVisibilityConverter x:Key="RoiPanelModeToVisibility" />
         <conv:NavKeyEqualsConverter x:Key="NavKeyEquals" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
         <SolidColorBrush x:Key="BrushAppBackground" Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
         <SolidColorBrush x:Key="LeftNavSelectedForeground"
                          Color="{DynamicResource {x:Static SystemColors.ControlLightColorKey}}" />
+
+        <ControlTemplate x:Key="HudVisibilityToggleTemplate" TargetType="{x:Type ToggleButton}">
+            <Grid Width="46" Height="24" SnapsToDevicePixels="True">
+                <Border x:Name="SwitchTrack"
+                        CornerRadius="12"
+                        Background="#80555555"/>
+                <Ellipse x:Name="SwitchKnob"
+                         Width="18"
+                         Height="18"
+                         Margin="3"
+                         Fill="White"
+                         Stroke="#33000000"
+                         StrokeThickness="1"
+                         HorizontalAlignment="Left"
+                         VerticalAlignment="Center"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter TargetName="SwitchTrack" Property="Background" Value="Black"/>
+                    <Setter TargetName="SwitchKnob" Property="HorizontalAlignment" Value="Right"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="SwitchTrack" Property="Opacity" Value="0.82"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="SwitchTrack" Property="Opacity" Value="0.45"/>
+                    <Setter TargetName="SwitchKnob" Property="Opacity" Value="0.7"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
 
         <DropShadowEffect x:Key="LeftNavSelectedShadow"
                           ShadowDepth="0"
@@ -61,17 +92,49 @@
         </Style>
         <Style TargetType="TextBlock" BasedOn="{StaticResource LabelTextStyle}" />
 
+        <ControlTemplate x:Key="ThemedUiButtonTemplate" TargetType="{x:Type ui:Button}">
+            <Border x:Name="ButtonRoot"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="6"
+                    SnapsToDevicePixels="True">
+                <ContentPresenter Margin="{TemplateBinding Padding}"
+                                  HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  RecognizesAccessKey="True"
+                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="ButtonRoot" Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
+                    <Setter TargetName="ButtonRoot" Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="ButtonRoot" Property="Background" Value="{DynamicResource UI.Brush.Accent}" />
+                    <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="ButtonRoot" Property="Opacity" Value="0.45" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
         <Style x:Key="AppButtonStyle" TargetType="{x:Type ui:Button}">
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
             <Setter Property="Padding" Value="10,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template" Value="{StaticResource ThemedUiButtonTemplate}" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect BlurRadius="12" ShadowDepth="0" Opacity="0.35"
@@ -90,12 +153,14 @@
             <Setter Property="Appearance" Value="Secondary" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ButtonText}" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template" Value="{StaticResource ThemedUiButtonTemplate}" />
             <Setter Property="ToolTipService.ShowDuration" Value="30000" />
             <Setter Property="ContentTemplate">
                 <Setter.Value>
@@ -109,7 +174,7 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35"
@@ -128,13 +193,16 @@
             <Setter Property="Appearance" Value="Secondary" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="Effect" Value="{x:Null}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template" Value="{StaticResource ThemedUiButtonTemplate}" />
             <Setter Property="ToolTipService.ShowDuration" Value="30000" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.35"
@@ -155,15 +223,18 @@
             <Setter Property="Height" Value="48" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="TextElement.Foreground" Value="{DynamicResource UI.Brush.ButtonForeground}" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template" Value="{StaticResource ThemedUiButtonTemplate}" />
             <Setter Property="Padding" Value="12,8" />
             <Setter Property="Margin" Value="0,0,0,8" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
                     <Setter Property="Effect" Value="{StaticResource LeftNavHoverShadow}" />
                 </Trigger>
 
@@ -185,12 +256,12 @@
         <Style x:Key="LayoutPanelButtonStyle"
                TargetType="{x:Type ui:Button}"
                BasedOn="{StaticResource AppButtonStyle}">
-            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect BlurRadius="12"
@@ -206,12 +277,12 @@
         <Style x:Key="LayoutIconTextButtonStyle"
                TargetType="{x:Type ui:Button}"
                BasedOn="{StaticResource IconTextButtonStyle}">
-            <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackground}" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Effect" Value="{x:Null}" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource BrushAppBackground}" />
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ButtonBackgroundHover}" />
                     <Setter Property="Effect">
                         <Setter.Value>
                             <DropShadowEffect BlurRadius="12"
@@ -228,18 +299,81 @@
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ControlText}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CaretBrush" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource UI.Brush.Accent}" />
+            <Setter Property="SelectionOpacity" Value="0.35" />
+            <Setter Property="Padding" Value="4,2" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style TargetType="ComboBox">
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.ControlText}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="TextElement.Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="Padding" Value="6,4" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackgroundHover}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackgroundHover}" />
+                </Trigger>
+            </Style.Triggers>
         </Style>
         <Style TargetType="CheckBox">
             <Setter Property="FontFamily" Value="{DynamicResource UI.FontFamily.Body}" />
             <Setter Property="FontSize" Value="{DynamicResource UI.FontSize.CheckBox}" />
             <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+        </Style>
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="Padding" Value="4,2" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackgroundHover}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackgroundHover}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+            <Setter Property="GridLinesVisibility" Value="Horizontal" />
+            <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+            <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+            <Setter Property="RowBackground" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="AlternatingRowBackground" Value="{DynamicResource UI.Brush.ControlBackgroundHover}" />
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.ControlBackground}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource UI.Brush.Surface}" />
+            <Setter Property="Foreground" Value="{DynamicResource UI.Brush.Foreground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource UI.Brush.ControlBorder}" />
         </Style>
         <Style TargetType="{x:Type ui:ToggleSwitch}"
                BasedOn="{StaticResource {x:Type ui:ToggleSwitch}}">
@@ -555,112 +689,134 @@
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="220"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Foreground" VerticalAlignment="Center"/>
-                                <TextBox x:Name="ForegroundColorBox"
-                                         Grid.Column="1"
-                                         Tag="UI.Brush.Foreground"
-                                         LostFocus="ColorTextBox_LostFocus"/>
-                                <Rectangle Grid.Column="2"
-                                           Width="24"
-                                           Height="24"
-                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource UI.Brush.Foreground}"
-                                           Margin="8,0,0,0"/>
+                                <TextBox x:Name="ForegroundColorBox" Grid.Column="1" Tag="UI.Brush.Foreground" Visibility="Collapsed" LostFocus="ColorTextBox_LostFocus"/>
+                                <ui:Button x:Name="ForegroundColorButton" Grid.Column="1" Tag="UI.Brush.Foreground" Click="ColorPickerButton_Click" HorizontalContentAlignment="Stretch" Padding="6,4">
+                                    <DockPanel LastChildFill="True">
+                                        <Rectangle DockPanel.Dock="Left" Width="24" Height="24" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" Fill="{DynamicResource UI.Brush.Foreground}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Text, ElementName=ForegroundColorBox}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </ui:Button>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="220"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Accent" VerticalAlignment="Center"/>
-                                <TextBox x:Name="AccentColorBox"
-                                         Grid.Column="1"
-                                         Tag="UI.Brush.Accent"
-                                         LostFocus="ColorTextBox_LostFocus"/>
-                                <Rectangle Grid.Column="2"
-                                           Width="24"
-                                           Height="24"
-                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource UI.Brush.Accent}"
-                                           Margin="8,0,0,0"/>
+                                <TextBox x:Name="AccentColorBox" Grid.Column="1" Tag="UI.Brush.Accent" Visibility="Collapsed" LostFocus="ColorTextBox_LostFocus"/>
+                                <ui:Button x:Name="AccentColorButton" Grid.Column="1" Tag="UI.Brush.Accent" Click="ColorPickerButton_Click" HorizontalContentAlignment="Stretch" Padding="6,4">
+                                    <DockPanel LastChildFill="True">
+                                        <Rectangle DockPanel.Dock="Left" Width="24" Height="24" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" Fill="{DynamicResource UI.Brush.Accent}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Text, ElementName=AccentColorBox}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </ui:Button>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="220"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Button Background" VerticalAlignment="Center"/>
-                                <TextBox x:Name="ButtonBackgroundColorBox"
-                                         Grid.Column="1"
-                                         Tag="UI.Brush.ButtonBackground"
-                                         LostFocus="ColorTextBox_LostFocus"/>
-                                <Rectangle Grid.Column="2"
-                                           Width="24"
-                                           Height="24"
-                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource UI.Brush.ButtonBackground}"
-                                           Margin="8,0,0,0"/>
+                                <TextBox x:Name="ButtonBackgroundColorBox" Grid.Column="1" Tag="UI.Brush.ButtonBackground" Visibility="Collapsed" LostFocus="ColorTextBox_LostFocus"/>
+                                <ui:Button x:Name="ButtonBackgroundColorButton" Grid.Column="1" Tag="UI.Brush.ButtonBackground" Click="ColorPickerButton_Click" HorizontalContentAlignment="Stretch" Padding="6,4">
+                                    <DockPanel LastChildFill="True">
+                                        <Rectangle DockPanel.Dock="Left" Width="24" Height="24" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" Fill="{DynamicResource UI.Brush.ButtonBackground}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Text, ElementName=ButtonBackgroundColorBox}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </ui:Button>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="220"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Hover Background" VerticalAlignment="Center"/>
-                                <TextBox x:Name="ButtonHoverBackgroundColorBox"
-                                         Grid.Column="1"
-                                         Tag="UI.Brush.ButtonBackgroundHover"
-                                         LostFocus="ColorTextBox_LostFocus"/>
-                                <Rectangle Grid.Column="2"
-                                           Width="24"
-                                           Height="24"
-                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource UI.Brush.ButtonBackgroundHover}"
-                                           Margin="8,0,0,0"/>
+                                <TextBox x:Name="ButtonHoverBackgroundColorBox" Grid.Column="1" Tag="UI.Brush.ButtonBackgroundHover" Visibility="Collapsed" LostFocus="ColorTextBox_LostFocus"/>
+                                <ui:Button x:Name="ButtonHoverBackgroundColorButton" Grid.Column="1" Tag="UI.Brush.ButtonBackgroundHover" Click="ColorPickerButton_Click" HorizontalContentAlignment="Stretch" Padding="6,4">
+                                    <DockPanel LastChildFill="True">
+                                        <Rectangle DockPanel.Dock="Left" Width="24" Height="24" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" Fill="{DynamicResource UI.Brush.ButtonBackgroundHover}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Text, ElementName=ButtonHoverBackgroundColorBox}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </ui:Button>
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="220"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Button Foreground" VerticalAlignment="Center"/>
-                                <TextBox x:Name="ButtonForegroundColorBox"
-                                         Grid.Column="1"
-                                         Tag="UI.Brush.ButtonForeground"
-                                         LostFocus="ColorTextBox_LostFocus"/>
-                                <Rectangle Grid.Column="2"
-                                           Width="24"
-                                           Height="24"
-                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource UI.Brush.ButtonForeground}"
-                                           Margin="8,0,0,0"/>
+                                <TextBox x:Name="ButtonForegroundColorBox" Grid.Column="1" Tag="UI.Brush.ButtonForeground" Visibility="Collapsed" LostFocus="ColorTextBox_LostFocus"/>
+                                <ui:Button x:Name="ButtonForegroundColorButton" Grid.Column="1" Tag="UI.Brush.ButtonForeground" Click="ColorPickerButton_Click" HorizontalContentAlignment="Stretch" Padding="6,4">
+                                    <DockPanel LastChildFill="True">
+                                        <Rectangle DockPanel.Dock="Left" Width="24" Height="24" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" Fill="{DynamicResource UI.Brush.ButtonForeground}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Text, ElementName=ButtonForegroundColorBox}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </ui:Button>
                             </Grid>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="180"/>
-                                    <ColumnDefinition Width="140"/>
-                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="220"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Group Header Foreground" VerticalAlignment="Center"/>
-                                <TextBox x:Name="GroupHeaderForegroundColorBox"
-                                         Grid.Column="1"
-                                         Tag="UI.Brush.GroupHeaderForeground"
-                                         LostFocus="ColorTextBox_LostFocus"/>
-                                <Rectangle Grid.Column="2"
-                                           Width="24"
-                                           Height="24"
-                                           Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
-                                           Fill="{DynamicResource UI.Brush.GroupHeaderForeground}"
-                                           Margin="8,0,0,0"/>
+                                <TextBox x:Name="GroupHeaderForegroundColorBox" Grid.Column="1" Tag="UI.Brush.GroupHeaderForeground" Visibility="Collapsed" LostFocus="ColorTextBox_LostFocus"/>
+                                <ui:Button x:Name="GroupHeaderForegroundColorButton" Grid.Column="1" Tag="UI.Brush.GroupHeaderForeground" Click="ColorPickerButton_Click" HorizontalContentAlignment="Stretch" Padding="6,4">
+                                    <DockPanel LastChildFill="True">
+                                        <Rectangle DockPanel.Dock="Left" Width="24" Height="24" Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" Fill="{DynamicResource UI.Brush.GroupHeaderForeground}" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding Text, ElementName=GroupHeaderForegroundColorBox}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                </ui:Button>
                             </Grid>
                         </StackPanel>
+
+                        <Popup x:Name="GuiColorPalettePopup"
+                               Placement="Bottom"
+                               StaysOpen="False"
+                               AllowsTransparency="True">
+                            <Border Background="{DynamicResource UI.Brush.Surface}"
+                                    BorderBrush="{DynamicResource UI.Brush.ControlBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="8">
+                                <UniformGrid Columns="8" Rows="4">
+                                    <Button Tag="#FF000000" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF000000"/></Button>
+                                    <Button Tag="#FF404040" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF404040"/></Button>
+                                    <Button Tag="#FF808080" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF808080"/></Button>
+                                    <Button Tag="#FFFFFFFF" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFFFFFF"/></Button>
+                                    <Button Tag="#FFE81123" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFE81123"/></Button>
+                                    <Button Tag="#FFFF8C00" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFF8C00"/></Button>
+                                    <Button Tag="#FFFFD700" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFFD700"/></Button>
+                                    <Button Tag="#FF107C10" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF107C10"/></Button>
+                                    <Button Tag="#FF00CC6A" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF00CC6A"/></Button>
+                                    <Button Tag="#FF00B7C3" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF00B7C3"/></Button>
+                                    <Button Tag="#FF0078D4" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF0078D4"/></Button>
+                                    <Button Tag="#FF5C2D91" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF5C2D91"/></Button>
+                                    <Button Tag="#FFC239B3" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFC239B3"/></Button>
+                                    <Button Tag="#FFFF7EB9" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFF7EB9"/></Button>
+                                    <Button Tag="#FF8E562E" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF8E562E"/></Button>
+                                    <Button Tag="#FF69797E" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF69797E"/></Button>
+                                    <Button Tag="#FFF3F4F6" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFF3F4F6"/></Button>
+                                    <Button Tag="#FFE5E7EB" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFE5E7EB"/></Button>
+                                    <Button Tag="#FFB8C0CC" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFB8C0CC"/></Button>
+                                    <Button Tag="#FF111827" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF111827"/></Button>
+                                    <Button Tag="#FF1F2937" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF1F2937"/></Button>
+                                    <Button Tag="#FF374151" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF374151"/></Button>
+                                    <Button Tag="#FFDDEAFB" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFDDEAFB"/></Button>
+                                    <Button Tag="#FFFFF4CE" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFFF4CE"/></Button>
+                                    <Button Tag="#FFE8F5E9" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFE8F5E9"/></Button>
+                                    <Button Tag="#FFFFE5E5" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFFE5E5"/></Button>
+                                    <Button Tag="#FFF7E8FF" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFF7E8FF"/></Button>
+                                    <Button Tag="#FFE0F2FE" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFE0F2FE"/></Button>
+                                    <Button Tag="#FF1A1A1A" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF1A1A1A"/></Button>
+                                    <Button Tag="#FF2C2C2C" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF2C2C2C"/></Button>
+                                    <Button Tag="#FF3A3A3A" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FF3A3A3A"/></Button>
+                                    <Button Tag="#FFFAFAFA" Click="GuiColorPalette_Click" Margin="2" Padding="0"><Rectangle Width="24" Height="24" Fill="#FFFAFAFA"/></Button>
+                                </UniformGrid>
+                            </Border>
+                        </Popup>
 
                         <TextBlock Text="Diagnostics" Style="{StaticResource HeaderTextStyle}" Margin="0,0,0,6"/>
                         <StackPanel Margin="0,0,0,16">
@@ -709,13 +865,6 @@
                 </ScrollViewer.Resources>
                 <StackPanel Margin="8" Orientation="Vertical">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <ui:Button x:Name="BtnLoadImage"
-                                   Style="{StaticResource LayoutIconTextButtonStyle}"
-                                   MinWidth="140"
-                                   ToolTip="{DynamicResource LoadPictureTooltip}"
-                                   Tag="{x:Static ui:SymbolRegular.Image24}"
-                                   Content="{DynamicResource LoadImage}"
-                                   Click="BtnLoadImage_Click" />
                         <ui:Button x:Name="BtnLoadLayout"
                                    Style="{StaticResource LayoutIconTextButtonStyle}"
                                    MinWidth="140"
@@ -1776,18 +1925,27 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,12">
-                        <TextBlock Text="PLC IP:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,12">
+                        <TextBlock Text="PLC:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="110"
+                                  ItemsSource="{Binding PlcModes}"
+                                  SelectedItem="{Binding PlcMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <TextBlock Text="IP:" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="130"
                                  Text="{Binding PlcIpAddress, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <TextBlock Text="Rack:" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="40"
-                                 Text="{Binding Rack}" IsReadOnly="True"/>
+                                 Text="{Binding Rack, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <TextBlock Text="Slot:" VerticalAlignment="Center" Margin="8,0,4,0"/>
                         <TextBox Width="40"
-                                 Text="{Binding Slot}" IsReadOnly="True"/>
+                                 Text="{Binding Slot, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <TextBlock Text="DB:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="44"
+                                 Text="{Binding DbNumber, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <ui:Button Margin="12,0,0,0"
                                    Padding="10,3"
@@ -1810,10 +1968,11 @@
                         <TextBlock Margin="12,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{Binding ConnectionStatus}"/>
-                    </StackPanel>
+                    </WrapPanel>
 
                     <Grid Grid.Row="1">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
@@ -1862,7 +2021,87 @@
                             </Grid>
                         </GroupBox>
 
-                        <GroupBox Header="Inputs" Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
+                        <GroupBox Header="Camera" Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,12">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Text="Provider" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <ComboBox Width="130"
+                                              ItemsSource="{Binding CameraProviders}"
+                                              SelectedItem="{Binding CameraProvider, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <CheckBox Content="Auto inspect"
+                                              Margin="12,0,0,0"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{Binding AutoRunInspection, Mode=TwoWay}"/>
+                                </StackPanel>
+
+                                <TextBlock Grid.Row="1" Text="Source" VerticalAlignment="Center" Margin="0,8,8,0"/>
+                                <DockPanel Grid.Row="1" Grid.Column="1" Margin="0,8,0,0"
+                                           IsEnabled="{Binding IsFolderCameraProvider}">
+                                    <ui:Button DockPanel.Dock="Left"
+                                               Padding="10,3"
+                                               Command="{Binding BrowseCameraSourceCommand}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.FolderOpen24}" Margin="0,0,8,0" FontSize="16"/>
+                                            <TextBlock Text="Browse" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ui:Button>
+                                    <TextBlock Margin="10,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding CameraSourceDisplay}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding CameraSourceDisplay}"/>
+                                </DockPanel>
+
+                                <TextBlock Grid.Row="2" Text="Output" VerticalAlignment="Center" Margin="0,8,8,0"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Margin="0,8,0,0"
+                                         Text="{Binding CameraOutputDirectory, UpdateSourceTrigger=PropertyChanged}"/>
+
+                                <WrapPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                                    <ui:Button Padding="10,3"
+                                               Command="{Binding ConnectCameraCommand}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugConnected24}" Margin="0,0,8,0" FontSize="16"/>
+                                            <TextBlock Text="Connect camera" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ui:Button>
+                                    <ui:Button Margin="4,0,0,0"
+                                               Padding="10,3"
+                                               Command="{Binding DisconnectCameraCommand}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.PlugDisconnected24}" Margin="0,0,8,0" FontSize="16"/>
+                                            <TextBlock Text="Disconnect" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ui:Button>
+                                    <ui:Button Margin="4,0,0,0"
+                                               Padding="10,3"
+                                               Command="{Binding AcquireImageCommand}">
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Power24}" Margin="0,0,8,0" FontSize="16"/>
+                                            <TextBlock Text="Acquire" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </ui:Button>
+                                    <TextBlock Margin="12,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding CameraStatus}"/>
+                                    <TextBlock Margin="12,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding CycleStatus}"/>
+                                </WrapPanel>
+                            </Grid>
+                        </GroupBox>
+
+                        <GroupBox Header="Inputs" Grid.Row="2" Grid.Column="0" Margin="0,0,8,0">
                             <ItemsControl ItemsSource="{Binding Inputs}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -1888,7 +2127,7 @@
                             </ItemsControl>
                         </GroupBox>
 
-                        <GroupBox Header="Outputs" Grid.Row="1" Grid.Column="1">
+                        <GroupBox Header="Outputs" Grid.Row="2" Grid.Column="1">
                             <ItemsControl ItemsSource="{Binding Outputs}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
@@ -2065,12 +2304,59 @@
                         Background="Transparent"
                         IsHitTestVisible="True"
                        Panel.ZIndex="2"/>
-                            <local:RoiOverlay x:Name="RoiOverlay"
+                             <local:RoiOverlay x:Name="RoiOverlay"
+                                   Visibility="Collapsed"
+                                   IsHitTestVisible="False"
+                                   Panel.ZIndex="3"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"/>
+                            <Border BorderBrush="#FFFFD400"
+                                    BorderThickness="4"
+                                    Background="Transparent"
+                                    IsHitTestVisible="False"
+                                    Panel.ZIndex="360"
+                                    Visibility="{Binding IsRoiEditModeActive, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource BoolToVisibility}}"/>
+                            <Border HorizontalAlignment="Left"
+                                    VerticalAlignment="Bottom"
+                                    Margin="18"
+                                    Padding="12,7"
+                                    Background="#D9FFD400"
+                                    CornerRadius="4"
+                                    IsHitTestVisible="False"
+                                    Panel.ZIndex="370"
+                                    Visibility="{Binding IsRoiEditModeActive, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="Edit Mode"
+                                           Foreground="Black"
+                                           FontFamily="Segoe UI"
+                                           FontSize="18"
+                                           FontWeight="Black"/>
+                            </Border>
+                            <Grid x:Name="DiskStatusHUD"
+                                  HorizontalAlignment="Right"
+                                  VerticalAlignment="Top"
+                                  Margin="0,24,24,0"
+                                  Panel.ZIndex="950"
                                   Visibility="Collapsed"
-                                  IsHitTestVisible="False"
-                                  Panel.ZIndex="3"
-                                  HorizontalAlignment="Stretch"
-                                  VerticalAlignment="Stretch"/>
+                                  IsHitTestVisible="False">
+                                <Border x:Name="DiskStatusPanel"
+                                        Width="48"
+                                        Height="48"
+                                        Background="Transparent"
+                                        BorderBrush="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="0"
+                                        Padding="0">
+                                    <TextBlock x:Name="DiskStatusText"
+                                               Text=""
+                                               FontFamily="Segoe UI"
+                                               FontWeight="Black"
+                                               FontSize="20"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               TextAlignment="Center"
+                                               Foreground="White"/>
+                                </Border>
+                            </Grid>
                         </Grid>
                     </Grid>
                 </AdornerDecorator>
@@ -2081,34 +2367,38 @@
                   HorizontalAlignment="Center"
                   VerticalAlignment="Top"
                   Margin="0,12,0,0"
-                  Padding="10,6"
+                  Padding="20,12"
                   Background="#F22C2C2C"
-                  CornerRadius="6"
+                  CornerRadius="8"
                   Visibility="Collapsed"
                   Panel.ZIndex="900"
                   IsHitTestVisible="False">
                     <TextBlock x:Name="SnackText"
                        Foreground="White"
-                       FontWeight="SemiBold"
-                       TextWrapping="Wrap"
-                       MaxWidth="520"/>
+                        FontWeight="SemiBold"
+                        FontSize="26"
+                        TextWrapping="Wrap"
+                        MaxWidth="900"/>
                 </Border>
 
-                <!-- ===== HUD: ROI list (top-left) ===== -->
+                <!-- ===== HUD: ROI list (top-right) ===== -->
                 <Grid x:Name="RoiHudOverlay"
                 Grid.Row="1"
                 VerticalAlignment="Top"
-                HorizontalAlignment="Left"
-                Margin="12,8,0,0"
+                HorizontalAlignment="Right"
+                Margin="0,36,96,0"
                 Panel.ZIndex="400"
                 IsHitTestVisible="True"
                 Visibility="Collapsed">
                     <Border x:Name="RoiHudPanel"
-                      Background="#CC1A1A1A"
-                      BorderBrush="#39FF14"
-                      BorderThickness="1.2"
+                      Background="#99FFFFFF"
+                      BorderBrush="#33000000"
+                      BorderThickness="1"
                       CornerRadius="8"
-                      Padding="10">
+                      Padding="12">
+                        <Border.LayoutTransform>
+                                            <ScaleTransform ScaleX="0.9375" ScaleY="0.9375"/>
+                        </Border.LayoutTransform>
                         <Border.Effect>
                             <DropShadowEffect Color="#AA000000"
                                     BlurRadius="8"
@@ -2135,84 +2425,185 @@
                                TextTrimming="CharacterEllipsis"/>
                 </Border>
 
-                <StackPanel Grid.Row="2"
-                            Orientation="Horizontal"
-                            HorizontalAlignment="Left"
-                            Margin="12,8,12,12">
-                    <ui:Button x:Name="BtnLoadImageUnderCanvas"
-                               Style="{StaticResource LayoutIconTextButtonStyle}"
-                               MinWidth="140"
-                               ToolTip="{DynamicResource LoadPictureTooltip}"
-                               Tag="{x:Static ui:SymbolRegular.Image24}"
-                               Content="{DynamicResource LoadImage}"
-                               Click="BtnLoadImage_Click" />
-                </StackPanel>
-            </Grid>
-            <Grid x:Name="DiskStatusHUD"
-              HorizontalAlignment="Right"
-              VerticalAlignment="Top"
-              Margin="12"
-              Panel.ZIndex="950"
-              Visibility="Collapsed"
-              IsHitTestVisible="False">
-                <Border x:Name="DiskStatusPanel"
-                  Width="48"
-                  Height="48"
-                  Background="Transparent"
-                  BorderBrush="Transparent"
-                  BorderThickness="0"
-                  CornerRadius="0"
-                  Padding="0">
-                    <TextBlock x:Name="DiskStatusText"
-                       Text=""
-                       FontFamily="Segoe UI"
-                       FontWeight="Black"
-                       FontSize="20"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       TextAlignment="Center"
-                       Foreground="White"/>
-                </Border>
-            </Grid>
-            <!-- ===== HUD: bottom-right Heatmap controls ===== -->
-            <Grid x:Name="HudOverlay" Panel.ZIndex="1000" IsHitTestVisible="True">
-                <Border x:Name="HeatmapHUD"
-                  HorizontalAlignment="Right"
-                  VerticalAlignment="Bottom"
-                  Margin="0,0,16,28"
-                  CornerRadius="8"
-                  Padding="10"
-                  IsHitTestVisible="True">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock x:Name="HeatmapScaleLabel"
-                         Text="Heatmap Scale: 1.00"
-                         Foreground="{DynamicResource UI.Brush.ButtonForeground}"
-                         FontFamily="Segoe UI"
-                         FontWeight="SemiBold"
-                         Margin="0,0,8,0"/>
-                        <Slider x:Name="HeatmapScaleSlider"
-                      Width="160"
-                      Minimum="0.10"
-                      Maximum="2.00"
-                      Value="1.00"
-                      Margin="0,0,12,0"/>
-                        <TextBlock Text="Opacity"
-                         Foreground="{DynamicResource UI.Brush.ButtonForeground}"
-                         FontFamily="Segoe UI"
-                         FontWeight="SemiBold"
-                         Margin="0,0,8,0"/>
-                        <Slider x:Name="HeatmapOpacitySlider"
-                      Width="140"
-                      Minimum="0"
-                      Maximum="1"
-                      TickFrequency="0.05"
-                      IsSnapToTickEnabled="True"
-                      Value="{Binding HeatmapOverlayOpacity, ElementName=RootWindow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    </StackPanel>
+                <!-- ===== HUD: bottom-right Heatmap controls ===== -->
+                <Grid x:Name="HudOverlay"
+                      Grid.Row="1"
+                      Panel.ZIndex="1000"
+                      IsHitTestVisible="True"
+                      Visibility="{Binding IsImageLoaded, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Converter={StaticResource BoolToVisibility}}">
+                    <Border x:Name="HeatmapHUD"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Margin="0,0,16,28"
+                            Background="#99FFFFFF"
+                            BorderBrush="#33000000"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="10"
+                            IsHitTestVisible="True">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="HeatmapScaleLabel"
+                                       Text="Heatmap Scale: 1.00"
+                                       Foreground="Black"
+                                       FontFamily="Segoe UI"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,8,0"/>
+                            <Slider x:Name="HeatmapScaleSlider"
+                                    Width="160"
+                                    Minimum="0.10"
+                                    Maximum="2.00"
+                                    Value="1.00"
+                                    Margin="0,0,12,0"/>
+                            <TextBlock Text="Opacity"
+                                       Foreground="Black"
+                                       FontFamily="Segoe UI"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,8,0"/>
+                            <Slider x:Name="HeatmapOpacitySlider"
+                                    Width="140"
+                                    Minimum="0"
+                                    Maximum="1"
+                                    TickFrequency="0.05"
+                                    IsSnapToTickEnabled="True"
+                                    Value="{Binding HeatmapOverlayOpacity, ElementName=RootWindow, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Border Grid.Row="2"
+                        Margin="0,8,0,0"
+                        Padding="8"
+                        MinHeight="150"
+                        Background="{DynamicResource UI.Brush.Surface}"
+                        BorderBrush="{DynamicResource UI.Brush.ControlBorder}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <ui:Button x:Name="BtnOpenImageFolder"
+                                   Grid.Row="0"
+                                   Grid.Column="0"
+                                   Style="{StaticResource LayoutIconTextButtonStyle}"
+                                   MinWidth="140"
+                                   ToolTip="{DynamicResource OpenImageFolderTooltip}"
+                                   Tag="{x:Static ui:SymbolRegular.FolderOpen24}"
+                                   Content="{DynamicResource OpenImageFolder}"
+                                   Click="BtnOpenImageFolder_Click"/>
+
+                        <TextBlock Grid.Row="0"
+                                   Grid.Column="1"
+                                   Margin="10,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding ThumbnailFolderDisplay, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ThumbnailFolderDisplay, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"/>
+
+                        <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                            <ListBox x:Name="ThumbnailStripList"
+                                     Height="112"
+                                     ItemsSource="{Binding ImageThumbnails, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                     SelectedItem="{Binding SelectedThumbnail, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay}"
+                                     SelectionChanged="ThumbnailStrip_SelectionChanged"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                     Background="Transparent"
+                                     BorderThickness="0">
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="{x:Type ListBoxItem}">
+                                        <Setter Property="Width" Value="104"/>
+                                        <Setter Property="Height" Value="84"/>
+                                        <Setter Property="Margin" Value="0,0,1,0"/>
+                                        <Setter Property="Padding" Value="2"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid ToolTip="{Binding Path}">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="58"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Border Grid.Row="0"
+                                                    Background="{DynamicResource UI.Brush.ControlBackground}"
+                                                    BorderBrush="{DynamicResource UI.Brush.ControlBorder}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4">
+                                                <Image Source="{Binding Thumbnail}"
+                                                       Stretch="Uniform"
+                                                       SnapsToDevicePixels="True"/>
+                                            </Border>
+                                            <TextBlock Grid.Row="1"
+                                                       Margin="0,4,0,0"
+                                                       Text="{Binding FileName}"
+                                                       TextAlignment="Center"
+                                                       FontSize="11"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <TextBlock Text="{DynamicResource ImageFolderEmpty}"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Opacity="0.7">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ImageThumbnails.Count, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <Border Background="#E6FFFFFF"
+                                    Panel.ZIndex="20"
+                                    CornerRadius="6">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsThumbnailCollectionLoading, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <ProgressBar Width="220"
+                                                 Height="8"
+                                                 IsIndeterminate="True"/>
+                                    <TextBlock Margin="0,8,0,0"
+                                               Text="{DynamicResource ImageFolderLoading}"
+                                               Foreground="Black"
+                                               FontWeight="SemiBold"
+                                               TextAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </Grid>
                 </Border>
             </Grid>
         </Grid>
-        <Border Grid.Row="2" Grid.ColumnSpan="4" Padding="12,10" Background="{DynamicResource {x:Static SystemColors.ControlLightBrushKey}}" BorderBrush="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}" BorderThickness="0,1,0,0">
+        <Border Grid.Row="2" Grid.ColumnSpan="4" Padding="12,10" Background="{DynamicResource UI.Brush.Surface}" BorderBrush="{DynamicResource UI.Brush.ControlBorder}" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*" />
@@ -2226,7 +2617,7 @@
                              Height="10"
                              Margin="6,0,0,0"
                              VerticalAlignment="Center"
-                             Stroke="{DynamicResource {x:Static SystemColors.ControlDarkBrushKey}}"
+                             Stroke="{DynamicResource UI.Brush.ControlBorder}"
                              StrokeThickness="1"
                              Fill="{Binding DataContext.IsBackendOnline, ElementName=WorkflowHost, Converter={StaticResource BoolToBrush}}" />
                     <TextBlock Margin="6,0,0,0"

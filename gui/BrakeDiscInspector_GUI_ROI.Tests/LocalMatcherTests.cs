@@ -30,7 +30,7 @@ namespace BrakeDiscInspector_GUI_ROI.Tests
                 patternRoi,
                 searchRoi,
                 feature: "tm_rot",
-                thr: 0,
+                threshold: 0,
                 rotRange: 0,
                 scaleMin: 1.0,
                 scaleMax: 1.0);
@@ -78,7 +78,7 @@ namespace BrakeDiscInspector_GUI_ROI.Tests
                 patternRoi,
                 searchRoi,
                 feature: "tm_rot",
-                thr: 0,
+                threshold: 0,
                 rotRange: 0,
                 scaleMin: 1.0,
                 scaleMax: 1.0,
@@ -109,6 +109,47 @@ namespace BrakeDiscInspector_GUI_ROI.Tests
             Assert.True(result.AcceptedByThreshold);
             Assert.Equal(result.Score, (int)result.TemplateScore);
             Assert.True(result.BestCorr > 0);
+        }
+
+        [Fact]
+        public void MatchInSearchROIWithDetails_TmRot_CanReusePrebuiltTemplateVariants()
+        {
+            using var fullImage = new Mat(new Size(160, 160), MatType.CV_8UC3, Scalar.Black);
+            var patternRect = new Rect(65, 75, 34, 26);
+            Cv2.Rectangle(fullImage, patternRect, new Scalar(20, 180, 210), -1);
+            Cv2.Line(fullImage, new Point(patternRect.X, patternRect.Bottom - 1), new Point(patternRect.Right - 1, patternRect.Y), new Scalar(240, 30, 40), 2);
+
+            var pattern = new RoiModel
+            {
+                Shape = RoiShape.Rectangle,
+                X = patternRect.X + patternRect.Width / 2.0,
+                Y = patternRect.Y + patternRect.Height / 2.0,
+                Width = patternRect.Width,
+                Height = patternRect.Height
+            };
+            var search = new RoiModel { Shape = RoiShape.Rectangle, X = 80, Y = 80, Width = 100, Height = 100 };
+
+            using var patternView = new Mat(fullImage, patternRect);
+            using var patternOverride = patternView.Clone();
+            using var variants = LocalMatcher.BuildTemplateVariantSet(patternOverride, 4, 1.0, 1.0);
+
+            var result = LocalMatcher.MatchInSearchROIWithDetails(
+                fullImage,
+                pattern,
+                search,
+                "tm_rot",
+                40,
+                4,
+                1.0,
+                1.0,
+                patternOverride,
+                templateVariants: variants);
+
+            Assert.Equal(5, variants.Count);
+            Assert.Equal("tm_rot", result.ModeUsed);
+            Assert.True(result.AcceptedByThreshold);
+            Assert.InRange(result.Center!.Value.X, pattern.X - 0.5, pattern.X + 0.5);
+            Assert.InRange(result.Center.Value.Y, pattern.Y - 0.5, pattern.Y + 0.5);
         }
 
         [Fact]

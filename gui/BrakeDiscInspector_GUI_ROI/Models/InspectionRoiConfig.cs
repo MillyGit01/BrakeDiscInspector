@@ -151,6 +151,9 @@ namespace BrakeDiscInspector_GUI_ROI.Models
         [JsonIgnore]
         public bool HasDatasetPath => !string.IsNullOrWhiteSpace(_datasetPath);
 
+        [JsonIgnore]
+        public bool HasDatasetSamples => DatasetOkCount + DatasetKoCount > 0;
+
         public bool TrainMemoryFit
         {
             get => _trainMemoryFit;
@@ -322,6 +325,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(DatasetCountsText));
                 OnPropertyChanged(nameof(OkCount));
+                OnPropertyChanged(nameof(HasDatasetSamples));
             }
         }
 
@@ -336,6 +340,7 @@ namespace BrakeDiscInspector_GUI_ROI.Models
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(DatasetCountsText));
                 OnPropertyChanged(nameof(NgCount));
+                OnPropertyChanged(nameof(HasDatasetSamples));
             }
         }
 

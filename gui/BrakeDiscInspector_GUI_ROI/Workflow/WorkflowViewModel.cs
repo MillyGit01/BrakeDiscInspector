@@ -23,7 +23,6 @@ using BrakeDiscInspector_GUI_ROI.Helpers;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using BrakeDiscInspector_GUI_ROI;
-using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Util;
 using BrakeDiscInspector_GUI_ROI.Imaging;
 using BrakeDiscInspector_GUI_ROI.Models;
@@ -264,6 +263,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
         private readonly RoiModel?[] _batchBaselineRois = new RoiModel?[4];
         private Mat? _cachedM1Pattern;
         private Mat? _cachedM2Pattern;
+        private LocalMatcher.TemplateVariantSet? _cachedM1PatternVariants;
+        private LocalMatcher.TemplateVariantSet? _cachedM2PatternVariants;
         private string? _cachedM1PatternPath;
         private string? _cachedM2PatternPath;
         private DateTime? _cachedM1PatternLastWriteUtc;
@@ -593,7 +594,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             TrainSelectedRoiCommand = CreateCommand(async _ => await TrainSelectedRoiWithValidationAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
             CalibrateSelectedRoiCommand = CreateCommand(async _ => await CalibrateSelectedRoiWithValidationAsync().ConfigureAwait(false), _ => !IsBusy && SelectedInspectionRoi != null);
             EvaluateSelectedRoiCommand = CreateCommand(_ => EvaluateSelectedRoiAsync(), _ => !IsBusy && SelectedInspectionRoi != null && SelectedInspectionRoi.Enabled);
-            var inferEnabledCommand = CreateCommand(_ => InferEnabledRoisAsync(), _ => !IsBusy && HasAnyEnabledInspectionRoi());
+            var inferEnabledCommand = CreateCommand(_ => InferEnabledRoisAsync(CancellationToken.None), _ => !IsBusy && HasAnyEnabledInspectionRoi());
             EvaluateAllRoisCommand = inferEnabledCommand;
             InferEnabledRoisCommand = inferEnabledCommand;
 
@@ -1526,6 +1527,31 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             InvokeOnUi(RedrawOverlays);
             EvaluateAllRoisCommand.RaiseCanExecuteChanged();
             UpdateGlobalBadge();
+        }
+
+        public async Task RefreshInspectionDatasetsAsync(string reason = "")
+        {
+            var rois = _inspectionRois?.ToList() ?? new List<InspectionRoiConfig>();
+            if (rois.Count == 0)
+            {
+                _log($"[dataset] refresh all skipped: no inspection ROIs reason='{reason}'");
+                return;
+            }
+
+            _roiDatasetCache.Clear();
+            _log($"[dataset] refresh all start reason='{reason}' layout='{CurrentLayoutName}' count={rois.Count}");
+
+            foreach (var roi in rois)
+            {
+                await RefreshRoiDatasetStateAsync(roi).ConfigureAwait(false);
+            }
+
+            if (SelectedInspectionRoi != null)
+            {
+                await RefreshDatasetAsync().ConfigureAwait(false);
+            }
+
+            _log($"[dataset] refresh all done reason='{reason}' layout='{CurrentLayoutName}'");
         }
 
         public Task InitializeAsync(CancellationToken ct = default)
@@ -5051,7 +5077,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             await EvaluateRoiAsync(roiCfg, CancellationToken.None).ConfigureAwait(false);
         }
 
-        private async Task InferEnabledRoisAsync()
+        private async Task InferEnabledRoisAsync(CancellationToken ct)
         {
             if (_inspectionRois == null)
             {
@@ -5060,15 +5086,22 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             foreach (var roi in _inspectionRois.Where(r => r.Enabled))
             {
-                await EvaluateRoiAsync(roi, CancellationToken.None).ConfigureAwait(false);
+                ct.ThrowIfCancellationRequested();
+                await EvaluateRoiAsync(roi, ct).ConfigureAwait(false);
             }
 
             UpdateGlobalBadge();
         }
 
+        public async Task<bool?> EvaluateEnabledRoisForAutomationAsync(CancellationToken ct = default)
+        {
+            await InferEnabledRoisAsync(ct).ConfigureAwait(false);
+            return CalcGlobalDiskOk();
+        }
+
         private async Task EvaluateAllRoisAsync()
         {
-            await InferEnabledRoisAsync().ConfigureAwait(false);
+            await InferEnabledRoisAsync(CancellationToken.None).ConfigureAwait(false);
         }
 
         private async Task EvaluateRoiAsync(InspectionRoiConfig? roi, CancellationToken ct)
@@ -6241,7 +6274,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             await TryUpdateBatchAnchorsForImageAsync(mat, imagePath, ct).ConfigureAwait(false);
         }
 
-        private Task<bool> TryUpdateBatchAnchorsForImageAsync(Mat imageGray, string imagePath, CancellationToken ct)
+        private async Task<bool> TryUpdateBatchAnchorsForImageAsync(Mat imageGray, string imagePath, CancellationToken ct)
         {
             _batchAnchorsOk = false;
             _batchAnchorM1Ready = false;
@@ -6262,23 +6295,24 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (string.IsNullOrWhiteSpace(imagePath))
             {
                 GuiLog.Warn("[batch] match: missing image path");
-                return Task.FromResult(false);
+                return false;
             }
 
-            if (_layoutOriginal == null)
+            var layoutOriginal = _layoutOriginal;
+            if (layoutOriginal == null)
             {
                 GuiLog.Warn("[batch] match: no layout loaded; anchors cannot be computed");
-                return Task.FromResult(false);
+                return false;
             }
 
-            if (_layoutOriginal.Master1Pattern == null || _layoutOriginal.Master2Pattern == null
-                || _layoutOriginal.Master1Search == null || _layoutOriginal.Master2Search == null)
+            if (layoutOriginal.Master1Pattern == null || layoutOriginal.Master2Pattern == null
+                || layoutOriginal.Master1Search == null || layoutOriginal.Master2Search == null)
             {
                 GuiLog.Warn("[batch] match: master ROIs are missing (pattern/search)");
-                return Task.FromResult(false);
+                return false;
             }
 
-            var analyze = _layoutOriginal.Analyze ?? new AnalyzeOptions();
+            var analyze = layoutOriginal.Analyze ?? new AnalyzeOptions();
             var featureM1 = GetBatchFeatureM1();
             var featureM2 = GetBatchFeatureM2();
             var thrM1 = GetBatchThrM1();
@@ -6294,11 +6328,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             if (imageGray == null || imageGray.Empty())
             {
                 GuiLog.Warn($"[batch] match: image '{fileName}' could not be loaded for anchors");
-                return Task.FromResult(false);
+                return false;
             }
 
-            var pattern1 = GetOrLoadPatternCached(_layoutOriginal.Master1PatternImagePath, "M1");
-            var pattern2 = GetOrLoadPatternCached(_layoutOriginal.Master2PatternImagePath, "M2");
+            var pattern1 = GetOrLoadPatternCached(layoutOriginal.Master1PatternImagePath, "M1");
+            var pattern2 = GetOrLoadPatternCached(layoutOriginal.Master2PatternImagePath, "M2");
 
             if (pattern1 == null || pattern2 == null)
             {
@@ -6307,7 +6341,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 {
                     GuiLog.Warn("[batch] match: missing reference patterns for M1/M2");
                 }
-                return Task.FromResult(false);
+                return false;
             }
 
             LogPatternConfig(
@@ -6324,10 +6358,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 scaleLock,
                 disableRot);
 
-            var m1Result = LocalMatcher.MatchInSearchROIWithDetailsGray(
+            var m1Variants = GetOrBuildPatternVariants(pattern1, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, "M1");
+            var m2Variants = GetOrBuildPatternVariants(pattern2, analyze.RotRange, analyze.ScaleMin, analyze.ScaleMax, "M2");
+
+            var m1Task = Task.Run(() => LocalMatcher.MatchInSearchROIWithDetailsGray(
                 imageGray,
-                _layoutOriginal.Master1Pattern,
-                _layoutOriginal.Master1Search,
+                layoutOriginal.Master1Pattern,
+                layoutOriginal.Master1Search,
                 featureM1,
                 thrM1,
                 analyze.RotRange,
@@ -6335,12 +6372,13 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 analyze.ScaleMax,
                 pattern1,
                 PatternLog,
-                "M1");
+                "M1",
+                m1Variants), ct);
 
-            var m2Result = LocalMatcher.MatchInSearchROIWithDetailsGray(
+            var m2Task = Task.Run(() => LocalMatcher.MatchInSearchROIWithDetailsGray(
                 imageGray,
-                _layoutOriginal.Master2Pattern,
-                _layoutOriginal.Master2Search,
+                layoutOriginal.Master2Pattern,
+                layoutOriginal.Master2Search,
                 featureM2,
                 thrM2,
                 analyze.RotRange,
@@ -6348,7 +6386,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 analyze.ScaleMax,
                 pattern2,
                 PatternLog,
-                "M2");
+                "M2",
+                m2Variants), ct);
+
+            await Task.WhenAll(m1Task, m2Task).ConfigureAwait(false);
+            var m1Result = m1Task.Result;
+            var m2Result = m2Task.Result;
 
             var acceptedFinal = m1Result.Score >= thrM1 && m2Result.Score >= thrM2;
             LogPatternSummary("M1", featureM1, thrM1, m1Result, acceptedFinal);
@@ -6381,14 +6424,14 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 GuiLog.Warn(FormattableString.Invariant(
                     $"[batch] match: anchors not found for file='{fileName}' (M1={_m1Detection.IsOk} M2={_m2Detection.IsOk})"));
                 _log?.Invoke("[batch] Anclajes no detectados (Master1 o Master2). Se omite reposicionamiento de ROIs.");
-                return Task.FromResult(false);
+                return false;
             }
 
             TraceBatch(FormattableString.Invariant(
                 $"[batch] match: M1=({_m1Detection.Center.Value.X:0.0},{_m1Detection.Center.Value.Y:0.0}) score={_m1Detection.Score:0.00}  M2=({_m2Detection.Center.Value.X:0.0},{_m2Detection.Center.Value.Y:0.0}) score={_m2Detection.Score:0.00}"));
 
-            var m1Base = _layoutOriginal.Master1Pattern.GetCenter();
-            var m2Base = _layoutOriginal.Master2Pattern.GetCenter();
+            var m1Base = layoutOriginal.Master1Pattern.GetCenter();
+            var m2Base = layoutOriginal.Master2Pattern.GetCenter();
 
             RegisterBatchAnchors(
                 new Point(m1Base.cx, m1Base.cy),
@@ -6415,7 +6458,7 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             _batchAnchorsOk = AnchorsMeetThreshold();
             GuiLog.Info(FormattableString.Invariant(
                 $"[batch] match: M1 score={_m1Detection.Score:0.0} M2 score={_m2Detection.Score:0.0} anchorsOk={_batchAnchorsOk}"));
-            return Task.FromResult(_batchAnchorsOk);
+            return _batchAnchorsOk;
         }
 
         private void InvalidateMasterPatternCache()
@@ -6424,8 +6467,12 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             {
                 _cachedM1Pattern?.Dispose();
                 _cachedM2Pattern?.Dispose();
+                _cachedM1PatternVariants?.Dispose();
+                _cachedM2PatternVariants?.Dispose();
                 _cachedM1Pattern = null;
                 _cachedM2Pattern = null;
+                _cachedM1PatternVariants = null;
+                _cachedM2PatternVariants = null;
                 _cachedM1PatternPath = null;
                 _cachedM2PatternPath = null;
                 _cachedM1PatternLastWriteUtc = null;
@@ -6444,7 +6491,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (role == RoiRole.Master1Pattern || role == RoiRole.Master1Search)
                 {
                     _cachedM1Pattern?.Dispose();
+                    _cachedM1PatternVariants?.Dispose();
                     _cachedM1Pattern = null;
+                    _cachedM1PatternVariants = null;
                     _cachedM1PatternPath = null;
                     _cachedM1PatternLastWriteUtc = null;
                     _cachedM1PatternSize = null;
@@ -6456,7 +6505,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 if (role == RoiRole.Master2Pattern || role == RoiRole.Master2Search)
                 {
                     _cachedM2Pattern?.Dispose();
+                    _cachedM2PatternVariants?.Dispose();
                     _cachedM2Pattern = null;
+                    _cachedM2PatternVariants = null;
                     _cachedM2PatternPath = null;
                     _cachedM2PatternLastWriteUtc = null;
                     _cachedM2PatternSize = null;
@@ -6528,13 +6579,17 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     cachedMat.Dispose();
                     if (isM1)
                     {
+                        _cachedM1PatternVariants?.Dispose();
                         _cachedM1Pattern = null;
+                        _cachedM1PatternVariants = null;
                         _cachedM1PatternLastWriteUtc = null;
                         _cachedM1PatternSize = null;
                     }
                     else
                     {
+                        _cachedM2PatternVariants?.Dispose();
                         _cachedM2Pattern = null;
+                        _cachedM2PatternVariants = null;
                         _cachedM2PatternLastWriteUtc = null;
                         _cachedM2PatternSize = null;
                     }
@@ -6558,7 +6613,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                     if (isM1)
                     {
+                        _cachedM1PatternVariants?.Dispose();
                         _cachedM1Pattern = mat;
+                        _cachedM1PatternVariants = null;
                         _cachedM1PatternPath = effectivePath;
                         _cachedM1PatternLastWriteUtc = lastWriteUtc;
                         _cachedM1PatternSize = size;
@@ -6566,7 +6623,9 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     }
                     else
                     {
+                        _cachedM2PatternVariants?.Dispose();
                         _cachedM2Pattern = mat;
+                        _cachedM2PatternVariants = null;
                         _cachedM2PatternPath = effectivePath;
                         _cachedM2PatternLastWriteUtc = lastWriteUtc;
                         _cachedM2PatternSize = size;
@@ -6580,6 +6639,39 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                     WarnMissingPatternOnce(tag, $"failed to load pattern: {ex.Message}");
                     return null;
                 }
+            }
+        }
+
+        private LocalMatcher.TemplateVariantSet? GetOrBuildPatternVariants(Mat? pattern, int rotRange, double scaleMin, double scaleMax, string tag)
+        {
+            if (pattern == null || pattern.Empty())
+            {
+                return null;
+            }
+
+            var isM1 = string.Equals(tag, "M1", StringComparison.OrdinalIgnoreCase);
+            lock (_masterPatternCacheLock)
+            {
+                var cached = isM1 ? _cachedM1PatternVariants : _cachedM2PatternVariants;
+                if (cached != null && cached.Matches(pattern, rotRange, scaleMin, scaleMax))
+                {
+                    _log($"[master-cache] variants hit tag={tag} count={cached.Count} rotRange={rotRange} scale=({scaleMin:0.###},{scaleMax:0.###})");
+                    return cached;
+                }
+
+                cached?.Dispose();
+                var built = LocalMatcher.BuildTemplateVariantSet(pattern, rotRange, scaleMin, scaleMax);
+                if (isM1)
+                {
+                    _cachedM1PatternVariants = built;
+                }
+                else
+                {
+                    _cachedM2PatternVariants = built;
+                }
+
+                _log($"[master-cache] variants build tag={tag} count={built.Count} rotRange={rotRange} scale=({scaleMin:0.###},{scaleMax:0.###})");
+                return built;
             }
         }
 

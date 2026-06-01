@@ -12,8 +12,10 @@ namespace BrakeDiscInspector_GUI_ROI.Services
 {
     public static class GuiSetupSettingsService
     {
+        private const string AppBackgroundBrushKey = "BrushAppBackground";
         private const string AccentBrushKey = "UI.Brush.Accent";
         private const string AccentColorKey = "UI.Color.Accent";
+        private const string DefaultAccentColor = "#FF39FF14";
 
         private static readonly string[] FontFamilyKeys =
         {
@@ -41,6 +43,36 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             "UI.Brush.ButtonBackgroundHover",
             "UI.Brush.GroupHeaderForeground"
         };
+
+        private static readonly IReadOnlyDictionary<string, string> LightThemeBrushes =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [AppBackgroundBrushKey] = "#FFF3F3F3",
+                ["UI.Brush.Foreground"] = "#FF111827",
+                ["UI.Brush.Surface"] = "#FFFFFFFF",
+                ["UI.Brush.ControlBackground"] = "#FFFFFFFF",
+                ["UI.Brush.ControlBackgroundHover"] = "#FFF3F4F6",
+                ["UI.Brush.ControlBorder"] = "#FFB8C0CC",
+                ["UI.Brush.ButtonForeground"] = "#FF111827",
+                ["UI.Brush.ButtonBackground"] = "#FFE5E5E5",
+                ["UI.Brush.ButtonBackgroundHover"] = "#FFD5D5D5",
+                ["UI.Brush.GroupHeaderForeground"] = "#FF111827"
+            };
+
+        private static readonly IReadOnlyDictionary<string, string> DarkThemeBrushes =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [AppBackgroundBrushKey] = "#FF1E1F22",
+                ["UI.Brush.Foreground"] = "#FFF4F4F5",
+                ["UI.Brush.Surface"] = "#FF25272C",
+                ["UI.Brush.ControlBackground"] = "#FF2B2D31",
+                ["UI.Brush.ControlBackgroundHover"] = "#FF383B42",
+                ["UI.Brush.ControlBorder"] = "#FF545861",
+                ["UI.Brush.ButtonForeground"] = "#FFF4F4F5",
+                ["UI.Brush.ButtonBackground"] = "#FF2B2D31",
+                ["UI.Brush.ButtonBackgroundHover"] = "#FF383B42",
+                ["UI.Brush.GroupHeaderForeground"] = "#FFF4F4F5"
+            };
 
         // Stored at %LOCALAPPDATA%\BrakeDiscInspector\gui_setup.json for easy diagnostics.
         public static string ConfigPath => Path.Combine(
@@ -120,11 +152,15 @@ namespace BrakeDiscInspector_GUI_ROI.Services
         }
 
         public static GuiSetupSettings CaptureCurrent(Window? window)
+            => CaptureCurrent(window, includeCustomColors: false);
+
+        public static GuiSetupSettings CaptureCurrent(Window? window, bool includeCustomColors)
         {
-            Log("[CAPTURE] start");
+            Log($"[CAPTURE] start includeCustomColors={includeCustomColors}");
             var settings = new GuiSetupSettings
             {
-                Theme = Settings.Default.ThemePreference
+                Theme = Settings.Default.ThemePreference,
+                CustomColorsEnabled = includeCustomColors
             };
 
             var fontFamilies = new Dictionary<string, string>();
@@ -177,63 +213,98 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 settings.FontSizes = fontSizes;
             }
 
-            var brushes = new Dictionary<string, string>();
-            foreach (var key in BrushKeys)
+            if (includeCustomColors)
             {
-                if (TryGetEffectiveResource(window, key, out var value, out var source))
+                var brushes = new Dictionary<string, string>();
+                foreach (var key in BrushKeys)
                 {
-                    if (value is SolidColorBrush brush)
+                    if (TryGetEffectiveResource(window, key, out var value, out var source))
                     {
-                        brushes[key] = brush.Color.ToString();
-                        LogCapture(key, source, brush.Color.ToString());
-                    }
-                    else if (value is Color color)
-                    {
-                        brushes[key] = color.ToString();
-                        LogCapture(key, source, color.ToString());
+                        if (value is SolidColorBrush brush)
+                        {
+                            brushes[key] = brush.Color.ToString();
+                            LogCapture(key, source, brush.Color.ToString());
+                        }
+                        else if (value is Color color)
+                        {
+                            brushes[key] = color.ToString();
+                            LogCapture(key, source, color.ToString());
+                        }
+                        else
+                        {
+                            LogCapture(key, source, value);
+                        }
                     }
                     else
                     {
                         LogCapture(key, source, value);
                     }
                 }
+
+                if (brushes.Count > 0)
+                {
+                    settings.Brushes = brushes;
+                }
+
+                if (TryGetEffectiveResource(window, AccentColorKey, out var accentValue, out var accentSource)
+                    && accentValue is Color accentColor)
+                {
+                    settings.Accent = accentColor.ToString();
+                    LogCapture(AccentColorKey, accentSource, accentColor.ToString());
+                }
+                else if (TryGetEffectiveResource(window, AccentBrushKey, out var accentBrush, out var accentBrushSource)
+                         && accentBrush is SolidColorBrush accent)
+                {
+                    settings.Accent = accent.Color.ToString();
+                    LogCapture(AccentBrushKey, accentBrushSource, accent.Color.ToString());
+                }
+                else if (settings.Brushes != null && settings.Brushes.TryGetValue(AccentBrushKey, out var accentHex))
+                {
+                    settings.Accent = accentHex;
+                    LogCapture(AccentBrushKey, "Snapshot", accentHex);
+                }
                 else
                 {
-                    LogCapture(key, source, value);
+                    LogCapture(AccentBrushKey, "fallback", null);
                 }
-            }
-
-            if (brushes.Count > 0)
-            {
-                settings.Brushes = brushes;
-            }
-
-            if (TryGetEffectiveResource(window, AccentColorKey, out var accentValue, out var accentSource)
-                && accentValue is Color accentColor)
-            {
-                settings.Accent = accentColor.ToString();
-                LogCapture(AccentColorKey, accentSource, accentColor.ToString());
-            }
-            else if (TryGetEffectiveResource(window, AccentBrushKey, out var accentBrush, out var accentBrushSource)
-                     && accentBrush is SolidColorBrush accent)
-            {
-                settings.Accent = accent.Color.ToString();
-                LogCapture(AccentBrushKey, accentBrushSource, accent.Color.ToString());
-            }
-            else if (settings.Brushes != null && settings.Brushes.TryGetValue(AccentBrushKey, out var accentHex))
-            {
-                settings.Accent = accentHex;
-                LogCapture(AccentBrushKey, "Snapshot", accentHex);
-            }
-            else
-            {
-                LogCapture(AccentBrushKey, "fallback", null);
             }
 
             return settings;
         }
 
-        public static void Apply(GuiSetupSettings settings)
+        public static void ApplyThemeBrushes(string? preference, Window? window = null)
+        {
+            if (Application.Current == null && window == null)
+            {
+                return;
+            }
+
+            var themeName = ResolveThemeName(preference);
+            var palette = themeName.Equals("Dark", StringComparison.OrdinalIgnoreCase)
+                ? DarkThemeBrushes
+                : LightThemeBrushes;
+
+            var updatedKeys = new List<string>();
+            foreach (var pair in palette)
+            {
+                if (TryParseColor(pair.Value, out var color))
+                {
+                    SetBrushResource(pair.Key, color, window);
+                    updatedKeys.Add(pair.Key);
+                }
+            }
+
+            if (TryParseColor(DefaultAccentColor, out var accentColor))
+            {
+                SetAccentResources(accentColor, window);
+                updatedKeys.Add(AccentColorKey);
+                updatedKeys.Add(AccentBrushKey);
+            }
+
+            Log($"[APPLY_THEME] theme={themeName} keys=[{string.Join(", ", updatedKeys)}]");
+        }
+
+        public static void Apply(GuiSetupSettings settings, Window? window = null)
         {
             if (settings == null || Application.Current == null)
             {
@@ -247,7 +318,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 {
                     if (!string.IsNullOrWhiteSpace(pair.Value))
                     {
-                        SetResourceValue(pair.Key, new FontFamily(pair.Value));
+                        SetResourceValue(pair.Key, new FontFamily(pair.Value), window);
                         updatedKeys.Add(pair.Key);
                     }
                 }
@@ -257,12 +328,12 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             {
                 foreach (var pair in settings.FontSizes)
                 {
-                    SetResourceValue(pair.Key, pair.Value);
+                    SetResourceValue(pair.Key, pair.Value, window);
                     updatedKeys.Add(pair.Key);
                 }
             }
 
-            if (settings.Brushes != null)
+            if (settings.CustomColorsEnabled && settings.Brushes != null)
             {
                 foreach (var pair in settings.Brushes)
                 {
@@ -270,22 +341,24 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                     {
                         if (string.Equals(pair.Key, AccentBrushKey, StringComparison.OrdinalIgnoreCase))
                         {
-                            SetAccentResources(color);
+                            SetAccentResources(color, window);
                             updatedKeys.Add(AccentColorKey);
                             updatedKeys.Add(pair.Key);
                         }
                         else
                         {
-                            SetBrushResource(pair.Key, color);
+                            SetBrushResource(pair.Key, color, window);
                             updatedKeys.Add(pair.Key);
                         }
                     }
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(settings.Accent) && TryParseColor(settings.Accent, out var accentColor))
+            if (settings.CustomColorsEnabled
+                && !string.IsNullOrWhiteSpace(settings.Accent)
+                && TryParseColor(settings.Accent, out var accentColor))
             {
-                SetAccentResources(accentColor);
+                SetAccentResources(accentColor, window);
                 updatedKeys.Add(AccentColorKey);
                 updatedKeys.Add(AccentBrushKey);
             }
@@ -335,7 +408,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             return false;
         }
 
-        private static void SetBrushResource(string key, Color color)
+        private static void SetBrushResource(string key, Color color, Window? window = null)
         {
             var brush = new SolidColorBrush(color);
             if (brush.CanFreeze)
@@ -343,25 +416,36 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 brush.Freeze();
             }
 
-            SetResourceValue(key, brush);
+            SetResourceValue(key, brush, window);
         }
 
-        private static void SetAccentResources(Color color)
+        private static void SetAccentResources(Color color, Window? window = null)
         {
-            SetResourceValue(AccentColorKey, color);
-            SetBrushResource(AccentBrushKey, color);
+            SetResourceValue(AccentColorKey, color, window);
+            SetBrushResource(AccentBrushKey, color, window);
         }
 
-        private static void SetResourceValue(string key, object value)
+        private static void SetResourceValue(string key, object value, Window? window = null)
         {
-            if (Application.Current.Resources.Contains(key))
+            if (Application.Current != null)
             {
                 Application.Current.Resources[key] = value;
             }
-            else
+
+            if (window != null && window.Resources.Contains(key))
             {
-                Application.Current.Resources[key] = value;
+                window.Resources[key] = value;
             }
+        }
+
+        private static string ResolveThemeName(string? preference)
+        {
+            if (string.Equals(preference, "Dark", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Dark";
+            }
+
+            return "Light";
         }
 
         private static bool TryParseColor(string value, out Color color)
@@ -435,6 +519,8 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 parts.Add($"theme={settings.Theme}");
             }
 
+            parts.Add($"customColors={settings.CustomColorsEnabled}");
+
             if (TryGetFontSize(settings, "UI.FontSize.WindowTitle", out var titleSize))
             {
                 parts.Add($"title={titleSize.ToString("0.#", CultureInfo.InvariantCulture)}");
@@ -450,17 +536,17 @@ namespace BrakeDiscInspector_GUI_ROI.Services
                 parts.Add($"button={buttonText.ToString("0.#", CultureInfo.InvariantCulture)}");
             }
 
-            if (TryGetBrush(settings, "UI.Brush.Foreground", out var foreground))
+            if (settings.CustomColorsEnabled && TryGetBrush(settings, "UI.Brush.Foreground", out var foreground))
             {
                 parts.Add($"fg={foreground}");
             }
 
-            if (TryGetBrush(settings, "UI.Brush.ButtonBackground", out var buttonBg))
+            if (settings.CustomColorsEnabled && TryGetBrush(settings, "UI.Brush.ButtonBackground", out var buttonBg))
             {
                 parts.Add($"btnBg={buttonBg}");
             }
 
-            if (!string.IsNullOrWhiteSpace(settings.Accent))
+            if (settings.CustomColorsEnabled && !string.IsNullOrWhiteSpace(settings.Accent))
             {
                 parts.Add($"accent={settings.Accent}");
             }

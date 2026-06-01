@@ -7,6 +7,7 @@ namespace BrakeDiscInspector_GUI_ROI.Services
         public string? Theme { get; set; }
         public Dictionary<string, string>? FontFamilies { get; set; }
         public Dictionary<string, double>? FontSizes { get; set; }
+        public bool CustomColorsEnabled { get; set; }
         public Dictionary<string, string>? Brushes { get; set; }
         public string? Accent { get; set; }
     }

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using BrakeDiscInspector_GUI_ROI;
+using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Workflow;
 using Xunit;
 

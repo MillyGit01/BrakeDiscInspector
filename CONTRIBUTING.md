@@ -21,7 +21,8 @@ Every PR must include:
 
 ## 4. Tests
 - Backend: run `pytest` if you change backend logic.
-- GUI: manual checklist (load image, edit ROI, run `fit_ok`, `calibrate`, `infer`, batch folder).
+- GUI automated: run `dotnet test gui/BrakeDiscInspector_GUI_ROI.Tests/BrakeDiscInspector_GUI_ROI.Tests.csproj -v:minimal`.
+- GUI manual checklist: load layout, open image folder, select a thumbnail, verify heatmap/HUD behavior, edit ROI before dataset creation, verify inspection ROI dataset lock after samples exist, run `fit_ok`, `calibrate`, `infer`, and batch folder.
 
 ## 5. Contracts
 - Do not rename `/health`, `/fit_ok`, `/calibrate_ng`, `/infer` or their fields without updating `docs/API_CONTRACTS.md` and the GUI client.

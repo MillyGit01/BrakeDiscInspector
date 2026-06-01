@@ -34,7 +34,7 @@ public class RoiAdornerTests
         Canvas.SetLeft(annulus, 0);
         Canvas.SetTop(annulus, 0);
 
-        var adorner = new RoiAdorner(annulus, (_, _) => { }, _ => { });
+        var adorner = new RoiAdorner(annulus, new RoiOverlay(), (_, _) => { }, _ => { });
 
         InvokeResizeByCorner(adorner, 20.0, -20.0, "NE");
 
@@ -73,7 +73,7 @@ public class RoiAdornerTests
         Canvas.SetLeft(circle, 0);
         Canvas.SetTop(circle, 0);
 
-        var adorner = new RoiAdorner(circle, (_, _) => { }, _ => { });
+        var adorner = new RoiAdorner(circle, new RoiOverlay(), (_, _) => { }, _ => { });
 
         InvokeResizeByCorner(adorner, 30.0, -10.0, "NE");
 

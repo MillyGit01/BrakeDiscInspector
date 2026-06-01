@@ -16,7 +16,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="10" Orientation="Vertical">
             <StackPanel.Resources>
-                <Style TargetType="GroupBox">
+                <Style TargetType="GroupBox" BasedOn="{StaticResource CardGroupBoxStyle}">
                     <Setter Property="Margin" Value="0,0,0,12"/>
                 </Style>
             </StackPanel.Resources>

@@ -1943,9 +1943,17 @@
                         <TextBox Width="40"
                                  Text="{Binding Slot, UpdateSourceTrigger=PropertyChanged}"/>
 
-                        <TextBlock Text="DB:" VerticalAlignment="Center" Margin="8,0,4,0"/>
-                        <TextBox Width="44"
+                        <TextBlock Text="PC-&gt;PLC DB:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="48"
                                  Text="{Binding DbNumber, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <TextBlock Text="PLC-&gt;PC DB:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="48"
+                                 Text="{Binding PlcToPcDbNumber, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <TextBlock Text="Diag DB:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="48"
+                                 Text="{Binding DiagnosticDbNumber, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <ui:Button Margin="12,0,0,0"
                                    Padding="10,3"
@@ -1968,6 +1976,15 @@
                         <TextBlock Margin="12,0,0,0"
                                    VerticalAlignment="Center"
                                    Text="{Binding ConnectionStatus}"/>
+
+                        <ui:Button Margin="12,0,0,0"
+                                   Padding="10,3"
+                                   Command="{Binding StartAutoCam1Command}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Record24}" Margin="0,0,8,0" FontSize="16"/>
+                                <TextBlock Text="AutoCam1 360" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
                     </WrapPanel>
 
                     <Grid Grid.Row="1">
@@ -2111,7 +2128,8 @@
                                                      Fill="{Binding IsOn, Converter={StaticResource BoolToBrush}}"/>
                                             <TextBlock Text="{Binding DisplayName}"
                                                        VerticalAlignment="Center"
-                                                       Width="140"/>
+                                                       Width="220"
+                                                       TextWrapping="Wrap"/>
                                             <ui:Button Margin="8,0,0,0"
                                                        Padding="6,2"
                                                        Command="{Binding DataContext.ToggleInputCommand, RelativeSource={RelativeSource AncestorType={x:Type GroupBox}}}"
@@ -2137,7 +2155,8 @@
                                                      Fill="{Binding IsOn, Converter={StaticResource BoolToBrush}}"/>
                                             <TextBlock Text="{Binding DisplayName}"
                                                        VerticalAlignment="Center"
-                                                       Width="140"/>
+                                                       Width="220"
+                                                       TextWrapping="Wrap"/>
                                             <ui:Button Margin="8,0,0,0"
                                                        Padding="6,2"
                                                        Command="{Binding DataContext.ToggleOutputCommand, RelativeSource={RelativeSource AncestorType={x:Type GroupBox}}}"

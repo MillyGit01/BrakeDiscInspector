@@ -73,6 +73,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         private short _rack;
         private short _slot;
         private int _dbNumber;
+        private int _plcToPcDbNumber;
+        private int _diagnosticDbNumber;
         private string _plcMode;
         private string _connectionStatus = "Disconnected";
         private string _cameraProvider;
@@ -113,6 +115,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             _rack = config.Rack;
             _slot = config.Slot;
             _dbNumber = config.DbNumber;
+            _plcToPcDbNumber = config.PlcToPcDbNumber;
+            _diagnosticDbNumber = config.DiagnosticDbNumber;
             _plcMode = _clientMode;
             _cameraProvider = cameraConfig?.Provider ?? BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Disabled;
             _cameraSource = cameraConfig?.Source ?? string.Empty;
@@ -139,6 +143,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             DisconnectCommand = new AsyncCommand(_ => DisconnectAsync());
             ToggleOutputCommand = new AsyncCommand(param => ToggleOutputAsync(param));
             ToggleInputCommand = new AsyncCommand(param => ToggleInputAsync(param));
+            StartAutoCam1Command = new AsyncCommand(_ => PulseAutoCam1StartAsync());
             ConnectCameraCommand = new AsyncCommand(_ => ConnectCameraAsync());
             DisconnectCameraCommand = new AsyncCommand(_ => DisconnectCameraAsync());
             AcquireImageCommand = new AsyncCommand(_ => AcquireImageCycleAsync("manual"));
@@ -215,6 +220,34 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 if (_dbNumber != normalized)
                 {
                     _dbNumber = normalized;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int PlcToPcDbNumber
+        {
+            get => _plcToPcDbNumber;
+            set
+            {
+                var normalized = Math.Max(1, value);
+                if (_plcToPcDbNumber != normalized)
+                {
+                    _plcToPcDbNumber = normalized;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int DiagnosticDbNumber
+        {
+            get => _diagnosticDbNumber;
+            set
+            {
+                var normalized = Math.Max(1, value);
+                if (_diagnosticDbNumber != normalized)
+                {
+                    _diagnosticDbNumber = normalized;
                     OnPropertyChanged();
                 }
             }
@@ -345,6 +378,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
         public AsyncCommand ToggleInputCommand { get; }
 
+        public AsyncCommand StartAutoCam1Command { get; }
+
         public AsyncCommand ConnectCameraCommand { get; }
 
         public AsyncCommand DisconnectCameraCommand { get; }
@@ -449,6 +484,28 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             return Task.CompletedTask;
         }
 
+        private async Task PulseAutoCam1StartAsync()
+        {
+            if (!_client.IsConnected)
+            {
+                CycleStatus = "AutoCam1 start ignored: PLC disconnected";
+                return;
+            }
+
+            CycleStatus = "AutoCam1 360 start pulse";
+            await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+            {
+                [PlcSignalId.AutoCam1Start] = true
+            }).ConfigureAwait(false);
+
+            await Task.Delay(150).ConfigureAwait(false);
+
+            await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+            {
+                [PlcSignalId.AutoCam1Start] = false
+            }).ConfigureAwait(false);
+        }
+
         public async Task ConnectCameraAsync()
         {
             EnsureCameraMatchesConfig();
@@ -524,6 +581,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             {
                 [PlcSignalId.Busy] = true,
                 [PlcSignalId.Error] = false,
+                [PlcSignalId.InspectionComplete] = false,
                 [PlcSignalId.ResultOk] = false,
                 [PlcSignalId.ResultNg] = false
             };
@@ -536,6 +594,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             var payload = new Dictionary<PlcSignalId, bool>
             {
                 [PlcSignalId.Busy] = false,
+                [PlcSignalId.InspectionComplete] = true,
                 [PlcSignalId.ResultOk] = ok,
                 [PlcSignalId.ResultNg] = !ok
             };
@@ -645,6 +704,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         {
             var startNow = values.TryGetValue(PlcSignalId.StartInspection, out var start) && start;
             var startWas = _lastSignals.TryGetValue(PlcSignalId.StartInspection, out var previousStart) && previousStart;
+            var legacyStartNow = values.TryGetValue(PlcSignalId.LegacyCapture1, out var legacyStart) && legacyStart;
+            var legacyStartWas = _lastSignals.TryGetValue(PlcSignalId.LegacyCapture1, out var previousLegacyStart) && previousLegacyStart;
             var stopNow = values.TryGetValue(PlcSignalId.StopInspection, out var stop) && stop;
             var stopWas = _lastSignals.TryGetValue(PlcSignalId.StopInspection, out var previousStop) && previousStop;
             var partPresent = values.TryGetValue(PlcSignalId.PartPresent, out var present) && present;
@@ -665,7 +726,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 CancelCycle("plc-stop");
             }
 
-            if (!startNow || startWas)
+            if ((!startNow || startWas) && (!legacyStartNow || legacyStartWas))
             {
                 return;
             }
@@ -801,12 +862,14 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         private void EnsureClientMatchesConfig()
         {
             var desiredMode = NormalizePlcMode(PlcMode);
-            var desired = new PlcConfig(PlcIpAddress, Rack, Slot, DbNumber);
+            var desired = new PlcConfig(PlcIpAddress, Rack, Slot, DbNumber, PlcToPcDbNumber, DiagnosticDbNumber);
 
             if (_client.Config.IpAddress == desired.IpAddress &&
                 _client.Config.Rack == desired.Rack &&
                 _client.Config.Slot == desired.Slot &&
                 _client.Config.DbNumber == desired.DbNumber &&
+                _client.Config.PlcToPcDbNumber == desired.PlcToPcDbNumber &&
+                _client.Config.DiagnosticDbNumber == desired.DiagnosticDbNumber &&
                 string.Equals(_clientMode, desiredMode, StringComparison.OrdinalIgnoreCase))
             {
                 return;

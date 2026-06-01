@@ -17,6 +17,8 @@
 - Inspection ROI datasets refresh after layout load so dataset counts/previews are restored.
 - Inspection ROIs are locked after a dataset exists; users can add more dataset images, but cannot edit, resize, move, delete, recreate, change shape, or clear those inspection ROIs. Master ROIs remain editable.
 - Master pattern matching now caches rotated/scaled template variants to reduce repeated work during batch alignment.
+- Removed the obsolete `BackendAPI` facade in favor of `BackendPayloadBuilder` plus `Workflow.BackendClient`.
+- Removed unused GUI polling/diagnostic code, unused private flags, and stale agent markdown files.
 - Recipe-aware backend storage under `BDI_MODELS_DIR/recipes/<recipe_id>/...` with legacy fallback.
 - Reserved `recipe_id` `last` rejected with HTTP 400.
 - Dataset-only training gate via `BDI_TRAIN_DATASET_ONLY` and minimum OK samples via `BDI_MIN_OK_SAMPLES`.

@@ -22,6 +22,4 @@ Use this page as the single entry point for all documentation in the repo.
 ## Contributor / Agent Guides
 - [`CONTRIBUTING.md`](../CONTRIBUTING.md) - contributor workflow.
 - [`agents.md`](../agents.md) - project playbook.
-- [`instructions_codex_gui_workflow.md`](../instructions_codex_gui_workflow.md) - AI workflow checklist.
 - [`backend/README_backend.md`](../backend/README_backend.md) - backend quick reference.
-- [`backend/agents_for_backend.md`](../backend/agents_for_backend.md) - backend playbook.

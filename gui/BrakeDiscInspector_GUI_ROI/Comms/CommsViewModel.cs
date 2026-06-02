@@ -182,6 +182,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             SaveSettingsCommand = new AsyncCommand(_ => SaveSettingsCommandAsync());
             ToggleOutputCommand = new AsyncCommand(param => ToggleOutputAsync(param));
             ToggleInputCommand = new AsyncCommand(param => ToggleInputAsync(param));
+            TriggerCameraViaPlcCommand = new AsyncCommand(_ => PulsePlcCameraTriggerAsync());
             StartAutoCam1Command = new AsyncCommand(_ => PulseAutoCam1StartAsync());
             ConnectCameraCommand = new AsyncCommand(_ => ConnectCameraAsync());
             DisconnectCameraCommand = new AsyncCommand(_ => DisconnectCameraAsync());
@@ -472,6 +473,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
         public AsyncCommand ToggleInputCommand { get; }
 
+        public AsyncCommand TriggerCameraViaPlcCommand { get; }
+
         public AsyncCommand StartAutoCam1Command { get; }
 
         public AsyncCommand ConnectCameraCommand { get; }
@@ -605,6 +608,28 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
 
             return Task.CompletedTask;
+        }
+
+        private async Task PulsePlcCameraTriggerAsync()
+        {
+            if (!_client.IsConnected)
+            {
+                CycleStatus = "PLC camera trigger ignored: PLC disconnected";
+                return;
+            }
+
+            CycleStatus = "PLC camera trigger pulse";
+            await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+            {
+                [PlcSignalId.Trigger1] = true
+            }).ConfigureAwait(false);
+
+            await Task.Delay(150).ConfigureAwait(false);
+
+            await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
+            {
+                [PlcSignalId.Trigger1] = false
+            }).ConfigureAwait(false);
         }
 
         private async Task PulseAutoCam1StartAsync()

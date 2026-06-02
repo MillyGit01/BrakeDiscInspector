@@ -2002,6 +2002,15 @@
 
                         <ui:Button Margin="12,0,0,0"
                                    Padding="10,3"
+                                   Command="{Binding TriggerCameraViaPlcCommand}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Camera24}" Margin="0,0,8,0" FontSize="16"/>
+                                <TextBlock Text="PLC trigger" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+
+                        <ui:Button Margin="4,0,0,0"
+                                   Padding="10,3"
                                    Command="{Binding StartAutoCam1Command}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Record24}" Margin="0,0,8,0" FontSize="16"/>

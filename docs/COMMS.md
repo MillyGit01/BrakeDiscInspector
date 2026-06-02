@@ -8,6 +8,14 @@ The PLC contract follows the `Mesa_Giratoria` project used as reference:
 - `DB151` / `PLC_PC`: state, handshake, and camera result bits read by the GUI from the PLC.
 - `DB8` / `DB_Diag_AutoCam1_360`: diagnostic DB reserved for AutoCam1 360 troubleshooting.
 
+The FLIR Blackfly S `BFS-PGE-120S4M-CS` is a mono GigE Vision / GenICam camera. It is not treated as a native PROFINET device by the GUI. The intended production topology is:
+
+```text
+BrakeDiscInspector <-> Siemens PLC: S7 over Ethernet / PROFINET network
+BrakeDiscInspector <-> FLIR camera: Spinnaker / GigE Vision
+PLC -> camera trigger: PLC output or PROFINET remote I/O wired to the camera trigger input
+```
+
 ## PLC
 
 Supported modes:
@@ -85,6 +93,8 @@ GUI-to-PLC command map (`DB150`):
 The GUI detects a rising edge on `Start inspection / TriggerAck Cam1`, with `Legacy capture 1` accepted as a compatibility start edge. If `RequirePartPresent` is enabled, `PLC ready / part present` must also be true.
 
 The S7 client writes only the first two boolean bytes of `DB150` for the command map. It does not write the Mesa Giratoria `GiroPinza` DInt at byte 4 or `Velocidad` byte at 8, so motion setpoints remain owned by the PLC/HMI workflow until they are explicitly wired in BDI.
+
+The `PLC trigger` button in the communications panel manually pulses `DB150.DBX1.0` (`Trigger 1`) for 150 ms. The PLC must translate that bit into the camera trigger action.
 
 ## Camera
 

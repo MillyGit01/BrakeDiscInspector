@@ -46,7 +46,14 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                     catch (Exception ex)
                     {
                         GuiLog.Error($"[plc] Connect failed to {Config.IpAddress}", ex);
-                        throw;
+                        try
+                        {
+                            _plc.Close();
+                        }
+                        catch
+                        {
+                            // Keep the connection failure non-fatal for the GUI.
+                        }
                     }
                 }
             }, ct);

@@ -499,6 +499,13 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             try
             {
                 await _client.ConnectAsync().ConfigureAwait(false);
+                if (!_client.IsConnected)
+                {
+                    ConnectionStatus = $"Disconnected: cannot reach PLC {PlcIpAddress}:102";
+                    GuiLog.Warn($"[plc] Connection unavailable ip={PlcIpAddress} rack={Rack} slot={Slot} port=102");
+                    return;
+                }
+
                 ConnectionStatus = "Connected";
                 await WriteOutputsSafeAsync(new Dictionary<PlcSignalId, bool>
                 {

@@ -53,10 +53,42 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         }
     }
 
+    public sealed class CommsSettingsSnapshot
+    {
+        public string PlcMode { get; set; } = "Simulation";
+
+        public string PlcIpAddress { get; set; } = "192.168.0.1";
+
+        public short Rack { get; set; }
+
+        public short Slot { get; set; } = 1;
+
+        public int PcToPlcDbNumber { get; set; } = PlcSignals.DefaultPcToPlcDbNumber;
+
+        public int PlcToPcDbNumber { get; set; } = PlcSignals.DefaultPlcToPcDbNumber;
+
+        public int DiagnosticDbNumber { get; set; } = PlcSignals.DefaultDiagnosticDbNumber;
+
+        public int PollIntervalMs { get; set; } = 100;
+
+        public bool AutoConnectOnStartup { get; set; }
+
+        public bool AutoRunInspection { get; set; }
+
+        public bool RequirePartPresent { get; set; } = true;
+
+        public string CameraProvider { get; set; } = CameraProviders.Disabled;
+
+        public string CameraSource { get; set; } = string.Empty;
+
+        public string CameraOutputDirectory { get; set; } = string.Empty;
+    }
+
     public sealed class CommsViewModel : INotifyPropertyChanged, IDisposable
     {
         private readonly Func<PlcConfig, string, IPlcClient> _clientFactory;
         private readonly Func<CameraConfig, ICameraClient> _cameraFactory;
+        private readonly Func<CommsSettingsSnapshot, CancellationToken, Task>? _saveSettingsAsync;
         private readonly Func<string, CancellationToken, Task<bool?>>? _inspectImageAsync;
         private IPlcClient _client;
         private ICameraClient _camera;
@@ -64,8 +96,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         private readonly SynchronizationContext? _uiContext;
         private CancellationTokenSource? _pollingCts;
         private Task? _pollingTask;
-        private readonly int _pollIntervalMs;
-        private readonly bool _requirePartPresent;
+        private int _pollIntervalMs;
+        private bool _requirePartPresent;
         private readonly object _cycleSync = new();
         private readonly Dictionary<PlcSignalId, bool> _lastSignals = new();
         private CancellationTokenSource? _cycleCts;
@@ -83,6 +115,8 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         private string _cameraStatus = "Camera disconnected";
         private string _lastAcquiredImagePath = string.Empty;
         private string _cycleStatus = "Idle";
+        private string _settingsStatus = "Comms settings not saved";
+        private bool _autoConnectOnStartup;
         private bool _autoRunInspection;
         private bool _cycleInProgress;
 
@@ -92,9 +126,11 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             Func<PlcConfig, string, IPlcClient> clientFactory,
             CameraConfig cameraConfig,
             Func<CameraConfig, ICameraClient> cameraFactory,
+            Func<CommsSettingsSnapshot, CancellationToken, Task>? saveSettingsAsync,
             Func<string, CancellationToken, Task<bool?>>? inspectImageAsync,
             int pollIntervalMs,
             bool requirePartPresent,
+            bool autoConnectOnStartup,
             bool autoRunInspection)
         {
             if (config == null)
@@ -108,6 +144,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             _clientMode = NormalizePlcMode(plcMode);
             _client = _clientFactory(config, _clientMode);
             _camera = _cameraFactory(cameraConfig ?? new CameraConfig(BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Disabled, string.Empty, string.Empty));
+            _saveSettingsAsync = saveSettingsAsync;
             _uiContext = SynchronizationContext.Current;
             _pollIntervalMs = Math.Max(50, pollIntervalMs);
             _requirePartPresent = requirePartPresent;
@@ -121,6 +158,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             _cameraProvider = cameraConfig?.Provider ?? BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Disabled;
             _cameraSource = cameraConfig?.Source ?? string.Empty;
             _cameraOutputDirectory = cameraConfig?.OutputDirectory ?? string.Empty;
+            _autoConnectOnStartup = autoConnectOnStartup;
             _autoRunInspection = autoRunInspection;
 
             Inputs = new ObservableCollection<PlcIoPointViewModel>();
@@ -141,6 +179,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
             ConnectCommand = new AsyncCommand(_ => ConnectAsync());
             DisconnectCommand = new AsyncCommand(_ => DisconnectAsync());
+            SaveSettingsCommand = new AsyncCommand(_ => SaveSettingsCommandAsync());
             ToggleOutputCommand = new AsyncCommand(param => ToggleOutputAsync(param));
             ToggleInputCommand = new AsyncCommand(param => ToggleInputAsync(param));
             StartAutoCam1Command = new AsyncCommand(_ => PulseAutoCam1StartAsync());
@@ -248,6 +287,46 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 if (_diagnosticDbNumber != normalized)
                 {
                     _diagnosticDbNumber = normalized;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public int PollIntervalMs
+        {
+            get => _pollIntervalMs;
+            set
+            {
+                var normalized = Math.Max(50, value);
+                if (_pollIntervalMs != normalized)
+                {
+                    _pollIntervalMs = normalized;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool AutoConnectOnStartup
+        {
+            get => _autoConnectOnStartup;
+            set
+            {
+                if (_autoConnectOnStartup != value)
+                {
+                    _autoConnectOnStartup = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool RequirePartPresent
+        {
+            get => _requirePartPresent;
+            set
+            {
+                if (_requirePartPresent != value)
+                {
+                    _requirePartPresent = value;
                     OnPropertyChanged();
                 }
             }
@@ -370,9 +449,24 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
         }
 
+        public string SettingsStatus
+        {
+            get => _settingsStatus;
+            private set
+            {
+                if (_settingsStatus != value)
+                {
+                    _settingsStatus = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public AsyncCommand ConnectCommand { get; }
 
         public AsyncCommand DisconnectCommand { get; }
+
+        public AsyncCommand SaveSettingsCommand { get; }
 
         public AsyncCommand ToggleOutputCommand { get; }
 
@@ -436,6 +530,28 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             }
 
             ConnectionStatus = "Disconnected";
+        }
+
+        private async Task SaveSettingsCommandAsync()
+        {
+            if (_saveSettingsAsync == null)
+            {
+                SettingsStatus = "Save unavailable";
+                return;
+            }
+
+            try
+            {
+                var snapshot = CreateSettingsSnapshot();
+                await _saveSettingsAsync(snapshot, CancellationToken.None).ConfigureAwait(false);
+                SettingsStatus = $"Saved to {AppConfigLoader.UserConfigPath}";
+                GuiLog.Info($"[comms] Settings saved to '{AppConfigLoader.UserConfigPath}'");
+            }
+            catch (Exception ex)
+            {
+                SettingsStatus = $"Save failed: {ex.Message}";
+                GuiLog.Error("[comms] Save settings failed", ex);
+            }
         }
 
         private Task ToggleOutputAsync(object? parameter)
@@ -640,7 +756,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                         var values = await _client.ReadAsync(token).ConfigureAwait(false);
                         UpdateSignals(values);
                         await HandleInputTransitionsAsync(values, token).ConfigureAwait(false);
-                        await Task.Delay(_pollIntervalMs, token).ConfigureAwait(false);
+                        await Task.Delay(PollIntervalMs, token).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
                     {
@@ -731,7 +847,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                 return;
             }
 
-            if (_requirePartPresent && !partPresent)
+            if (RequirePartPresent && !partPresent)
             {
                 CycleStatus = "Start ignored: part not present";
                 GuiLog.Warn("[plc] StartInspection ignored because PartPresent is false");
@@ -880,6 +996,27 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             _clientMode = desiredMode;
             _client = _clientFactory(desired, desiredMode);
             _lastSignals.Clear();
+        }
+
+        private CommsSettingsSnapshot CreateSettingsSnapshot()
+        {
+            return new CommsSettingsSnapshot
+            {
+                PlcMode = PlcMode,
+                PlcIpAddress = PlcIpAddress,
+                Rack = Rack,
+                Slot = Slot,
+                PcToPlcDbNumber = DbNumber,
+                PlcToPcDbNumber = PlcToPcDbNumber,
+                DiagnosticDbNumber = DiagnosticDbNumber,
+                PollIntervalMs = PollIntervalMs,
+                AutoConnectOnStartup = AutoConnectOnStartup,
+                AutoRunInspection = AutoRunInspection,
+                RequirePartPresent = RequirePartPresent,
+                CameraProvider = CameraProvider,
+                CameraSource = CameraSource,
+                CameraOutputDirectory = CameraOutputDirectory
+            };
         }
 
         private void EnsureCameraMatchesConfig()

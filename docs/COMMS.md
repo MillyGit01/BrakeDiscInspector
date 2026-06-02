@@ -20,7 +20,7 @@ Default PLC settings live in `gui/BrakeDiscInspector_GUI_ROI/appsettings.json` a
 "Comms": {
   "Plc": {
     "Mode": "Simulation",
-    "IpAddress": "192.168.0.10",
+    "IpAddress": "192.168.0.1",
     "Rack": 0,
     "Slot": 1,
     "DbNumber": 150,
@@ -32,6 +32,14 @@ Default PLC settings live in `gui/BrakeDiscInspector_GUI_ROI/appsettings.json` a
 ```
 
 `DbNumber` is kept for backward compatibility and means the PC-to-PLC DB. In the Mesa Giratoria layout that is `DB150`.
+
+The communications panel can edit these PLC fields directly. Use `Save comms` to persist the complete communications settings to:
+
+```text
+%LOCALAPPDATA%\BrakeDiscInspector\appsettings.user.json
+```
+
+That user config is loaded after the packaged `appsettings.json`, so saved IP/DB/camera changes survive Visual Studio rebuilds.
 
 PLC-to-GUI status map (`DB151`):
 

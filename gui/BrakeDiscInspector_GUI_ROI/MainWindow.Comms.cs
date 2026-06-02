@@ -41,9 +41,11 @@ namespace BrakeDiscInspector_GUI_ROI
                     CreatePlcClient,
                     cameraConfig,
                     CameraClientFactory.Create,
+                    SaveCommsSettingsAsync,
                     RunCommsInspectionAsync,
                     plcSettings.PollIntervalMs,
                     _appConfig.Comms?.RequirePartPresent ?? true,
+                    _appConfig.Comms?.AutoConnectOnStartup ?? false,
                     _appConfig.Comms?.AutoRunInspectionOnTrigger ?? false);
 
                 CommsRoot.DataContext = _commsVm;
@@ -58,6 +60,35 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 Util.GuiLog.Error("[comms] InitComms failed", ex);
             }
+        }
+
+        private Task SaveCommsSettingsAsync(CommsSettingsSnapshot settings, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var comms = _appConfig.Comms ??= new AppConfig.CommsConfig();
+            var plc = comms.Plc ??= new AppConfig.PlcSettings();
+            var camera = comms.Camera ??= new AppConfig.CameraSettings();
+
+            comms.AutoConnectOnStartup = settings.AutoConnectOnStartup;
+            comms.AutoRunInspectionOnTrigger = settings.AutoRunInspection;
+            comms.RequirePartPresent = settings.RequirePartPresent;
+
+            plc.Mode = settings.PlcMode;
+            plc.IpAddress = settings.PlcIpAddress;
+            plc.Rack = settings.Rack;
+            plc.Slot = settings.Slot;
+            plc.DbNumber = settings.PcToPlcDbNumber;
+            plc.PlcToPcDbNumber = settings.PlcToPcDbNumber;
+            plc.DiagnosticDbNumber = settings.DiagnosticDbNumber;
+            plc.PollIntervalMs = settings.PollIntervalMs;
+
+            camera.Provider = settings.CameraProvider;
+            camera.Source = settings.CameraSource;
+            camera.OutputDirectory = settings.CameraOutputDirectory;
+
+            AppConfigLoader.SaveUserConfig(_appConfig);
+            return Task.CompletedTask;
         }
 
         private static IPlcClient CreatePlcClient(PlcConfig config, string mode)

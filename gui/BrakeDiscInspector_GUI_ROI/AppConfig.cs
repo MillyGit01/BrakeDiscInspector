@@ -59,7 +59,7 @@ namespace BrakeDiscInspector_GUI_ROI
         public sealed class PlcSettings
         {
             public string Mode { get; set; } = "Simulation";
-            public string IpAddress { get; set; } = "192.168.0.10";
+            public string IpAddress { get; set; } = "192.168.0.1";
             public short Rack { get; set; } = 0;
             public short Slot { get; set; } = 1;
             public int DbNumber { get; set; } = 150;
@@ -79,10 +79,16 @@ namespace BrakeDiscInspector_GUI_ROI
 
     public static class AppConfigLoader
     {
+        public static string UserConfigPath => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "BrakeDiscInspector",
+            "appsettings.user.json");
+
         private static readonly string[] ConfigPaths =
         {
             Path.Combine(AppContext.BaseDirectory, "config", "appsettings.json"),
-            Path.Combine(AppContext.BaseDirectory, "appsettings.json")
+            Path.Combine(AppContext.BaseDirectory, "appsettings.json"),
+            UserConfigPath
         };
 
         public static AppConfig Load()
@@ -116,6 +122,37 @@ namespace BrakeDiscInspector_GUI_ROI
 
             ApplyEnvironmentOverrides(config);
             return config;
+        }
+
+        public static void SaveUserConfig(AppConfig config)
+        {
+            Save(config, UserConfigPath);
+        }
+
+        public static void Save(AppConfig config, string path)
+        {
+            if (config == null)
+            {
+                throw new ArgumentNullException(nameof(config));
+            }
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new ArgumentException("Config path is required.", nameof(path));
+            }
+
+            var directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            File.WriteAllText(path, json);
         }
 
         private static void Merge(AppConfig target, AppConfig source)

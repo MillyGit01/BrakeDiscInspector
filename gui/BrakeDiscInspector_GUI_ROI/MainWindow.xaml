@@ -1955,6 +1955,20 @@
                         <TextBox Width="48"
                                  Text="{Binding DiagnosticDbNumber, UpdateSourceTrigger=PropertyChanged}"/>
 
+                        <TextBlock Text="Poll ms:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                        <TextBox Width="56"
+                                 Text="{Binding PollIntervalMs, UpdateSourceTrigger=PropertyChanged}"/>
+
+                        <CheckBox Content="Auto connect"
+                                  Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding AutoConnectOnStartup, Mode=TwoWay}"/>
+
+                        <CheckBox Content="Require part"
+                                  Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsChecked="{Binding RequirePartPresent, Mode=TwoWay}"/>
+
                         <ui:Button Margin="12,0,0,0"
                                    Padding="10,3"
                                    Command="{Binding ConnectCommand}">
@@ -1979,12 +1993,28 @@
 
                         <ui:Button Margin="12,0,0,0"
                                    Padding="10,3"
+                                   Command="{Binding SaveSettingsCommand}">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Save24}" Margin="0,0,8,0" FontSize="16"/>
+                                <TextBlock Text="Save comms" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </ui:Button>
+
+                        <ui:Button Margin="12,0,0,0"
+                                   Padding="10,3"
                                    Command="{Binding StartAutoCam1Command}">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <ui:SymbolIcon Symbol="{x:Static ui:SymbolRegular.Record24}" Margin="0,0,8,0" FontSize="16"/>
                                 <TextBlock Text="AutoCam1 360" VerticalAlignment="Center"/>
                             </StackPanel>
                         </ui:Button>
+
+                        <TextBlock Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Width="320"
+                                   Text="{Binding SettingsStatus}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding SettingsStatus}"/>
                     </WrapPanel>
 
                     <Grid Grid.Row="1">

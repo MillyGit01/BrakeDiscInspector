@@ -101,10 +101,13 @@ The `PLC trigger` button in the communications panel manually pulses `DB150.DBX1
 Supported providers:
 - `Disabled`: no acquisition.
 - `Folder`: development provider that copies the next image from a folder into the capture output directory.
-- `FlirBlackfly`: placeholder for FLIR Spinnaker SDK wiring.
+- `FlirBlackfly`: FLIR/Teledyne Blackfly S acquisition through Spinnaker software trigger.
 - `Cognex`: placeholder for the selected Cognex SDK/protocol wiring.
 
-`Folder` is the safe no-hardware path for integration testing. The GUI only enables the camera `Source` selector and browse button when this provider is active; for FLIR/Cognex that field is not used. Set:
+`Folder` is the safe no-hardware path for integration testing. The GUI enables the camera `Source` selector for `Folder` and `FlirBlackfly`:
+
+- For `Folder`, use the `Browse` button and point `Source` to a folder of sample images.
+- For `FlirBlackfly`, `Source` is optional. Leave it empty to use the first detected Blackfly, or set it to the camera serial/IP. The current validated camera is `BFS-PGE-120S4M-CS`, serial `25103916`, IP `192.168.1.15`.
 
 ```json
 "Camera": {
@@ -113,6 +116,23 @@ Supported providers:
   "OutputDirectory": "C:\\path\\to\\captures"
 }
 ```
+
+For the current Blackfly software-trigger path:
+
+```json
+"Camera": {
+  "Provider": "FlirBlackfly",
+  "Source": "25103916",
+  "OutputDirectory": "C:\\path\\to\\captures"
+}
+```
+
+Requirements and behavior:
+
+- Install Teledyne Spinnaker 4.3.x. The GUI loads `SpinnakerNET_v140.dll` dynamically from `C:\Program Files\Teledyne\Spinnaker\bin64\vs2015\` or from `BDI_SPINNAKER_NET_DLL`.
+- Close SpinView before connecting from BDI; the camera can be locked by another Spinnaker client while it is acquiring.
+- The client configures `AcquisitionMode=SingleFrame`, `TriggerSource=Software`, `TriggerSelector=FrameStart`, and `TriggerMode=On`. Each `Acquire` starts acquisition, executes one software trigger, reads one image, ends acquisition, converts the frame to `Mono8`, and saves it as a PNG file in `OutputDirectory`.
+- PLC-driven hardware trigger is intentionally left for the later wiring phase.
 
 ## Cycle
 
@@ -125,11 +145,11 @@ When `AutoRunInspectionOnTrigger` is true, the cycle is:
 5. GUI writes `Busy=false`, `BDI inspection complete=true`, plus `BDI result OK` or `BDI result NG`.
 6. On failure, GUI writes `Error=true`.
 
-Real FLIR/Cognex acquisition requires the vendor SDK choice and installed native/.NET assemblies before those providers can replace their placeholders.
+Real Cognex acquisition requires the selected Cognex SDK/protocol adapter before that provider can replace its placeholder.
 
 ## UI behavior
 - The communications panel can run against the simulated PLC and `Folder` camera without hardware.
 - `AutoConnectOnStartup` controls whether the GUI connects automatically.
 - `AutoRunInspectionOnTrigger` controls whether a PLC start edge loads the acquired image and evaluates enabled inspection ROIs.
 - `RequirePartPresent` requires the PLC `Part present` signal before accepting a start edge.
-- Provider changes rebuild the camera client; the `Source` path is only meaningful for `Folder`.
+- Provider changes rebuild the camera client; the `Source` field is meaningful for `Folder` and optional for `FlirBlackfly`.

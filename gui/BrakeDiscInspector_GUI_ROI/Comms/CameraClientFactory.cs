@@ -14,9 +14,7 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
             return config.Provider.Trim() switch
             {
                 CameraProviders.Folder => new FolderCameraClient(config),
-                CameraProviders.FlirBlackfly => new UnavailableCameraClient(
-                    config,
-                    "FLIR Blackfly requires the FLIR Spinnaker SDK .NET assemblies to be installed and wired before this provider can acquire images."),
+                CameraProviders.FlirBlackfly => new FlirBlackflyCameraClient(config),
                 CameraProviders.Cognex => new UnavailableCameraClient(
                     config,
                     "Cognex requires the selected Cognex SDK/protocol adapter to be installed and wired before this provider can acquire images."),

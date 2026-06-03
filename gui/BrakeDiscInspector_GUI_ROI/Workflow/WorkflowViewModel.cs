@@ -5075,10 +5075,21 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
                 return;
             }
 
-            foreach (var roi in _inspectionRois.Where(r => r.Enabled))
+            var enabledRois = _inspectionRois.Where(r => r.Enabled).ToList();
+            var preserveHeatmapAcrossRois = enabledRois.Count > 1;
+            if (preserveHeatmapAcrossRois)
+            {
+                ClearInferenceUi("[eval-all] start");
+            }
+
+            foreach (var roi in enabledRois)
             {
                 ct.ThrowIfCancellationRequested();
-                await EvaluateRoiAsync(roi, ct).ConfigureAwait(false);
+                await EvaluateRoiAsync(
+                    roi,
+                    ct,
+                    preserveHeatmapOnFailure: preserveHeatmapAcrossRois,
+                    preserveExistingHeatmapWhenNoHeatmap: preserveHeatmapAcrossRois).ConfigureAwait(false);
             }
 
             UpdateGlobalBadge();
@@ -5095,7 +5106,11 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
             await InferEnabledRoisAsync(CancellationToken.None).ConfigureAwait(false);
         }
 
-        private async Task EvaluateRoiAsync(InspectionRoiConfig? roi, CancellationToken ct)
+        private async Task EvaluateRoiAsync(
+            InspectionRoiConfig? roi,
+            CancellationToken ct,
+            bool preserveHeatmapOnFailure = false,
+            bool preserveExistingHeatmapWhenNoHeatmap = false)
         {
             EnsureRoleRoi();
             if (roi == null || !roi.Enabled)
@@ -5161,7 +5176,8 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             async Task ApplyInferResultAsync(InferResult result)
             {
-                _lastExport = export;
+                var previousExport = _lastExport;
+                var previousHeatmapBytes = _lastHeatmapBytes;
                 _lastInferResult = result;
                 InferenceScore = result.score;
                 InferenceThreshold = result.threshold;
@@ -5185,13 +5201,24 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
                 if (!string.IsNullOrWhiteSpace(result.heatmap_png_base64))
                 {
+                    _lastExport = export;
                     _lastHeatmapBytes = Convert.FromBase64String(result.heatmap_png_base64);
                     await _showHeatmapAsync(export, _lastHeatmapBytes, HeatmapOpacity).ConfigureAwait(false);
                 }
                 else
                 {
-                    _lastHeatmapBytes = null;
-                    _clearHeatmap();
+                    if (preserveExistingHeatmapWhenNoHeatmap && previousExport != null && previousHeatmapBytes != null)
+                    {
+                        _lastExport = previousExport;
+                        _lastHeatmapBytes = previousHeatmapBytes;
+                        _log($"[eval] idx={roi.Index} returned no heatmap; preserving previous NG heatmap.");
+                    }
+                    else
+                    {
+                        _lastExport = export;
+                        _lastHeatmapBytes = null;
+                        _clearHeatmap();
+                    }
                 }
 
                 roi.LastScore = result.score;
@@ -5210,16 +5237,25 @@ namespace BrakeDiscInspector_GUI_ROI.Workflow
 
             async Task ResetAfterFailureAsync(string message, string caption, string? extraLog = null)
             {
-                _lastExport = export;
+                var preserveExistingHeatmap = preserveHeatmapOnFailure && _lastHeatmapBytes != null;
+                if (!preserveExistingHeatmap)
+                {
+                    _lastExport = export;
+                    _lastHeatmapBytes = null;
+                    _clearHeatmap();
+                }
+                else
+                {
+                    _log($"[eval] idx={roi.Index} failed; preserving previous NG heatmap.");
+                }
+
                 _lastInferResult = null;
-                _lastHeatmapBytes = null;
                 InferenceScore = null;
                 InferenceThreshold = null;
                 await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     Regions.Clear();
                 });
-                _clearHeatmap();
                 roi.LastScore = null;
                 roi.LastResultOk = null;
                 roi.LastEvaluatedAt = DateTime.UtcNow;

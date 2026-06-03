@@ -11,6 +11,8 @@ namespace BrakeDiscInspector_GUI_ROI.Services
     internal static class BackendAutoStarter
     {
         private static readonly SemaphoreSlim StartLock = new(1, 1);
+        private static readonly object ProcessSync = new();
+        private static Process? StartedBackendProcess;
 
         public static async Task EnsureStartedAsync(AppConfig.BackendConfig config, CancellationToken ct = default)
         {
@@ -103,7 +105,54 @@ namespace BrakeDiscInspector_GUI_ROI.Services
             startInfo.ArgumentList.Add(bashCommand);
 
             GuiLog.Info($"[backend-autostart] launching WSL distro='{distro}' mode='{mode}' condaEnv='{envName}' venv='{venvPath}' models='{modelsDir ?? "<default>"}' repo='{repoRoot}' port={port}.");
-            Process.Start(startInfo);
+            var process = Process.Start(startInfo);
+            if (process != null)
+            {
+                lock (ProcessSync)
+                {
+                    StartedBackendProcess?.Dispose();
+                    StartedBackendProcess = process;
+                }
+            }
+        }
+
+        public static void StopStartedBackend()
+        {
+            Process? process;
+            lock (ProcessSync)
+            {
+                process = StartedBackendProcess;
+                StartedBackendProcess = null;
+            }
+
+            if (process == null)
+            {
+                return;
+            }
+
+            try
+            {
+                if (process.HasExited)
+                {
+                    GuiLog.Info("[backend-autostart] backend process already exited.");
+                    return;
+                }
+
+                GuiLog.Info($"[backend-autostart] stopping backend process pid={process.Id}.");
+                process.Kill(entireProcessTree: true);
+                if (!process.WaitForExit(3000))
+                {
+                    GuiLog.Warn("[backend-autostart] backend process did not exit within 3s after kill.");
+                }
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[backend-autostart] failed to stop backend process", ex);
+            }
+            finally
+            {
+                process.Dispose();
+            }
         }
 
         private static bool IsSupportedWslMode(string mode)

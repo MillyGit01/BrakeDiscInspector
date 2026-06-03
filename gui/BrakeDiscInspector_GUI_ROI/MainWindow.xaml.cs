@@ -55,6 +55,7 @@ using RoiShapeType = BrakeDiscInspector_GUI_ROI.RoiShape;
 using BrakeDiscInspector_GUI_ROI.Models;
 using BrakeDiscInspector_GUI_ROI.Helpers;
 using BrakeDiscInspector_GUI_ROI.Services;
+using BrakeDiscInspector_GUI_ROI.Views;
 // --- BEGIN: UI/OCV type aliases ---
 using SW = System.Windows;
 using SWM = System.Windows.Media;
@@ -874,6 +875,13 @@ namespace BrakeDiscInspector_GUI_ROI
         private string _thumbnailFolderPath = string.Empty;
         private bool _updatingThumbnailSelection;
         private bool _isThumbnailCollectionLoading;
+        private const double CanvasZoomMin = 1.0;
+        private const double CanvasZoomMax = 6.0;
+        private const double CanvasZoomStep = 1.25;
+        private const double CanvasWheelZoomStep = 1.12;
+        private double _canvasZoom = 1.0;
+        private double _canvasPanX;
+        private double _canvasPanY;
 
         private WorkflowViewModel? _workflowViewModel;
         private WorkflowViewModel? ViewModel => _workflowViewModel;
@@ -992,6 +1000,13 @@ namespace BrakeDiscInspector_GUI_ROI
             public string FileName { get; }
 
             public ImageSource Thumbnail { get; }
+        }
+
+        private sealed class ThumbnailLoadResult
+        {
+            public List<ImageThumbnailItem> Items { get; } = new();
+
+            public List<string> Diagnostics { get; } = new();
         }
 
         public RoiModel? Inspection1
@@ -1564,6 +1579,7 @@ namespace BrakeDiscInspector_GUI_ROI
             RequestRoiVisibilityRefresh();
             RedrawOverlaySafe();
             UpdateRoiHud();
+            Snack($"Layout {layoutName} cargado");
         }
 
         private async Task RefreshInspectionDatasetsAfterLayoutAsync(string sourceContext)
@@ -2668,6 +2684,7 @@ namespace BrakeDiscInspector_GUI_ROI
         private Mat? bgrFrame; // tu frame actual
 
         private bool _loadedOnce;
+        private bool _startupLayoutNoticeShown;
         private RoiShape _currentDrawTool = RoiShape.Rectangle;
         private bool _updatingDrawToolUi;
 
@@ -3718,6 +3735,7 @@ namespace BrakeDiscInspector_GUI_ROI
             Settings.Default.IsSidePanelCollapsed = _isPanelCollapsed;
             Settings.Default.Save();
             _commsVm?.Dispose();
+            BackendAutoStarter.StopStartedBackend();
             base.OnClosed(e);
         }
 
@@ -3871,7 +3889,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 : "ROI management → ROI Inspection");
         }
 
-        private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
+        private void ActivateLayoutSetupPanel()
         {
             SetSelectedLeftNav("LayoutSetup");
             RoiNavSubmenu.Visibility = Visibility.Collapsed;
@@ -3881,6 +3899,11 @@ namespace BrakeDiscInspector_GUI_ROI
             SetMasterAdvancedOpen(false);
             ShowSidePanel(SidePanelMode.LayoutSetup);
             SetSidePanelTitle("Layout Setup");
+        }
+
+        private void NavLayoutSetup_Click(object sender, RoutedEventArgs e)
+        {
+            ActivateLayoutSetupPanel();
         }
 
         private void NavRoiManagement_Click(object sender, RoutedEventArgs e)
@@ -5302,6 +5325,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _roiCheckboxHasRoi.Clear();
 
             UpdateRoiVisibilityControls();
+            RefreshCreateButtonsEnabled();
         }
 
         private void UpdateRoiVisibilityControls()
@@ -5999,25 +6023,13 @@ namespace BrakeDiscInspector_GUI_ROI
             }
 
             IsThumbnailCollectionLoading = true;
+            Snack("Loading Pictures");
             await Dispatcher.Yield(DispatcherPriority.Render);
 
-            List<string> files;
             try
             {
-                files = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
-                    .Where(IsSupportedThumbnailImage)
-                    .OrderBy(file => Path.GetFileName(file), StringComparer.CurrentCultureIgnoreCase)
-                    .ToList();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error al leer la carpeta: {ex.Message}");
-                IsThumbnailCollectionLoading = false;
-                return;
-            }
+                var result = await Task.Run(() => LoadThumbnailItems(folderPath));
 
-            try
-            {
                 _thumbnailFolderPath = folderPath;
                 OnPropertyChanged(nameof(ThumbnailFolderDisplay));
 
@@ -6027,12 +6039,14 @@ namespace BrakeDiscInspector_GUI_ROI
                     SelectedThumbnail = null;
                     _imageThumbnails.Clear();
 
-                    foreach (var file in files)
+                    var added = 0;
+                    foreach (var item in result.Items)
                     {
-                        var thumbnail = TryLoadThumbnail(file);
-                        if (thumbnail != null)
+                        _imageThumbnails.Add(item);
+                        added++;
+                        if (added % 100 == 0)
                         {
-                            _imageThumbnails.Add(new ImageThumbnailItem(file, thumbnail));
+                            await Dispatcher.Yield(DispatcherPriority.Background);
                         }
                     }
 
@@ -6043,12 +6057,41 @@ namespace BrakeDiscInspector_GUI_ROI
                     _updatingThumbnailSelection = false;
                 }
 
+                foreach (var diagnostic in result.Diagnostics)
+                {
+                    AppendLog(diagnostic);
+                }
+
                 AppendLog($"[thumbs] folder='{folderPath}' images={_imageThumbnails.Count}");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error al leer la carpeta: {ex.Message}");
             }
             finally
             {
                 IsThumbnailCollectionLoading = false;
             }
+        }
+
+        private ThumbnailLoadResult LoadThumbnailItems(string folderPath)
+        {
+            var result = new ThumbnailLoadResult();
+            var files = Directory.EnumerateFiles(folderPath, "*.*", SearchOption.TopDirectoryOnly)
+                .Where(IsSupportedThumbnailImage)
+                .OrderBy(file => Path.GetFileName(file), StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            foreach (var file in files)
+            {
+                var thumbnail = TryLoadThumbnail(file, result.Diagnostics);
+                if (thumbnail != null)
+                {
+                    result.Items.Add(new ImageThumbnailItem(file, thumbnail));
+                }
+            }
+
+            return result;
         }
 
         private static bool IsSupportedThumbnailImage(string filePath)
@@ -6057,7 +6100,7 @@ namespace BrakeDiscInspector_GUI_ROI
             return !string.IsNullOrWhiteSpace(extension) && ThumbnailImageExtensions.Contains(extension);
         }
 
-        private ImageSource? TryLoadThumbnail(string filePath)
+        private ImageSource? TryLoadThumbnail(string filePath, ICollection<string>? diagnostics = null)
         {
             try
             {
@@ -6072,7 +6115,16 @@ namespace BrakeDiscInspector_GUI_ROI
             }
             catch (Exception ex)
             {
-                AppendLog($"[thumbs] skip '{Path.GetFileName(filePath)}': {ex.Message}");
+                var message = $"[thumbs] skip '{Path.GetFileName(filePath)}': {ex.Message}";
+                if (diagnostics != null)
+                {
+                    diagnostics.Add(message);
+                }
+                else
+                {
+                    AppendLog(message);
+                }
+
                 return null;
             }
         }
@@ -6119,6 +6171,162 @@ namespace BrakeDiscInspector_GUI_ROI
             }
         }
 
+        private void CanvasZoomIn_Click(object sender, RoutedEventArgs e)
+        {
+            SetCanvasZoom(_canvasZoom * CanvasZoomStep);
+        }
+
+        private void CanvasZoomOut_Click(object sender, RoutedEventArgs e)
+        {
+            SetCanvasZoom(_canvasZoom / CanvasZoomStep);
+        }
+
+        private void CanvasPanLeft_Click(object sender, RoutedEventArgs e)
+        {
+            PanCanvas(-GetCanvasPanStep());
+        }
+
+        private void CanvasPanRight_Click(object sender, RoutedEventArgs e)
+        {
+            PanCanvas(GetCanvasPanStep());
+        }
+
+        private void CanvasFit_Click(object sender, RoutedEventArgs e)
+        {
+            ResetCanvasViewport();
+        }
+
+        private void CanvasShell_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (ImgMain?.Source == null)
+            {
+                return;
+            }
+
+            var wheelSteps = e.Delta / 120.0;
+            if (Math.Abs(wheelSteps) < 0.001)
+            {
+                return;
+            }
+
+            var factor = Math.Pow(CanvasWheelZoomStep, wheelSteps);
+            var pointer = CanvasShell != null
+                ? e.GetPosition(CanvasShell)
+                : new System.Windows.Point(0, 0);
+
+            SetCanvasZoom(_canvasZoom * factor, pointer);
+            e.Handled = true;
+        }
+
+        private void SetCanvasZoom(double zoom)
+        {
+            SetCanvasZoom(zoom, null);
+        }
+
+        private void SetCanvasZoom(double zoom, System.Windows.Point? anchorPoint)
+        {
+            var previousZoom = _canvasZoom;
+            var previousPanX = _canvasPanX;
+            var previousPanY = _canvasPanY;
+
+            _canvasZoom = Math.Clamp(zoom, CanvasZoomMin, CanvasZoomMax);
+            if (_canvasZoom <= CanvasZoomMin + 0.0001)
+            {
+                _canvasPanX = 0;
+                _canvasPanY = 0;
+            }
+            else if (anchorPoint.HasValue && CanvasShell != null && previousZoom > 0.0001)
+            {
+                var centerX = CanvasShell.ActualWidth * 0.5;
+                var centerY = CanvasShell.ActualHeight * 0.5;
+                var ratio = _canvasZoom / previousZoom;
+                _canvasPanX = (1.0 - ratio) * (anchorPoint.Value.X - centerX) + ratio * previousPanX;
+                _canvasPanY = (1.0 - ratio) * (anchorPoint.Value.Y - centerY) + ratio * previousPanY;
+            }
+
+            ApplyCanvasViewportTransform();
+        }
+
+        private void PanCanvas(double deltaX)
+        {
+            if (_canvasZoom <= CanvasZoomMin + 0.0001)
+            {
+                return;
+            }
+
+            _canvasPanX += deltaX;
+            ApplyCanvasViewportTransform();
+        }
+
+        private double GetCanvasPanStep()
+        {
+            var width = CanvasShell?.ActualWidth ?? ViewerHost?.ActualWidth ?? 0;
+            return Math.Max(40.0, width * 0.08);
+        }
+
+        private void ResetCanvasViewport()
+        {
+            _canvasZoom = 1.0;
+            _canvasPanX = 0;
+            _canvasPanY = 0;
+            ApplyCanvasViewportTransform();
+        }
+
+        private void ApplyCanvasViewportTransform()
+        {
+            _canvasZoom = Math.Clamp(_canvasZoom, CanvasZoomMin, CanvasZoomMax);
+            ClampCanvasPan();
+
+            if (CanvasZoomScaleTransform != null)
+            {
+                CanvasZoomScaleTransform.ScaleX = _canvasZoom;
+                CanvasZoomScaleTransform.ScaleY = _canvasZoom;
+            }
+
+            if (CanvasZoomTranslateTransform != null)
+            {
+                CanvasZoomTranslateTransform.X = _canvasPanX;
+                CanvasZoomTranslateTransform.Y = _canvasPanY;
+            }
+
+            if (ZoomLevelText != null)
+            {
+                ZoomLevelText.Text = FormattableString.Invariant($"{_canvasZoom * 100.0:0}%");
+            }
+
+            InvalidateCanvasAdorners();
+        }
+
+        private void ClampCanvasPan()
+        {
+            if (_canvasZoom <= CanvasZoomMin + 0.0001)
+            {
+                _canvasPanX = 0;
+                _canvasPanY = 0;
+                return;
+            }
+
+            var width = CanvasShell?.ActualWidth ?? 0;
+            var height = CanvasShell?.ActualHeight ?? 0;
+            var maxPanX = Math.Max(0.0, width * (_canvasZoom - 1.0) * 0.5);
+            var maxPanY = Math.Max(0.0, height * (_canvasZoom - 1.0) * 0.5);
+            _canvasPanX = Math.Clamp(_canvasPanX, -maxPanX, maxPanX);
+            _canvasPanY = Math.Clamp(_canvasPanY, -maxPanY, maxPanY);
+        }
+
+        private void InvalidateCanvasAdorners()
+        {
+            if (CanvasROI == null)
+            {
+                return;
+            }
+
+            foreach (var shape in CanvasROI.Children.OfType<Shape>())
+            {
+                InvalidateAdornerFor(shape);
+            }
+        }
+
         private void LoadImage(string path, bool runAutoAnalyze = true)
         {
             _currentImagePathWin = path;
@@ -6134,6 +6342,7 @@ namespace BrakeDiscInspector_GUI_ROI
             _imgSourceBI.EndInit();
 
             ImgMain.Source = _imgSourceBI;
+            ResetCanvasViewport();
 
             // [AUTO] reset master/image seeds for this new image
             _imageKeyForMasters = string.Empty;          // so masters won't be considered already seeded
@@ -8500,6 +8709,27 @@ namespace BrakeDiscInspector_GUI_ROI
             {
                 BtnCreateInspection4.IsEnabled = !HasInspectionRoi(4);
             }
+
+            if (BtnM1_Create != null)
+            {
+                BtnM1_Create.IsEnabled = CanCreateSelectedMasterRoi(1);
+            }
+
+            if (BtnM2_Create != null)
+            {
+                BtnM2_Create.IsEnabled = CanCreateSelectedMasterRoi(2);
+            }
+        }
+
+        private bool CanCreateSelectedMasterRoi(int masterIndex)
+        {
+            if (_layout == null)
+            {
+                return false;
+            }
+
+            var role = GetSelectedMasterRole(masterIndex, log: false);
+            return GetMasterRoiForRole(role) == null && !IsMasterCreateDragActive(role);
         }
 
         private void RefreshInspectionRoiSlots(IReadOnlyList<RoiModel>? rois = null)
@@ -9565,6 +9795,91 @@ namespace BrakeDiscInspector_GUI_ROI
                 // no-op
             }
         }
+
+        private async Task EnsureBackendStartedWithStartupWindowAsync()
+        {
+            var backendConfig = _appConfig.Backend;
+            if (backendConfig == null)
+            {
+                return;
+            }
+
+            if (!backendConfig.AutoStart)
+            {
+                await BackendAutoStarter.EnsureStartedAsync(backendConfig).ConfigureAwait(true);
+                return;
+            }
+
+            BusyProgressWindow? progressWindow = null;
+            var wasEnabled = IsEnabled;
+
+            try
+            {
+                progressWindow = new BusyProgressWindow
+                {
+                    Owner = this
+                };
+                progressWindow.SetState(
+                    "Initializing Backend",
+                    "Waiting for backend service to become ready...",
+                    null);
+                progressWindow.Show();
+                IsEnabled = false;
+
+                await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+                await BackendAutoStarter.EnsureStartedAsync(backendConfig).ConfigureAwait(true);
+            }
+            finally
+            {
+                IsEnabled = wasEnabled;
+
+                if (progressWindow != null)
+                {
+                    progressWindow.Close();
+                }
+
+                Activate();
+            }
+        }
+
+        private void ShowStartupLayoutNoticeIfNeeded()
+        {
+            if (_startupLayoutNoticeShown)
+            {
+                return;
+            }
+
+            _startupLayoutNoticeShown = true;
+            SetPanelCollapsed(false, updateSettings: false);
+            ActivateLayoutSetupPanel();
+
+            if (_hasAppliedLayoutSnapshot || _workflowViewModel?.HasLoadedLayout == true)
+            {
+                return;
+            }
+
+            try
+            {
+                var notice = new ConfirmMessageWindow(
+                    "Layouts",
+                    "Layout not loaded, please load from list",
+                    "Confirm")
+                {
+                    Owner = this
+                };
+                notice.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                GuiLog.Error("[BOOT] startup layout notice failed", ex);
+                MessageBox.Show(
+                    "Layout not loaded, please load from list",
+                    "Layouts",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             GuiLog.Info($"[BOOT] MainWindow_Loaded ENTER"); // CODEX: string interpolation compatibility.
@@ -9623,7 +9938,7 @@ namespace BrakeDiscInspector_GUI_ROI
             try
             {
                 GuiLog.Info($"[BOOT] MainWindow_Loaded -> BackendAutoStarter BEGIN");
-                await BackendAutoStarter.EnsureStartedAsync(_appConfig.Backend);
+                await EnsureBackendStartedWithStartupWindowAsync();
                 GuiLog.Info($"[BOOT] MainWindow_Loaded -> BackendAutoStarter END");
             }
             catch (Exception ex)
@@ -9693,6 +10008,7 @@ namespace BrakeDiscInspector_GUI_ROI
                 SetSelectedLeftNav("Comms");
             }
 
+            ShowStartupLayoutNoticeIfNeeded();
             RefreshCreateButtonsEnabled();
             GuiLog.Info($"[BOOT] MainWindow_Loaded EXIT"); // CODEX: string interpolation compatibility.
         }
@@ -10223,6 +10539,7 @@ namespace BrakeDiscInspector_GUI_ROI
             RoiOverlay?.InvalidateVisual();
             UpdateHeatmapOverlayLayoutAndClip();
             RedrawAnalysisCrosses();
+            ApplyCanvasViewportTransform();
         }
 
         private void ImgMain_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -14492,7 +14809,6 @@ namespace BrakeDiscInspector_GUI_ROI
                 _dataRoot = EnsureDataRoot();
                 EnsureInspectionDatasetStructure();
                 SetEditModeActive(false);
-                Snack($"Layout loaded: {System.IO.Path.GetFileName(dlg.FileName)}");
             }
             catch (Exception ex)
             {
@@ -16105,7 +16421,12 @@ namespace BrakeDiscInspector_GUI_ROI
         private void BtnM1_Save_Click(object sender, RoutedEventArgs e) => SaveFor(GetSelectedMasterState(1));
         private void BtnM1_Remove_Click(object sender, RoutedEventArgs e) => RemoveFor(GetSelectedMasterState(1));
 
-        private RoiRole GetSelectedMasterRole(int masterIndex)
+        private void MasterRole_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            RefreshCreateButtonsEnabled();
+        }
+
+        private RoiRole GetSelectedMasterRole(int masterIndex, bool log = true)
         {
             var combo = masterIndex == 1 ? ComboMasterRoiRole : ComboM2Role;
             var isSearch = combo?.SelectedIndex == 1;
@@ -16113,7 +16434,10 @@ namespace BrakeDiscInspector_GUI_ROI
                 ? (isSearch ? RoiRole.Master1Search : RoiRole.Master1Pattern)
                 : (isSearch ? RoiRole.Master2Search : RoiRole.Master2Pattern);
 
-            GuiLog.Info($"[master] GetSelectedMasterRole master={masterIndex} combo={combo?.Name} selectedIndex={combo?.SelectedIndex} => role={role}");
+            if (log)
+            {
+                GuiLog.Info($"[master] GetSelectedMasterRole master={masterIndex} combo={combo?.Name} selectedIndex={combo?.SelectedIndex} => role={role}");
+            }
 
             return role;
         }

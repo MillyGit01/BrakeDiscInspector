@@ -1,0 +1,48 @@
+<Window x:Class="BrakeDiscInspector_GUI_ROI.Views.ConfirmMessageWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Message"
+        WindowStartupLocation="CenterOwner"
+        SizeToContent="WidthAndHeight"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True">
+
+    <Border CornerRadius="12"
+            Background="{DynamicResource UI.Brush.Surface}"
+            Padding="24"
+            SnapsToDevicePixels="True">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="0" Opacity="0.25"/>
+        </Border.Effect>
+
+        <StackPanel Width="380">
+            <TextBlock x:Name="TitleText"
+                       FontFamily="{DynamicResource UI.FontFamily.Header}"
+                       FontSize="18"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource UI.Brush.Foreground}"
+                       Margin="0,0,0,10"
+                       Text="Message"/>
+
+            <TextBlock x:Name="MessageText"
+                       FontFamily="{DynamicResource UI.FontFamily.Body}"
+                       FontSize="{DynamicResource UI.FontSize.ControlText}"
+                       Foreground="{DynamicResource UI.Brush.Foreground}"
+                       Opacity="0.82"
+                       TextWrapping="Wrap"/>
+
+            <Button x:Name="ConfirmButton"
+                    Content="Confirm"
+                    MinWidth="104"
+                    Margin="0,18,0,0"
+                    Padding="14,7"
+                    HorizontalAlignment="Right"
+                    IsDefault="True"
+                    Click="ConfirmButton_Click"/>
+        </StackPanel>
+    </Border>
+</Window>

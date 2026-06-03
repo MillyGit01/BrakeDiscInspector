@@ -357,6 +357,9 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
                     _cameraProvider = normalized;
                     OnPropertyChanged();
                     OnPropertyChanged(nameof(IsFolderCameraProvider));
+                    OnPropertyChanged(nameof(IsFlirBlackflyCameraProvider));
+                    OnPropertyChanged(nameof(IsCameraSourceEditable));
+                    OnPropertyChanged(nameof(IsCameraSourceTextEditable));
                     OnPropertyChanged(nameof(CameraSourceDisplay));
                     BrowseCameraSourceCommand?.RaiseCanExecuteChanged();
                 }
@@ -365,6 +368,13 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
 
         public bool IsFolderCameraProvider
             => string.Equals(CameraProvider, BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.Folder, StringComparison.OrdinalIgnoreCase);
+
+        public bool IsFlirBlackflyCameraProvider
+            => string.Equals(CameraProvider, BrakeDiscInspector_GUI_ROI.Comms.CameraProviders.FlirBlackfly, StringComparison.OrdinalIgnoreCase);
+
+        public bool IsCameraSourceEditable => IsFolderCameraProvider || IsFlirBlackflyCameraProvider;
+
+        public bool IsCameraSourceTextEditable => IsFlirBlackflyCameraProvider;
 
         public string CameraSource
         {
@@ -383,7 +393,9 @@ namespace BrakeDiscInspector_GUI_ROI.Comms
         public string CameraSourceDisplay
             => IsFolderCameraProvider
                 ? (string.IsNullOrWhiteSpace(CameraSource) ? "No source folder selected" : CameraSource)
-                : "Source is only used by the Folder provider";
+                : IsFlirBlackflyCameraProvider
+                    ? (string.IsNullOrWhiteSpace(CameraSource) ? "Auto-detect first Blackfly (serial/IP optional)" : CameraSource)
+                    : "Source is not used by this provider";
 
         public string CameraOutputDirectory
         {
